@@ -18,6 +18,10 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
     setLoading(true)
 
     try {
+      if (!content.trim()) {
+        throw new Error('Message cannot be empty')
+      }
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
@@ -49,7 +53,9 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
 
       // TODO: Parse Capybara response to detect clone selection and auto-transition
     } catch (err: any) {
-      setError(err.message || 'Message error')
+      const errorMsg = err.message || 'An unexpected error occurred'
+      setError(errorMsg)
+      console.error('GodMode error:', err)
     } finally {
       setLoading(false)
     }
@@ -61,10 +67,28 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         <div style={{ marginBottom: '1rem', color: '#666', fontSize: '0.9rem' }}>
           💡 God Mode: Talk to Capybara AI to plan your research
         </div>
+        {messages.length === 0 && !error && (
+          <div style={{ color: '#999', fontStyle: 'italic', padding: '1rem' }}>
+            Start by describing what you'd like to research. For example: "I want to test my sales pitch on game developers."
+          </div>
+        )}
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} sender_id={msg.sender_id} content={msg.content} />
         ))}
-        {error && <div style={{ color: 'red', padding: '0.5rem' }}>Error: {error}</div>}
+        {error && (
+          <div
+            style={{
+              backgroundColor: '#fee',
+              color: '#c33',
+              padding: '0.75rem 1rem',
+              borderRadius: '0.25rem',
+              marginBottom: '1rem',
+              border: '1px solid #fcc',
+            }}
+          >
+            <strong>Error:</strong> {error}
+          </div>
+        )}
       </div>
       <ChatInput onSend={handleSendMessage} disabled={loading} placeholder="Describe your research goal..." />
     </div>
