@@ -39,7 +39,7 @@ app.get('/user/profile', async (req, res) => {
 
     const { supabase } = await import('shared')
     const { data: user, error } = await supabase
-      .from('users')
+      .from('app_users')
       .select('*')
       .eq('id', userId)
       .single()

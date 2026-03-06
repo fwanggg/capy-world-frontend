@@ -32,7 +32,7 @@ router.post('/google', async (req: Request, res: Response) => {
 
     // Get or create user
     let { data: user, error: userError } = await supabase
-      .from('users')
+      .from('app_users')
       .select('*')
       .eq('google_id', googleId)
       .single()
@@ -44,7 +44,7 @@ router.post('/google', async (req: Request, res: Response) => {
     if (!user) {
       // Create new user + add to waitlist
       const { data: newUser, error: createError } = await supabase
-        .from('users')
+        .from('app_users')
         .insert({ email, google_id: googleId, approved: false })
         .select()
         .single()

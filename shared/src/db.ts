@@ -9,10 +9,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey)
 export type Database = {
   public: {
     Tables: {
-      users: {
+      app_users: {
         Row: { id: string; email: string; google_id: string; created_at: string; approved: boolean }
-        Insert: Omit<Database['public']['Tables']['users']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['users']['Insert']>
+        Insert: Omit<Database['public']['Tables']['app_users']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['app_users']['Insert']>
       }
       waitlist: {
         Row: { id: string; user_id: string; joined_at: string; approved_at: string | null }

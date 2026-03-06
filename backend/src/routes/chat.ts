@@ -24,7 +24,7 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
 
     // Validate approval status
     const { data: user, error: userError } = await supabase
-      .from('users')
+      .from('app_users')
       .select('approved')
       .eq('id', userId)
       .single()
