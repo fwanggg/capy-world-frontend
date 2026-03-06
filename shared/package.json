@@ -2,6 +2,7 @@
   "name": "shared",
   "version": "1.0.0",
   "type": "module",
+  "exports": "./src/index.ts",
   "scripts": {
     "build": "tsc",
     "lint": "eslint src --ext ts"
@@ -10,6 +11,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.98.0"
+    "@supabase/supabase-js": "^2.98.0",
+    "dotenv": "^16.3.1"
   }
 }
