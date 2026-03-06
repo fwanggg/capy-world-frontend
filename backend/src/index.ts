@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import authRoutes from './routes/auth'
+import chatRoutes from './routes/chat'
+import { requireAuth, requireApproval } from './middleware/auth'
 
 const app = express()
 const PORT = 3001
@@ -18,6 +20,9 @@ app.use((req, res, next) => {
 
 // Auth routes
 app.use('/auth', authRoutes)
+
+// Protected chat routes
+app.use('/chat', requireAuth, requireApproval, chatRoutes)
 
 // User profile endpoint
 app.get('/user/profile', async (req, res) => {
