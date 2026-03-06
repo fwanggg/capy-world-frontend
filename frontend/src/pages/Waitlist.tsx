@@ -30,23 +30,92 @@ export function Waitlist() {
   }
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem', textAlign: 'center' }}>
-      <h1>Join the Waitlist</h1>
-      <p>Sign in with Google to join our waitlist. We'll notify you when you're approved for access.</p>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 'var(--space-xl)',
+      backgroundColor: 'var(--color-gray-50)',
+    }}>
+      <div style={{
+        maxWidth: '450px',
+        width: '100%',
+        backgroundColor: 'var(--color-white)',
+        borderRadius: '0.75rem',
+        padding: 'var(--space-3xl)',
+        boxShadow: 'var(--shadow-lg)',
+      }}>
+        <h1 style={{
+          textAlign: 'center',
+          fontSize: 'var(--text-3xl)',
+          marginBottom: 'var(--space-lg)',
+        }}>
+          Join Copybar
+        </h1>
 
-      {error && <div style={{ color: 'red', marginBottom: '1rem' }}>{error}</div>}
-      {message && <div style={{ color: 'green', marginBottom: '1rem' }}>{message}</div>}
+        <p style={{
+          textAlign: 'center',
+          color: 'var(--color-gray-500)',
+          marginBottom: 'var(--space-2xl)',
+        }}>
+          Sign in with Google to get early access and start testing your ideas with AI-powered user research.
+        </p>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
-        <GoogleLogin
-          onSuccess={handleGoogleLogin}
-          onError={() => setError('Login failed')}
-          size="large"
-          theme="outline"
-        />
+        {error && (
+          <div style={{
+            backgroundColor: '#fee2e2',
+            color: '#991b1b',
+            padding: 'var(--space-base)',
+            borderRadius: '0.375rem',
+            marginBottom: 'var(--space-lg)',
+            fontSize: 'var(--text-sm)',
+          }}>
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div style={{
+            backgroundColor: '#ecfdf5',
+            color: '#065f46',
+            padding: 'var(--space-base)',
+            borderRadius: '0.375rem',
+            marginBottom: 'var(--space-lg)',
+            fontSize: 'var(--text-sm)',
+          }}>
+            {message}
+          </div>
+        )}
+
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginBottom: 'var(--space-2xl)',
+        }}>
+          <GoogleLogin
+            onSuccess={handleGoogleLogin}
+            onError={() => setError('Login failed')}
+            size="large"
+            theme="outline"
+          />
+        </div>
+
+        {loading && (
+          <p style={{ textAlign: 'center', color: 'var(--color-gray-400)' }}>
+            Signing in...
+          </p>
+        )}
+
+        <p style={{
+          textAlign: 'center',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--color-gray-400)',
+          marginTop: 'var(--space-2xl)',
+        }}>
+          We're in beta. Early applicants get priority access.
+        </p>
       </div>
-
-      {loading && <p>Signing in...</p>}
     </div>
   )
 }
