@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Navigation } from './components/Navigation'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { Home } from './pages/Home'
 import { About } from './pages/About'
 import { Docs } from './pages/Docs'
@@ -15,7 +16,7 @@ function App() {
         <Route path="/about" element={<About />} />
         <Route path="/docs" element={<Docs />} />
         <Route path="/waitlist" element={<Waitlist />} />
-        <Route path="/chat" element={<Chat />} />
+        <Route path="/chat" element={<ProtectedRoute component={<Chat />} />} />
       </Routes>
     </BrowserRouter>
   )
