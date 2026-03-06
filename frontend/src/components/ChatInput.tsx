@@ -26,7 +26,13 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', padding: '1rem', borderTop: '1px solid #ccc' }}>
+    <div style={{
+      display: 'flex',
+      gap: 'var(--space-base)',
+      padding: 'var(--space-lg) var(--space-xl)',
+      borderTop: '1px solid var(--color-gray-200)',
+      backgroundColor: 'var(--color-white)',
+    }}>
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -35,11 +41,24 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         disabled={disabled}
         style={{
           flex: 1,
-          padding: '0.75rem',
-          borderRadius: '0.25rem',
-          border: '1px solid #ccc',
-          fontFamily: 'inherit',
-          fontSize: '1rem',
+          padding: 'var(--space-base)',
+          borderRadius: '0.375rem',
+          border: '1px solid var(--color-gray-200)',
+          fontFamily: 'var(--font-body)',
+          fontSize: 'var(--text-base)',
+          fontColor: 'var(--color-navy)',
+          resize: 'vertical',
+          transition: 'all var(--transition-fast)',
+          minHeight: '3rem',
+          maxHeight: '120px',
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = 'var(--color-teal)'
+          e.currentTarget.style.boxShadow = '0 0 0 3px rgba(13, 148, 136, 0.1)'
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = 'var(--color-gray-200)'
+          e.currentTarget.style.boxShadow = 'none'
         }}
         rows={2}
       />
@@ -47,14 +66,29 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         onClick={handleSend}
         disabled={disabled || !input.trim()}
         style={{
-          padding: '0.75rem 1.5rem',
-          backgroundColor: '#007bff',
-          color: '#fff',
+          padding: 'var(--space-base) var(--space-lg)',
+          backgroundColor: disabled || !input.trim() ? 'var(--color-gray-300)' : 'var(--color-teal)',
+          color: 'var(--color-white)',
           border: 'none',
-          borderRadius: '0.25rem',
+          borderRadius: '0.375rem',
           cursor: disabled || !input.trim() ? 'not-allowed' : 'pointer',
-          opacity: disabled || !input.trim() ? 0.5 : 1,
-          fontSize: '1rem',
+          opacity: disabled || !input.trim() ? 0.6 : 1,
+          fontWeight: '600',
+          fontSize: 'var(--text-base)',
+          transition: 'all var(--transition-fast)',
+          whiteSpace: 'nowrap',
+        }}
+        onMouseOver={(e) => {
+          if (!disabled && input.trim()) {
+            e.currentTarget.style.backgroundColor = 'var(--color-teal-light)'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+            e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+          }
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--color-teal)'
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = 'none'
         }}
       >
         Send

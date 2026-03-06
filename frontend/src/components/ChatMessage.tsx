@@ -9,37 +9,57 @@ interface ChatMessageProps {
 export function ChatMessage({ role, sender_id, content }: ChatMessageProps) {
   const isUser = role === 'user'
 
-  const styles = {
-    container: {
+  return (
+    <div style={{
       display: 'flex',
       justifyContent: isUser ? 'flex-end' : 'flex-start',
-      marginBottom: '1rem',
-    },
-    bubble: {
-      maxWidth: '70%',
-      padding: '0.75rem 1rem',
-      borderRadius: '0.5rem',
-      backgroundColor: isUser ? '#007bff' : '#f0f0f0',
-      color: isUser ? '#fff' : '#000',
-      wordWrap: 'break-word' as const,
-    },
-    header: {
-      fontSize: '0.85rem',
-      color: '#666',
-      marginBottom: '0.25rem',
-    },
-  }
-
-  return (
-    <div style={styles.container}>
-      <div>
-        <div style={styles.header}>
+      gap: 'var(--space-base)',
+      animation: 'slideIn 0.3s ease-out',
+    }}>
+      <div style={{
+        maxWidth: '75%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-xs)',
+      }}>
+        <div style={{
+          fontSize: 'var(--text-xs)',
+          fontWeight: '500',
+          color: 'var(--color-gray-500)',
+          textAlign: isUser ? 'right' : 'left',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
           {role === 'user' && 'You'}
           {role === 'capybara' && 'Capybara AI'}
           {role === 'clone' && sender_id}
         </div>
-        <div style={styles.bubble}>{content}</div>
+        <div style={{
+          padding: 'var(--space-lg)',
+          borderRadius: '0.5rem',
+          backgroundColor: isUser ? 'var(--color-teal)' : 'var(--color-gray-50)',
+          color: isUser ? 'var(--color-white)' : 'var(--color-navy)',
+          fontSize: 'var(--text-base)',
+          lineHeight: 'var(--line-relaxed)',
+          wordWrap: 'break-word' as const,
+          border: isUser ? 'none' : '1px solid var(--color-gray-200)',
+          boxShadow: isUser ? 'var(--shadow-sm)' : 'none',
+        }}>
+          {content}
+        </div>
       </div>
+      <style>{`
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   )
 }

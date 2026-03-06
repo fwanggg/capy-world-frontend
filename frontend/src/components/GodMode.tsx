@@ -62,30 +62,52 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-        <div style={{ marginBottom: '1rem', color: '#666', fontSize: '0.9rem' }}>
-          💡 God Mode: Talk to Capybara AI to plan your research
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--color-white)' }}>
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: 'var(--space-2xl)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-lg)',
+      }}>
         {messages.length === 0 && !error && (
-          <div style={{ color: '#999', fontStyle: 'italic', padding: '1rem' }}>
-            Start by describing what you'd like to research. For example: "I want to test my sales pitch on game developers."
+          <div style={{
+            padding: 'var(--space-2xl)',
+            backgroundColor: 'var(--color-gray-50)',
+            borderRadius: '0.5rem',
+            borderLeft: '4px solid var(--color-teal)',
+          }}>
+            <h3 style={{
+              fontSize: 'var(--text-lg)',
+              fontWeight: '600',
+              color: 'var(--color-navy)',
+              marginBottom: 'var(--space-base)',
+              margin: 0,
+            }}>
+              God Mode
+            </h3>
+            <p style={{
+              color: 'var(--color-gray-600)',
+              fontSize: 'var(--text-base)',
+              margin: '0.5rem 0 0 0',
+            }}>
+              Talk to Capybara AI to plan your research. Start by describing what you'd like to research. For example: "I want to test my sales pitch on game developers."
+            </p>
           </div>
         )}
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} sender_id={msg.sender_id} content={msg.content} />
         ))}
         {error && (
-          <div
-            style={{
-              backgroundColor: '#fee',
-              color: '#c33',
-              padding: '0.75rem 1rem',
-              borderRadius: '0.25rem',
-              marginBottom: '1rem',
-              border: '1px solid #fcc',
-            }}
-          >
+          <div style={{
+            backgroundColor: '#fee2e2',
+            color: '#991b1b',
+            padding: 'var(--space-lg)',
+            borderRadius: '0.5rem',
+            marginBottom: 'var(--space-lg)',
+            border: '1px solid #fecaca',
+          }}>
             <strong>Error:</strong> {error}
           </div>
         )}
