@@ -17,9 +17,9 @@ router.post('/search', async (req: AuthRequest, res: Response) => {
     }
 
     const { data: clones, error } = await supabase
-      .from('clones')
-      .select('id, name, persona_description, category, tags')
-      .ilike('category', `%${query}%`)
+      .from('agent_memory')
+      .select('id, reddit_username, system_prompt')
+      .ilike('reddit_username', `%${query}%`)
       .limit(limit)
 
     if (error) throw error
@@ -58,8 +58,8 @@ router.get('/list', async (req: AuthRequest, res: Response) => {
     }
 
     const { data: clones, error } = await supabase
-      .from('clones')
-      .select('id, name, persona_description')
+      .from('agent_memory')
+      .select('id, reddit_username, system_prompt')
       .in('id', cloneIds)
 
     if (error) throw error

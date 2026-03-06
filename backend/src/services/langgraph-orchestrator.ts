@@ -49,13 +49,13 @@ export async function callClone(
   checkpointer: any
 ): Promise<string> {
   const { data: clone, error } = await supabase
-    .from('clones')
-    .select('system_prompt')
+    .from('agent_memory')
+    .select('system_prompt, reddit_username')
     .eq('id', cloneId)
     .single()
 
   if (error || !clone) {
-    throw new Error(`Clone ${cloneId} not found`)
+    throw new Error(`Agent ${cloneId} not found`)
   }
 
   const llm = createDeepSeekLLM()

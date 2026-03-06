@@ -15,17 +15,6 @@ CREATE TABLE waitlist (
   approved_at TIMESTAMP
 );
 
--- Create clones table
-CREATE TABLE clones (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  persona_description TEXT,
-  system_prompt TEXT NOT NULL,
-  category TEXT,
-  tags JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMP DEFAULT now()
-);
-
 -- Create chat_sessions table
 CREATE TABLE chat_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

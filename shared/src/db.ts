@@ -19,10 +19,10 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['waitlist']['Row'], 'id' | 'joined_at'>
         Update: Partial<Database['public']['Tables']['waitlist']['Insert']>
       }
-      clones: {
-        Row: { id: string; name: string; persona_description: string | null; system_prompt: string; category: string | null; tags: Record<string, any>; created_at: string }
-        Insert: Omit<Database['public']['Tables']['clones']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['clones']['Insert']>
+      agent_memory: {
+        Row: { id: number; reddit_username: string; system_prompt: string; created_at: string | null; updated_at: string | null }
+        Insert: Omit<Database['public']['Tables']['agent_memory']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['agent_memory']['Insert']>
       }
       chat_sessions: {
         Row: { id: string; user_id: string; created_at: string; mode: 'god' | 'conversation'; active_clones: Record<string, any>; metadata: Record<string, any> }
