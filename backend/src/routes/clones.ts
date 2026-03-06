@@ -1,0 +1,110 @@
+import { Router, Response } from 'express'
+import { supabase } from 'shared'
+import { AuthRequest } from '../middleware/auth'
+
+const router = Router()
+
+/**
+ * POST /clones/search
+ * Search for clones matching a query
+ */
+router.post('/search', async (req: AuthRequest, res: Response) => {
+  try {
+    const { query, limit = 100 } = req.body
+
+    if (!query) {
+      return res.status(400).json({ error: 'Missing query' })
+    }
+
+    const { data: clones, error } = await supabase
+      .from('clones')
+      .select('id, name, persona_description, category, tags')
+      .ilike('category', `%${query}%`)
+      .limit(limit)
+
+    if (error) throw error
+
+    res.json({
+      query,
+      count: clones?.length || 0,
+      clones,
+    })
+  } catch (error) {
+    console.error('Clone search error:', error)
+    res.status(500).json({ error: 'Failed to search clones' })
+  }
+})
+
+/**
+ * GET /clones/list
+ * List clones in current session
+ */
+router.get('/list', async (req: AuthRequest, res: Response) => {
+  try {
+    const { session_id } = req.query
+
+    const { data: session, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('active_clones')
+      .eq('id', session_id)
+      .single()
+
+    if (sessionError) throw sessionError
+
+    const cloneIds = session?.active_clones || []
+
+    if (cloneIds.length === 0) {
+      return res.json({ clones: [] })
+    }
+
+    const { data: clones, error } = await supabase
+      .from('clones')
+      .select('id, name, persona_description')
+      .in('id', cloneIds)
+
+    if (error) throw error
+
+    res.json({ clones })
+  } catch (error) {
+    console.error('Clone list error:', error)
+    res.status(500).json({ error: 'Failed to fetch clones' })
+  }
+})
+
+/**
+ * PUT /clones/update-session
+ * Update active clones in a session
+ */
+router.put('/update-session', async (req: AuthRequest, res: Response) => {
+  try {
+    const { session_id, clone_ids } = req.body
+    const userId = req.userId!
+
+    const { data: session, error: sessionError } = await supabase
+      .from('chat_sessions')
+      .select('id')
+      .eq('id', session_id)
+      .eq('user_id', userId)
+      .single()
+
+    if (sessionError || !session) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    const { data: updated, error } = await supabase
+      .from('chat_sessions')
+      .update({ active_clones: clone_ids })
+      .eq('id', session_id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json(updated)
+  } catch (error) {
+    console.error('Update session error:', error)
+    res.status(500).json({ error: 'Failed to update session' })
+  }
+})
+
+export default router
