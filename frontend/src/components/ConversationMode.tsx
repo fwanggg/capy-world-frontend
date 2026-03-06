@@ -66,34 +66,140 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '0.5rem 1rem', backgroundColor: '#f9f9f9', borderBottom: '1px solid #ddd' }}>
-        <small>Chatting with {activeClones.length} clones</small>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      backgroundColor: 'var(--color-white)',
+    }}>
+      {/* Conversation Header */}
+      <div style={{
+        padding: 'var(--space-lg) var(--space-xl)',
+        backgroundColor: 'var(--color-gray-50)',
+        borderBottom: '1px solid var(--color-gray-200)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <div>
+          <h3 style={{
+            fontSize: 'var(--text-sm)',
+            fontWeight: '600',
+            color: 'var(--color-gray-600)',
+            margin: 0,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            Conversation Mode
+          </h3>
+          <p style={{
+            fontSize: 'var(--text-base)',
+            color: 'var(--color-navy)',
+            margin: 'var(--space-xs) 0 0 0',
+            fontWeight: '500',
+          }}>
+            {activeClones.length} {activeClones.length === 1 ? 'clone' : 'clones'} in session
+          </p>
+        </div>
+        <div style={{
+          display: 'flex',
+          gap: 'var(--space-sm)',
+          flexWrap: 'wrap',
+          justifyContent: 'flex-end',
+        }}>
+          {activeClones.slice(0, 3).map((clone, idx) => (
+            <div
+              key={idx}
+              style={{
+                padding: 'var(--space-xs) var(--space-sm)',
+                backgroundColor: 'var(--color-teal)',
+                color: 'var(--color-white)',
+                borderRadius: '0.25rem',
+                fontSize: 'var(--text-xs)',
+                fontWeight: '500',
+              }}
+            >
+              {clone}
+            </div>
+          ))}
+          {activeClones.length > 3 && (
+            <div
+              style={{
+                padding: 'var(--space-xs) var(--space-sm)',
+                backgroundColor: 'var(--color-gray-300)',
+                color: 'var(--color-white)',
+                borderRadius: '0.25rem',
+                fontSize: 'var(--text-xs)',
+                fontWeight: '500',
+              }}
+            >
+              +{activeClones.length - 3} more
+            </div>
+          )}
+        </div>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+
+      {/* Messages Area */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: 'var(--space-2xl)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-lg)',
+      }}>
         {messages.length === 0 && !error && (
-          <div style={{ color: '#999', fontStyle: 'italic', padding: '1rem' }}>
-            Ask your clones a question to get their perspective on your product, pitch, or marketing message.
+          <div style={{
+            padding: 'var(--space-2xl)',
+            backgroundColor: 'var(--color-gray-50)',
+            borderRadius: '0.5rem',
+            borderLeft: '4px solid var(--color-teal)',
+            textAlign: 'center',
+          }}>
+            <h3 style={{
+              fontSize: 'var(--text-lg)',
+              fontWeight: '600',
+              color: 'var(--color-navy)',
+              margin: 0,
+              marginBottom: 'var(--space-base)',
+            }}>
+              Ready to hear from your clones
+            </h3>
+            <p style={{
+              color: 'var(--color-gray-600)',
+              fontSize: 'var(--text-base)',
+              margin: 0,
+            }}>
+              Ask your clones a question to get their perspective on your product, pitch, or marketing message.
+            </p>
           </div>
         )}
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} sender_id={msg.sender_id} content={msg.content} />
         ))}
         {error && (
-          <div
-            style={{
-              backgroundColor: '#fee',
-              color: '#c33',
-              padding: '0.75rem 1rem',
-              borderRadius: '0.25rem',
-              marginBottom: '1rem',
-              border: '1px solid #fcc',
-            }}
-          >
-            <strong>Error:</strong> {error}
+          <div style={{
+            backgroundColor: '#fee2e2',
+            color: '#991b1b',
+            padding: 'var(--space-lg)',
+            borderRadius: '0.5rem',
+            border: '1px solid #fecaca',
+          }}>
+            <strong style={{ fontSize: 'var(--text-sm)' }}>Error:</strong>
+            <p style={{ margin: 'var(--space-xs) 0 0 0', fontSize: 'var(--text-sm)' }}>{error}</p>
+          </div>
+        )}
+        {loading && (
+          <div style={{
+            textAlign: 'center',
+            padding: 'var(--space-lg)',
+            color: 'var(--color-gray-400)',
+          }}>
+            <p style={{ margin: 0, fontSize: 'var(--text-sm)' }}>Waiting for responses...</p>
           </div>
         )}
       </div>
+
       <ChatInput onSend={handleSendMessage} disabled={loading} placeholder="Ask your clones a question..." />
     </div>
   )
