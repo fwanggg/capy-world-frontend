@@ -1,37 +1,23 @@
-import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Navigation } from './components/Navigation'
+import { Home } from './pages/Home'
+import { About } from './pages/About'
+import { Docs } from './pages/Docs'
+import { Waitlist } from './pages/Waitlist'
+import { Chat } from './pages/Chat'
 
 function App() {
-  const [message, setMessage] = useState<string>('')
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    const fetchMessage = async () => {
-      setLoading(true)
-      try {
-        const res = await fetch('/api/hello')
-        const data = await res.json()
-        setMessage(data.message)
-      } catch (error) {
-        console.error('Failed to fetch message:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchMessage()
-  }, [])
-
   return (
-    <div className="app">
-      <h1>Capybara AI</h1>
-      <div className="container">
-        {loading ? (
-          <p>Loading...</p>
-        ) : (
-          <p>{message || 'No message from server'}</p>
-        )}
-      </div>
-    </div>
+    <BrowserRouter>
+      <Navigation />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/docs" element={<Docs />} />
+        <Route path="/waitlist" element={<Waitlist />} />
+        <Route path="/chat" element={<Chat />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
