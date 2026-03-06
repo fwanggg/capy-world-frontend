@@ -4,7 +4,8 @@
     "jsx": "react-jsx",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "types": ["vite/client"]
   },
   "include": ["src"],
   "exclude": ["node_modules"]
