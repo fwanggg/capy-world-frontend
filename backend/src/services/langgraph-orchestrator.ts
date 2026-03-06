@@ -1,5 +1,4 @@
-import { StateGraph, START, END, MessagesState } from '@langchain/langgraph'
-import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
+import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { createDeepSeekLLM } from './llm'
 import { supabase } from 'shared'
 
@@ -12,38 +11,43 @@ const CAPYBARA_SYSTEM_PROMPT = `You are Capybara AI, an expert user research gui
 You are intelligent, direct, and help users get maximum insight from their digital clones. When a user asks for clones, suggest specific counts (default 5, or top 10 active, or random). Ask clarifying questions to refine their research goal.`
 
 /**
- * Create the Capybara AI graph for orchestration
+ * Call Capybara AI with a message
+ * For now, uses direct LLM calls (thread-based checkpointing for session memory to be enhanced)
  */
-export function createCapybaraGraph() {
+export async function callCapybaraAI(
+  threadId: string,
+  userMessage: string,
+  checkpointer: any
+): Promise<string> {
   const llm = createDeepSeekLLM()
 
-  const graph = new StateGraph<MessagesState>(MessagesState)
+  const messages = [
+    new SystemMessage(CAPYBARA_SYSTEM_PROMPT),
+    new HumanMessage(userMessage),
+  ]
 
-  // Define the Capybara AI node
-  const capybaraNode = async (state: MessagesState) => {
-    const messages = [
-      { role: 'system', content: CAPYBARA_SYSTEM_PROMPT },
-      ...state.messages,
-    ]
+  const response = await llm.invoke(messages)
 
-    const response = await llm.invoke(state.messages)
-
-    return {
-      messages: [response],
-    }
+  // Extract content from response
+  const content = response.content
+  if (typeof content === 'string') {
+    return content
+  } else if (Array.isArray(content)) {
+    return content.map((c: any) => c.text || c).join('')
   }
-
-  graph.addNode('capybara', capybaraNode)
-  graph.addEdge(START, 'capybara')
-  graph.addEdge('capybara', END)
-
-  return graph.compile()
+  return String(content)
 }
 
 /**
- * Create a clone graph for a specific clone
+ * Call a digital clone with a message
+ * Each clone uses its own thread for isolated state
  */
-export async function createCloneGraph(cloneId: string) {
+export async function callClone(
+  cloneId: string,
+  threadId: string,
+  userMessage: string,
+  checkpointer: any
+): Promise<string> {
   const { data: clone, error } = await supabase
     .from('clones')
     .select('system_prompt')
@@ -56,63 +60,21 @@ export async function createCloneGraph(cloneId: string) {
 
   const llm = createDeepSeekLLM()
 
-  const graph = new StateGraph<MessagesState>(MessagesState)
+  const messages = [
+    new SystemMessage(clone.system_prompt),
+    new HumanMessage(userMessage),
+  ]
 
-  const cloneNode = async (state: MessagesState) => {
-    const response = await llm.invoke([
-      { role: 'system', content: clone.system_prompt },
-      ...state.messages,
-    ])
+  const response = await llm.invoke(messages)
 
-    return {
-      messages: [response],
-    }
+  // Extract content from response
+  const content = response.content
+  if (typeof content === 'string') {
+    return content
+  } else if (Array.isArray(content)) {
+    return content.map((c: any) => c.text || c).join('')
   }
-
-  graph.addNode('clone', cloneNode)
-  graph.addEdge(START, 'clone')
-  graph.addEdge('clone', END)
-
-  return graph.compile()
-}
-
-/**
- * Call Capybara AI with a message
- * Uses thread-based checkpointing for session memory
- */
-export async function callCapybaraAI(
-  threadId: string,
-  userMessage: string,
-  checkpointer: any
-) {
-  const graph = createCapybaraGraph()
-
-  const response = await graph.invoke(
-    { messages: [new HumanMessage(userMessage)] },
-    { configurable: { thread_id: threadId }, checkpoint_config: { checkpointer } }
-  )
-
-  return response.messages[response.messages.length - 1].content
-}
-
-/**
- * Call a digital clone with a message
- * Each clone uses its own thread for isolated state
- */
-export async function callClone(
-  cloneId: string,
-  threadId: string,
-  userMessage: string,
-  checkpointer: any
-) {
-  const graph = await createCloneGraph(cloneId)
-
-  const response = await graph.invoke(
-    { messages: [new HumanMessage(userMessage)] },
-    { configurable: { thread_id: threadId }, checkpoint_config: { checkpointer } }
-  )
-
-  return response.messages[response.messages.length - 1].content
+  return String(content)
 }
 
 /**
