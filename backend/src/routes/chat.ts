@@ -1,13 +1,37 @@
 import { Router, Response } from 'express'
+import { createHash } from 'crypto'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
-import { BaseMessage } from '@langchain/core/messages'
+import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
 import {
   callCapybaraAI,
   callMultipleClones,
 } from '../services/langgraph-orchestrator'
 
 const router = Router()
+
+// Helper: Generate deterministic UUID v4 from string
+const userHeaderToUUID = (header: string): string => {
+  const hash = createHash('md5').update(header).digest('hex')
+  // Convert first 16 hex chars to UUID v4 format
+  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`
+}
+
+// Helper: Generate random UUID v4
+const generateUUID = (): string => {
+  const chars = '0123456789abcdef'
+  let uuid = ''
+  for (let i = 0; i < 36; i++) {
+    if (i === 8 || i === 13 || i === 18 || i === 23) {
+      uuid += '-'
+    } else if (i === 14) {
+      uuid += '4' // UUID v4
+    } else {
+      uuid += chars[Math.floor(Math.random() * (i === 19 ? 4 : 16))]
+    }
+  }
+  return uuid
+}
 
 /**
  * POST /chat/init
@@ -16,16 +40,31 @@ const router = Router()
 router.post('/init', async (req: AuthRequest, res: Response) => {
   try {
     const { mode } = req.body // 'god' or 'conversation'
-    const userId = req.userId!
+    const userHeader = req.userId!
+    // Convert user header to deterministic UUID
+    const userId = userHeaderToUUID(userHeader)
 
     // Validate that mode is provided
     if (!mode || !['god', 'conversation'].includes(mode)) {
       return res.status(400).json({ error: 'Invalid mode. Must be "god" or "conversation"' })
     }
 
-    // Validate approval status (skip in test mode)
-    const isTestMode = process.env.TEST_MODE === 'true'
-    if (!isTestMode) {
+    // In development mode, skip approval check and ensure user exists
+    const isDev = process.env.NODE_ENV === 'development' || process.env.DEV === 'true'
+
+    if (isDev) {
+      // Auto-create user if doesn't exist
+      const { error: userError } = await supabase.from('app_users').upsert({
+        id: userId,
+        approved: true,
+        email: `${userHeader}@dev.local`,
+        google_id: `dev_${userHeader}`, // Required field
+      }, { onConflict: 'id' })
+      if (userError) {
+        console.log('[INIT] User upsert error:', userError.message)
+      }
+    } else {
+      // Production: check approval
       const { data: user, error: userError } = await supabase
         .from('app_users')
         .select('approved')
@@ -37,10 +76,9 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Create session (use test table in test mode)
-    const tableName = isTestMode ? 'chat_sessions' : 'chat_sessions'
+    // Create session
     const { data: session, error } = await supabase
-      .from(tableName)
+      .from('chat_sessions')
       .insert({
         user_id: userId,
         mode,
@@ -51,21 +89,11 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
       .single()
 
     if (error) {
-      // In test mode, create a mock session response if database fails
-      if (isTestMode) {
-        const mockSession = {
-          id: `session_${Date.now()}`,
-          user_id: userId,
-          mode,
-          active_clones: [],
-          metadata: { thread_id: `session_${Date.now()}` },
-          created_at: new Date().toISOString(),
-        }
-        return res.json(mockSession)
-      }
+      console.error('[INIT] Session creation error:', error)
       throw error
     }
 
+    console.log(`[INIT] Created session ${session.id} for user ${userId}`)
     res.json(session)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
@@ -82,37 +110,24 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
 router.post('/message', async (req: AuthRequest, res: Response) => {
   try {
     const { session_id, content, target_clones, target } = req.body
-    const userId = req.userId!
-    const isTestMode = process.env.TEST_MODE === 'true'
+    const userHeader = req.userId!
+    const userId = userHeaderToUUID(userHeader)
 
     // Validate input
     if (!session_id || !content) {
       return res.status(400).json({ error: 'Missing session_id or content' })
     }
 
-    // Verify session ownership
-    let session: any
-    let sessionError: any = null
+    // Fetch session from database
+    const result = await supabase
+      .from('chat_sessions')
+      .select('*')
+      .eq('id', session_id)
+      .eq('user_id', userId)
+      .single()
 
-    if (isTestMode) {
-      // In test mode, create a mock session
-      session = {
-        id: session_id,
-        user_id: userId,
-        mode: 'god',
-        active_clones: [],
-        metadata: { thread_id: session_id },
-      }
-    } else {
-      const result = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .eq('id', session_id)
-        .eq('user_id', userId)
-        .single()
-      session = result.data
-      sessionError = result.error
-    }
+    const session = result.data
+    const sessionError = result.error
 
     if (sessionError || !session) {
       return res.status(404).json({ error: 'Session not found' })
@@ -120,9 +135,9 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
     const threadId = session.metadata.thread_id
 
-    // Save user message (skip in test mode)
+    // Save user message
     let userMessage: any
-    if (isTestMode) {
+    if (false) { // Never use mock mode - always use database
       userMessage = {
         id: `msg_${Date.now()}`,
         session_id,
@@ -148,20 +163,16 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     }
 
     // Load last 10 messages for context
-    let lastMessages: any = []
-    if (!isTestMode) {
-      const result = await supabase
-        .from('chat_messages')
-        .select('role, sender_id, content')
-        .eq('session_id', session_id)
-        .order('created_at', { ascending: true })
-        .limit(10)
-      lastMessages = result.data || []
-    }
+    const messageResult = await supabase
+      .from('chat_messages')
+      .select('role, sender_id, content')
+      .eq('session_id', session_id)
+      .order('created_at', { ascending: true })
+      .limit(10)
+    const lastMessages = messageResult.data || []
 
     // Convert messages to LangChain format
     const messageHistory: BaseMessage[] = (lastMessages || []).map((msg: any) => {
-      const { HumanMessage, AIMessage } = require('@langchain/core/messages')
       if (msg.role === 'user') {
         return new HumanMessage(msg.content)
       } else {
@@ -222,16 +233,14 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       }))
     }
 
-    // Save AI responses (skip in test mode)
-    if (!isTestMode) {
-      for (const response of responses) {
-        await supabase.from('chat_messages').insert({
-          session_id,
-          role: response.role,
-          sender_id: response.sender_id,
-          content: response.content,
-        })
-      }
+    // Save AI responses - always save to database
+    for (const response of responses) {
+      await supabase.from('chat_messages').insert({
+        session_id,
+        role: response.role,
+        sender_id: response.sender_id,
+        content: response.content,
+      })
     }
 
     const responseBody: any = {

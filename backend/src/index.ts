@@ -4,6 +4,7 @@ import authRoutes from './routes/auth'
 import chatRoutes from './routes/chat'
 import cloneRoutes from './routes/clones'
 import { requireAuth, requireApproval } from './middleware/auth'
+import { supabase } from 'shared'
 
 const app = express()
 const PORT = 3001

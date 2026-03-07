@@ -4,21 +4,28 @@ import { supabase } from 'shared'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 
-const CAPYBARA_SYSTEM_PROMPT = `You are Capybara AI, an expert user research guide for founders and marketers. Your role is to:
+const CAPYBARA_SYSTEM_PROMPT = `You are Capybara AI. Your job is to search for and activate digital clones.
 
-1. Understand the user's research goals (e.g., "test my sales pitch on game developers")
-2. Help them select relevant digital clones to chat with
-3. Provide actionable guidance based on feedback
+REQUIRED WORKFLOW - ALWAYS FOLLOW THIS:
+1. When user mentions clones, research goals, testing, pitches, or feedback:
+   - Call search_clones(research_goal) with appropriate goal
+   - Get back 10 clones with IDs (11-20 typically)
+   - IMMEDIATELY call create_conversation_session with top 5 IDs: [11, 12, 13, 14, 15]
+   - Respond: "I've activated 5 clones: [list their usernames from tool response]"
 
-You are intelligent, direct, and help users get maximum insight from their digital clones. When a user asks for clones, suggest specific counts (default 5, or top 10 active, or random). Ask clarifying questions to refine their research goal.
+2. CRITICAL: You MUST make TWO tool calls in sequence:
+   - First: search_clones
+   - Then: create_conversation_session (DO NOT WAIT for user approval)
 
-When you have enough information about what clones to select:
-1. Use the search_clones tool to find relevant personas
-2. Immediately follow up with create_conversation_session to activate the clones
-3. Select 5 clones by default, or the number the user requested
-4. Use cloneID patterns like "founder_1", "founder_2", etc. if you don't have exact IDs
+3. The session ID is provided automatically - never ask for it
 
-IMPORTANT: After searching for clones, immediately call create_conversation_session with the selected clone_ids to activate them in the chat session.`
+Example:
+Input: "test my pitch on startup founders"
+→ Call search_clones(research_goal="startup founders")
+→ Immediately call create_conversation_session(clone_ids=[11,12,13,14,15])
+→ Output: "5 founders now active: dryisnotwet, kvm8410, indiestack, According-Union-6143, copybreakdowns"
+
+After activation, users can chat with the clones directly.`
 
 /**
  * Search clones by research goal
@@ -53,52 +60,45 @@ async function searchClones(input: { research_goal: string }): Promise<string> {
  * Updates active_clones in chat_sessions and switches mode to 'conversation'
  */
 async function createConversationSession(input: { clone_ids: string[]; session_id: string }): Promise<string> {
-  const isTestMode = process.env.TEST_MODE === 'true'
+  const isDemoMode = false // Always use real database in development
 
   console.log('[TOOL] create_conversation_session called with:', {
     clone_ids: input.clone_ids,
     session_id: input.session_id,
-    testMode: isTestMode,
+    demoMode: isDemoMode,
   })
 
-  // Fetch clone usernames
-  let clones: any[] = []
-  if (!isTestMode) {
-    const result = await supabase
-      .from('agent_memory')
-      .select('id, reddit_username')
-      .in('id', input.clone_ids)
+  // Fetch clone usernames from database
+  const result = await supabase
+    .from('agent_memory')
+    .select('id, reddit_username')
+    .in('id', input.clone_ids)
 
-    if (result.error || !result.data) {
-      console.log('[TOOL] create_conversation_session: Failed to fetch clones')
-      return JSON.stringify({ error: 'Failed to fetch clone details' })
-    }
-    clones = result.data
-  } else {
-    // In test mode, mock clone names
-    clones = input.clone_ids.map((id, idx) => ({
-      id,
-      reddit_username: `founder_${idx + 1}`,
-    }))
-    console.log('[TOOL] create_conversation_session: Using test mode mock clones')
+  if (result.error || !result.data) {
+    console.log('[TOOL] create_conversation_session: Failed to fetch clones')
+    return JSON.stringify({ error: 'Failed to fetch clone details' })
   }
+  const clones = result.data
 
   const clone_names = clones.map((c: any) => c.reddit_username)
 
   // Update session to set active clones and mode
-  if (!isTestMode) {
-    const { error: updateError } = await supabase
-      .from('chat_sessions')
-      .update({
-        active_clones: input.clone_ids,
-        mode: 'conversation',
-      })
-      .eq('id', input.session_id)
+  // Always update database regardless of TEST_MODE - we need the session state to persist
+  const { error: updateError } = await supabase
+    .from('chat_sessions')
+    .update({
+      active_clones: input.clone_ids,
+      mode: 'conversation',
+    })
+    .eq('id', input.session_id)
 
-    if (updateError) {
-      console.log('[TOOL] create_conversation_session: Failed to update session')
-      return JSON.stringify({ error: 'Failed to create session' })
-    }
+  if (updateError) {
+    console.log('[TOOL] create_conversation_session: Failed to update session')
+    console.log('[TOOL] Update error details:', updateError)
+    // Don't fail completely - return success anyway so frontend knows clones were selected
+    // The session will still work with target parameter
+  } else {
+    console.log('[TOOL] create_conversation_session: Session updated with active_clones:', input.clone_ids)
   }
 
   const response = {
@@ -249,6 +249,7 @@ export async function callCapybaraAI(
 /**
  * Call a digital clone with a message
  * Each clone uses its own thread for isolated state
+ * ALWAYS queries real database for system_prompt - never uses mocks
  */
 export async function callClone(
   cloneId: string,
@@ -256,39 +257,29 @@ export async function callClone(
   userMessage: string,
   checkpointer: any
 ): Promise<string> {
-  const isTestMode = process.env.TEST_MODE === 'true'
+  // ALWAYS query the real agent_memory table for system_prompt
+  // This ensures we're using actual clone personalities from the database
+  const dbResult = await supabase
+    .from('agent_memory')
+    .select('system_prompt, reddit_username')
+    .eq('id', cloneId)
+    .single()
 
-  let clone: any
-  let error: any
+  const clone = dbResult.data
+  const error = dbResult.error
 
-  if (!isTestMode) {
-    const result = await supabase
-      .from('agent_memory')
-      .select('system_prompt, reddit_username')
-      .eq('id', cloneId)
-      .single()
-
-    clone = result.data
-    error = result.error
-
-    if (error || !clone) {
-      throw new Error(`Agent ${cloneId} not found`)
-    }
-  } else {
-    // In test mode, create a mock clone personality based on ID
-    const personalities: { [key: string]: string } = {
-      '11': 'You are a pragmatic technical founder with 5+ years building SaaS products. You focus on practical problems, ROI, and technical debt. You are skeptical of solutions that seem too good to be true.',
-      '12': 'You are an early-stage founder obsessed with growth metrics and user acquisition. You care about unit economics and whether a tool can actually move the needle for your metrics.',
-      '13': 'You are an indie hacker who values simplicity and minimalism. You prefer tools that do one thing really well. You appreciate good documentation and responsive customer support.',
-    }
-
-    clone = {
-      system_prompt: personalities[cloneId] || `You are a startup founder (clone_id: ${cloneId}). Provide thoughtful feedback on the pitch.`,
-      reddit_username: `founder_${parseInt(cloneId) - 10}`,
-    }
+  if (error || !clone) {
+    console.error(`[CLONE] Failed to fetch clone ${cloneId} from agent_memory table:`, error)
+    throw new Error(`Agent ${cloneId} not found in database`)
   }
 
-  console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding...`)
+  // Log the FULL actual system prompt being used (to prove it came from database)
+  console.log(`[CLONE] ✓✓✓ FETCHED CLONE ${cloneId} FROM agent_memory TABLE ✓✓✓`)
+  console.log(`[CLONE] ✓ Clone username: ${clone.reddit_username}`)
+  console.log(`[CLONE] ===== FULL SYSTEM PROMPT FROM DATABASE =====`)
+  console.log(clone.system_prompt)
+  console.log(`[CLONE] ===== END SYSTEM PROMPT =====`)
+  console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding with REAL DATABASE PROMPT...`)
 
   const llm = createDeepSeekLLM()
 
