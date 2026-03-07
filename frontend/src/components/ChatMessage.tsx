@@ -8,6 +8,7 @@ interface ChatMessageProps {
 
 export function ChatMessage({ role, sender_id, content }: ChatMessageProps) {
   const isUser = role === 'user'
+  const isCapybara = role === 'capybara'
 
   return (
     <div style={{
@@ -25,7 +26,7 @@ export function ChatMessage({ role, sender_id, content }: ChatMessageProps) {
         <div style={{
           fontSize: 'var(--text-xs)',
           fontWeight: '500',
-          color: 'var(--color-gray-500)',
+          color: isCapybara ? 'var(--color-teal)' : 'var(--color-gray-500)',
           textAlign: isUser ? 'right' : 'left',
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
@@ -42,8 +43,9 @@ export function ChatMessage({ role, sender_id, content }: ChatMessageProps) {
           fontSize: 'var(--text-base)',
           lineHeight: 'var(--line-relaxed)',
           wordWrap: 'break-word' as const,
-          border: isUser ? 'none' : '1px solid var(--color-gray-200)',
-          boxShadow: isUser ? 'var(--shadow-sm)' : 'none',
+          border: isUser ? 'none' : isCapybara ? '2px solid var(--color-teal)' : '1px solid var(--color-gray-200)',
+          borderLeft: isCapybara ? '4px solid var(--color-teal)' : undefined,
+          boxShadow: isUser ? 'var(--shadow-sm)' : isCapybara ? '0 0 0 3px rgba(13, 148, 136, 0.1)' : 'none',
         }}>
           {content}
         </div>

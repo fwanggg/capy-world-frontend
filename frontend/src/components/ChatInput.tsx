@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 interface ChatInputProps {
-  onSend: (message: string, targetClones?: string[]) => void
+  onSend: (message: string, targetClones?: string[], target?: 'capybara' | 'clones') => void
   disabled?: boolean
   placeholder?: string
 }
@@ -11,9 +11,17 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
   const handleSend = () => {
     if (input.trim()) {
-      // Parse @mentions
-      const mentions = (input.match(/@\w+/g) || []).map((m) => m.slice(1))
-      onSend(input, mentions.length > 0 ? mentions : undefined)
+      // Check if message starts with @capybara
+      const capybaraMatch = input.match(/^@capybara\s+(.*)/)
+      if (capybaraMatch) {
+        // Send to Capybara AI, strip the @capybara prefix
+        const messageContent = capybaraMatch[1]
+        onSend(messageContent, undefined, 'capybara')
+      } else {
+        // Parse other @mentions for clones
+        const mentions = (input.match(/@\w+/g) || []).map((m) => m.slice(1))
+        onSend(input, mentions.length > 0 ? mentions : undefined, 'clones')
+      }
       setInput('')
     }
   }
@@ -28,41 +36,46 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   return (
     <div style={{
       display: 'flex',
-      gap: 'var(--space-base)',
+      flexDirection: 'column',
+      gap: 'var(--space-sm)',
       padding: 'var(--space-lg) var(--space-xl)',
       borderTop: '1px solid var(--color-gray-200)',
       backgroundColor: 'var(--color-white)',
     }}>
-      <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder || 'Type your message... (use @mention for specific clones)'}
-        disabled={disabled}
-        style={{
-          flex: 1,
-          padding: 'var(--space-base)',
-          borderRadius: '0.375rem',
-          border: '1px solid var(--color-gray-200)',
-          fontFamily: 'var(--font-body)',
-          fontSize: 'var(--text-base)',
-          fontColor: 'var(--color-navy)',
-          resize: 'vertical',
-          transition: 'all var(--transition-fast)',
-          minHeight: '3rem',
-          maxHeight: '120px',
-        }}
-        onFocus={(e) => {
-          e.currentTarget.style.borderColor = 'var(--color-teal)'
-          e.currentTarget.style.boxShadow = '0 0 0 3px rgba(13, 148, 136, 0.1)'
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = 'var(--color-gray-200)'
-          e.currentTarget.style.boxShadow = 'none'
-        }}
-        rows={2}
-      />
-      <button
+      <div style={{
+        display: 'flex',
+        gap: 'var(--space-base)',
+      }}>
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder || 'Type your message... (use @capybara for the orchestrator)'}
+          disabled={disabled}
+          style={{
+            flex: 1,
+            padding: 'var(--space-base)',
+            borderRadius: '0.375rem',
+            border: '1px solid var(--color-gray-200)',
+            fontFamily: 'var(--font-body)',
+            fontSize: 'var(--text-base)',
+            color: 'var(--color-navy)',
+            resize: 'vertical',
+            transition: 'all var(--transition-fast)',
+            minHeight: '3rem',
+            maxHeight: '120px',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = 'var(--color-teal)'
+            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(13, 148, 136, 0.1)'
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = 'var(--color-gray-200)'
+            e.currentTarget.style.boxShadow = 'none'
+          }}
+          rows={2}
+        />
+        <button
         onClick={handleSend}
         disabled={disabled || !input.trim()}
         style={{
@@ -90,9 +103,18 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
           e.currentTarget.style.transform = 'translateY(0)'
           e.currentTarget.style.boxShadow = 'none'
         }}
-      >
-        Send
-      </button>
+        >
+          Send
+        </button>
+      </div>
+      <p style={{
+        fontSize: 'var(--text-xs)',
+        color: 'var(--color-gray-400)',
+        margin: 0,
+        fontStyle: 'italic',
+      }}>
+        Tip: Type @capybara to ask the orchestrator
+      </p>
     </div>
   )
 }

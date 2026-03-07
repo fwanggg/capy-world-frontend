@@ -11,11 +11,13 @@ interface GodModeProps {
 export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
   const [messages, setMessages] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchingPersonas, setSearchingPersonas] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, _targetClones?: string[], target?: 'capybara' | 'clones') => {
     setError(null)
     setLoading(true)
+    setSearchingPersonas(target === 'capybara')
 
     try {
       if (!content.trim()) {
@@ -30,10 +32,15 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         headers['x-user-id'] = authHeaders['x-user-id']
       }
 
+      const requestBody: any = { session_id: sessionId, content }
+      if (target === 'capybara') {
+        requestBody.target = 'capybara'
+      }
+
       const response = await fetch('http://localhost:3001/chat/message', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ session_id: sessionId, content }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
@@ -51,13 +58,18 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         setMessages((prev) => [...prev, ...data.ai_responses])
       }
 
-      // TODO: Parse Capybara response to detect clone selection and auto-transition
+      // If session_transition is present, auto-transition to conversation mode
+      if (data.session_transition) {
+        const { clone_names } = data.session_transition
+        onEnterConversation(clone_names)
+      }
     } catch (err: any) {
       const errorMsg = err.message || 'An unexpected error occurred'
       setError(errorMsg)
       console.error('GodMode error:', err)
     } finally {
       setLoading(false)
+      setSearchingPersonas(false)
     }
   }
 
@@ -99,6 +111,19 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         {messages.map((msg, i) => (
           <ChatMessage key={i} role={msg.role} sender_id={msg.sender_id} content={msg.content} />
         ))}
+        {searchingPersonas && (
+          <div style={{
+            padding: 'var(--space-lg)',
+            backgroundColor: 'var(--color-gray-50)',
+            borderRadius: '0.5rem',
+            borderLeft: '4px solid var(--color-teal)',
+            color: 'var(--color-gray-600)',
+          }}>
+            <p style={{ margin: 0, fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
+              Searching for relevant personas...
+            </p>
+          </div>
+        )}
         {error && (
           <div style={{
             backgroundColor: '#fee2e2',

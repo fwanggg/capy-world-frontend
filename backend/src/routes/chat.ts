@@ -1,6 +1,7 @@
 import { Router, Response } from 'express'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
+import { BaseMessage } from '@langchain/core/messages'
 import {
   callCapybaraAI,
   callMultipleClones,
@@ -57,11 +58,11 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
 /**
  * POST /chat/message
  * Send a message in a chat session
- * Routes to Capybara AI or clones based on mode
+ * Routes to Capybara AI or clones based on mode/target
  */
 router.post('/message', async (req: AuthRequest, res: Response) => {
   try {
-    const { session_id, content, target_clones } = req.body
+    const { session_id, content, target_clones, target } = req.body
     const userId = req.userId!
 
     // Validate input
@@ -97,20 +98,45 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
     if (msgError) throw msgError
 
-    // Route message based on mode
-    let responses: Array<{ role: string; sender_id: string; content: string }> = []
+    // Load last 10 messages for context
+    const { data: lastMessages } = await supabase
+      .from('chat_messages')
+      .select('role, sender_id, content')
+      .eq('session_id', session_id)
+      .order('created_at', { ascending: true })
+      .limit(10)
 
-    if (session.mode === 'god') {
-      // Send to Capybara AI (uses LangGraph thread for session memory)
-      const capybaraResponse = await callCapybaraAI(threadId, content, null)
+    // Convert messages to LangChain format
+    const messageHistory: BaseMessage[] = (lastMessages || []).map((msg: any) => {
+      const { HumanMessage, AIMessage } = require('@langchain/core/messages')
+      if (msg.role === 'user') {
+        return new HumanMessage(msg.content)
+      } else {
+        return new AIMessage(msg.content)
+      }
+    })
+
+    // Route message based on target or mode
+    let responses: Array<{ role: string; sender_id: string; content: string }> = []
+    let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
+
+    // Determine routing: explicit target takes precedence, then mode
+    const routeToCapybara = target === 'capybara' || (session.mode === 'god' && target !== 'clones')
+
+    // If routing to Capybara, send the message
+    if (routeToCapybara) {
+      // Send to Capybara AI with message history
+      const capybaraResult = await callCapybaraAI(session_id, content, messageHistory)
 
       responses = [
         {
           role: 'capybara',
           sender_id: 'capybara-ai',
-          content: String(capybaraResponse),
+          content: capybaraResult.response,
         },
       ]
+
+      sessionTransition = capybaraResult.session_transition
     } else if (session.mode === 'conversation') {
       // Send to selected clones
       const clonesInScope = target_clones || session.active_clones
@@ -120,12 +146,7 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       }
 
       // Call all clones in parallel (each uses own thread for isolated state)
-      const cloneResponses = await callMultipleClones(
-        clonesInScope,
-        threadId,
-        content,
-        null
-      )
+      const cloneResponses = await callMultipleClones(clonesInScope, threadId, content, null)
 
       responses = cloneResponses.map((response) => ({
         role: 'clone',
@@ -144,10 +165,16 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       })
     }
 
-    res.json({
+    const responseBody: any = {
       user_message: userMessage,
       ai_responses: responses,
-    })
+    }
+
+    if (sessionTransition) {
+      responseBody.session_transition = sessionTransition
+    }
+
+    res.json(responseBody)
   } catch (error) {
     console.error('Message error:', error)
     res.status(500).json({ error: 'Failed to process message' })

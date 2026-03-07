@@ -13,7 +13,7 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSendMessage = async (content: string, targetClones?: string[]) => {
+  const handleSendMessage = async (content: string, targetClones?: string[], target?: 'capybara' | 'clones') => {
     setError(null)
     setLoading(true)
 
@@ -30,14 +30,21 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
         headers['x-user-id'] = authHeaders['x-user-id']
       }
 
+      const requestBody: any = {
+        session_id: sessionId,
+        content,
+      }
+
+      if (target === 'capybara') {
+        requestBody.target = 'capybara'
+      } else if (targetClones) {
+        requestBody.target_clones = targetClones
+      }
+
       const response = await fetch('http://localhost:3001/chat/message', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          session_id: sessionId,
-          content,
-          target_clones: targetClones,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
