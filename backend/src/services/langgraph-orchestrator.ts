@@ -12,7 +12,13 @@ const CAPYBARA_SYSTEM_PROMPT = `You are Capybara AI, an expert user research gui
 
 You are intelligent, direct, and help users get maximum insight from their digital clones. When a user asks for clones, suggest specific counts (default 5, or top 10 active, or random). Ask clarifying questions to refine their research goal.
 
-When you have enough information about what clones to select, use the search_clones tool to find relevant personas, then use create_conversation_session to activate them.`
+When you have enough information about what clones to select:
+1. Use the search_clones tool to find relevant personas
+2. Immediately follow up with create_conversation_session to activate the clones
+3. Select 5 clones by default, or the number the user requested
+4. Use cloneID patterns like "founder_1", "founder_2", etc. if you don't have exact IDs
+
+IMPORTANT: After searching for clones, immediately call create_conversation_session with the selected clone_ids to activate them in the chat session.`
 
 /**
  * Search clones by research goal
@@ -41,29 +47,43 @@ async function searchClones(input: { research_goal: string }): Promise<string> {
  * Updates active_clones in chat_sessions and switches mode to 'conversation'
  */
 async function createConversationSession(input: { clone_ids: string[]; session_id: string }): Promise<string> {
-  // Fetch clone usernames
-  const { data: clones, error: fetchError } = await supabase
-    .from('agent_memory')
-    .select('id, reddit_username')
-    .in('id', input.clone_ids)
+  const isTestMode = process.env.TEST_MODE === 'true'
 
-  if (fetchError || !clones) {
-    return JSON.stringify({ error: 'Failed to fetch clone details' })
+  // Fetch clone usernames
+  let clones: any[] = []
+  if (!isTestMode) {
+    const result = await supabase
+      .from('agent_memory')
+      .select('id, reddit_username')
+      .in('id', input.clone_ids)
+
+    if (result.error || !result.data) {
+      return JSON.stringify({ error: 'Failed to fetch clone details' })
+    }
+    clones = result.data
+  } else {
+    // In test mode, mock clone names
+    clones = input.clone_ids.map((id, idx) => ({
+      id,
+      reddit_username: `founder_${idx + 1}`,
+    }))
   }
 
   const clone_names = clones.map((c: any) => c.reddit_username)
 
   // Update session to set active clones and mode
-  const { error: updateError } = await supabase
-    .from('chat_sessions')
-    .update({
-      active_clones: input.clone_ids,
-      mode: 'conversation',
-    })
-    .eq('id', input.session_id)
+  if (!isTestMode) {
+    const { error: updateError } = await supabase
+      .from('chat_sessions')
+      .update({
+        active_clones: input.clone_ids,
+        mode: 'conversation',
+      })
+      .eq('id', input.session_id)
 
-  if (updateError) {
-    return JSON.stringify({ error: 'Failed to create session' })
+    if (updateError) {
+      return JSON.stringify({ error: 'Failed to create session' })
+    }
   }
 
   return JSON.stringify({

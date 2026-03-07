@@ -4,6 +4,7 @@
     "langchain-pack@claude-code-plugins-plus": true,
     "supabase-pack@claude-code-plugins-plus": true,
     "vercel-pack@claude-code-plugins-plus": true,
-    "context7@claude-plugins-official": true
+    "context7@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true
   }
 }
