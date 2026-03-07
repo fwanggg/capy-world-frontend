@@ -174,11 +174,24 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
 
     // Determine routing: explicit target takes precedence, then mode
-    const routeToCapybara = target === 'capybara' || (session.mode === 'god' && target !== 'clones')
+    // Priority: target='capybara' > target_clones provided > session mode
+    const hasActiveClones = session.active_clones && session.active_clones.length > 0
+    const hasExplicitClones = target_clones && target_clones.length > 0
+    const routeToCapybara = target === 'capybara' || (session.mode === 'god' && target !== 'clones' && !hasActiveClones && !hasExplicitClones)
+
+    console.log('[ROUTE] Decision:',{
+      target,
+      target_clones,
+      session_mode: session.mode,
+      hasActiveClones,
+      hasExplicitClones,
+      routeToCapybara,
+    })
 
     // If routing to Capybara, send the message
     if (routeToCapybara) {
       // Send to Capybara AI with message history
+      console.log('[ROUTE] Routing to Capybara AI')
       const capybaraResult = await callCapybaraAI(session_id, content, messageHistory)
 
       responses = [
@@ -190,8 +203,9 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       ]
 
       sessionTransition = capybaraResult.session_transition
-    } else if (session.mode === 'conversation') {
+    } else if (session.mode === 'conversation' || hasActiveClones || hasExplicitClones || target === 'clones') {
       // Send to selected clones
+      console.log('[ROUTE] Routing to clones, explicit_clones:', target_clones, 'active:', session.active_clones)
       const clonesInScope = target_clones || session.active_clones
 
       if (!clonesInScope || clonesInScope.length === 0) {

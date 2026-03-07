@@ -25,21 +25,27 @@ IMPORTANT: After searching for clones, immediately call create_conversation_sess
  * Returns list of clone IDs and usernames (never exposes system_prompt)
  */
 async function searchClones(input: { research_goal: string }): Promise<string> {
+  console.log('[TOOL] search_clones called with goal:', input.research_goal)
+
   const { data, error } = await supabase
     .from('agent_memory')
     .select('id, reddit_username')
     .limit(20)
 
   if (error) {
+    console.log('[TOOL] search_clones error:', error)
     return JSON.stringify({ error: 'Failed to search clones' })
   }
 
-  return JSON.stringify({
+  const result = {
     clones: data.map((d: any) => ({
       id: d.id,
       reddit_username: d.reddit_username,
     })),
-  })
+  }
+
+  console.log('[TOOL] search_clones returning:', result.clones.length, 'clones')
+  return JSON.stringify(result)
 }
 
 /**
@@ -48,6 +54,12 @@ async function searchClones(input: { research_goal: string }): Promise<string> {
  */
 async function createConversationSession(input: { clone_ids: string[]; session_id: string }): Promise<string> {
   const isTestMode = process.env.TEST_MODE === 'true'
+
+  console.log('[TOOL] create_conversation_session called with:', {
+    clone_ids: input.clone_ids,
+    session_id: input.session_id,
+    testMode: isTestMode,
+  })
 
   // Fetch clone usernames
   let clones: any[] = []
@@ -58,6 +70,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
       .in('id', input.clone_ids)
 
     if (result.error || !result.data) {
+      console.log('[TOOL] create_conversation_session: Failed to fetch clones')
       return JSON.stringify({ error: 'Failed to fetch clone details' })
     }
     clones = result.data
@@ -67,6 +80,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
       id,
       reddit_username: `founder_${idx + 1}`,
     }))
+    console.log('[TOOL] create_conversation_session: Using test mode mock clones')
   }
 
   const clone_names = clones.map((c: any) => c.reddit_username)
@@ -82,15 +96,19 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
       .eq('id', input.session_id)
 
     if (updateError) {
+      console.log('[TOOL] create_conversation_session: Failed to update session')
       return JSON.stringify({ error: 'Failed to create session' })
     }
   }
 
-  return JSON.stringify({
+  const response = {
     success: true,
     clone_ids: input.clone_ids,
     clone_names,
-  })
+  }
+
+  console.log('[TOOL] create_conversation_session returning:', response)
+  return JSON.stringify(response)
 }
 
 // Define tools for LLM binding
@@ -148,18 +166,22 @@ export async function callCapybaraAI(
 
   while (iterations < maxIterations) {
     iterations++
+    console.log(`[ORCHESTRATOR] Iteration ${iterations}/${maxIterations}`)
 
     // Invoke LLM
     const response = await llmWithTools.invoke(messages)
+    console.log('[ORCHESTRATOR] LLM response received, tool_calls:', response.tool_calls?.length || 0)
 
     // Check if there are tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
+      console.log('[ORCHESTRATOR] Processing', response.tool_calls.length, 'tool calls')
       // Append the assistant's response first
       messages.push(response)
 
       // Process tool calls
       for (const toolCall of response.tool_calls) {
         let toolResult: string
+        console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
 
         try {
           if (toolCall.name === 'search_clones') {
@@ -181,12 +203,14 @@ export async function callCapybaraAI(
                   clone_ids: result.clone_ids,
                   clone_names: result.clone_names,
                 }
+                console.log('[ORCHESTRATOR] Session transition set:', result.clone_names)
               }
             } catch {}
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
           }
         } catch (err) {
+          console.log('[ORCHESTRATOR] Tool execution error:', err)
           toolResult = JSON.stringify({ error: `Tool execution failed: ${err}` })
         }
 
@@ -201,6 +225,7 @@ export async function callCapybaraAI(
       }
     } else {
       // No tool calls - extract final response and exit loop
+      console.log('[ORCHESTRATOR] No tool calls, extracting final response')
       const content = response.content
       if (typeof content === 'string') {
         finalResponse = content
@@ -209,10 +234,12 @@ export async function callCapybaraAI(
       } else {
         finalResponse = String(content)
       }
+      console.log('[ORCHESTRATOR] Final response extracted, exiting loop')
       break
     }
   }
 
+  console.log('[ORCHESTRATOR] Returning response with session_transition:', !!sessionTransition)
   return {
     response: finalResponse || 'Unable to generate response',
     session_transition: sessionTransition,
@@ -229,15 +256,39 @@ export async function callClone(
   userMessage: string,
   checkpointer: any
 ): Promise<string> {
-  const { data: clone, error } = await supabase
-    .from('agent_memory')
-    .select('system_prompt, reddit_username')
-    .eq('id', cloneId)
-    .single()
+  const isTestMode = process.env.TEST_MODE === 'true'
 
-  if (error || !clone) {
-    throw new Error(`Agent ${cloneId} not found`)
+  let clone: any
+  let error: any
+
+  if (!isTestMode) {
+    const result = await supabase
+      .from('agent_memory')
+      .select('system_prompt, reddit_username')
+      .eq('id', cloneId)
+      .single()
+
+    clone = result.data
+    error = result.error
+
+    if (error || !clone) {
+      throw new Error(`Agent ${cloneId} not found`)
+    }
+  } else {
+    // In test mode, create a mock clone personality based on ID
+    const personalities: { [key: string]: string } = {
+      '11': 'You are a pragmatic technical founder with 5+ years building SaaS products. You focus on practical problems, ROI, and technical debt. You are skeptical of solutions that seem too good to be true.',
+      '12': 'You are an early-stage founder obsessed with growth metrics and user acquisition. You care about unit economics and whether a tool can actually move the needle for your metrics.',
+      '13': 'You are an indie hacker who values simplicity and minimalism. You prefer tools that do one thing really well. You appreciate good documentation and responsive customer support.',
+    }
+
+    clone = {
+      system_prompt: personalities[cloneId] || `You are a startup founder (clone_id: ${cloneId}). Provide thoughtful feedback on the pitch.`,
+      reddit_username: `founder_${parseInt(cloneId) - 10}`,
+    }
   }
+
+  console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding...`)
 
   const llm = createDeepSeekLLM()
 
@@ -250,12 +301,17 @@ export async function callClone(
 
   // Extract content from response
   const content = response.content
+  let result = ''
   if (typeof content === 'string') {
-    return content
+    result = content
   } else if (Array.isArray(content)) {
-    return content.map((c: any) => c.text || c).join('')
+    result = content.map((c: any) => c.text || c).join('')
+  } else {
+    result = String(content)
   }
-  return String(content)
+
+  console.log(`[CLONE] ${cloneId} response length: ${result.length} chars`)
+  return result
 }
 
 /**
@@ -267,14 +323,21 @@ export async function callMultipleClones(
   userMessage: string,
   checkpointer: any
 ) {
+  console.log('[CLONES] callMultipleClones called with IDs:', cloneIds)
+
   const promises = cloneIds.map((cloneId) =>
     callClone(cloneId, threadId, userMessage, checkpointer)
-      .then((content) => ({ clone_id: cloneId, content }))
+      .then((content) => {
+        console.log(`[CLONES] ${cloneId} completed with ${content.length} chars`)
+        return { clone_id: cloneId, content }
+      })
       .catch((error) => {
-        console.error(`Clone ${cloneId} error:`, error)
+        console.error(`[CLONES] ${cloneId} error:`, error instanceof Error ? error.message : String(error))
         return { clone_id: cloneId, content: '[Failed to respond]' }
       })
   )
 
-  return Promise.all(promises)
+  const results = await Promise.all(promises)
+  console.log('[CLONES] All clones completed, returning', results.length, 'responses')
+  return results
 }
