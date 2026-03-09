@@ -6,6 +6,8 @@ export function AuthCallback() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    let isMounted = true
+
     const handleCallback = async () => {
       try {
         // Get the session from the URL (Supabase stores it automatically)
@@ -13,21 +15,29 @@ export function AuthCallback() {
 
         if (error) throw error
 
+        // Check if component still mounted before state updates
+        if (!isMounted) return
+
         if (session?.user) {
-          console.log('[AUTH_CALLBACK] User authenticated:', session.user.email)
           // Redirect to chat
           navigate('/chat')
         } else {
-          console.log('[AUTH_CALLBACK] No session found')
           navigate('/waitlist')
         }
       } catch (error) {
         console.error('[AUTH_CALLBACK] Error:', error)
+        // Check if component still mounted before state updates
+        if (!isMounted) return
         navigate('/waitlist')
       }
     }
 
     handleCallback()
+
+    // Cleanup: mark as unmounted
+    return () => {
+      isMounted = false
+    }
   }, [navigate])
 
   return (
