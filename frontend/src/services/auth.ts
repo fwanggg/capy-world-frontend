@@ -1,46 +1,72 @@
-export async function signInWithGoogle(token: string) {
+import { createClient } from '@supabase/supabase-js'
+
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'http://localhost:54321'
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'your-anon-key'
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+export async function signInWithGoogle() {
   try {
-    const response = await fetch('http://localhost:3001/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     })
 
-    const data = await response.json()
-
-    if (data.user_id) {
-      // Save session
-      localStorage.setItem('user_id', data.user_id)
-      localStorage.setItem('session_token', data.session_token)
-      localStorage.setItem('email', data.email)
-      localStorage.setItem('approved', data.approved ? 'true' : 'false')
-
-      return data
-    } else {
-      throw new Error(data.error || 'Auth failed')
-    }
+    if (error) throw error
+    return data
   } catch (error) {
-    console.error('Auth error:', error)
+    console.error('Google sign-in error:', error)
     throw error
   }
 }
 
-export function getAuthHeaders() {
-  const userId = localStorage.getItem('user_id')
-  return userId ? { 'x-user-id': userId } : {}
+export async function getAuthToken(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    if (error || !data.session) return null
+    return data.session.access_token
+  } catch (error) {
+    console.error('Failed to get auth token:', error)
+    return null
+  }
 }
 
-export function isLoggedIn() {
-  return !!localStorage.getItem('user_id')
+export async function getCurrentUser() {
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (error || !data.user) return null
+    return data.user
+  } catch (error) {
+    console.error('Failed to get current user:', error)
+    return null
+  }
 }
 
-export function isApproved() {
-  return localStorage.getItem('approved') === 'true'
+export async function logout() {
+  try {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+  } catch (error) {
+    console.error('Logout error:', error)
+    throw error
+  }
 }
 
-export function logout() {
-  localStorage.removeItem('user_id')
-  localStorage.removeItem('session_token')
-  localStorage.removeItem('email')
-  localStorage.removeItem('approved')
+export function onAuthStateChange(callback: (user: any) => void) {
+  return supabase.auth.onAuthStateChange((event, session) => {
+    callback(session?.user || null)
+  })
+}
+
+export async function isLoggedIn(): Promise<boolean> {
+  const user = await getCurrentUser()
+  return !!user
+}
+
+export async function getAuthHeaders(): Promise<{ Authorization: string } | {}> {
+  const token = await getAuthToken()
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
 }
