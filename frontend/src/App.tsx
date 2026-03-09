@@ -6,6 +6,7 @@ import { About } from './pages/About'
 import { Docs } from './pages/Docs'
 import { Waitlist } from './pages/Waitlist'
 import { Chat } from './pages/Chat'
+import { AuthCallback } from './pages/AuthCallback'
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
         <Route path="/docs" element={<Docs />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/waitlist" element={<Waitlist />} />
         <Route path="/chat" element={<ProtectedRoute component={<Chat />} />} />
       </Routes>
