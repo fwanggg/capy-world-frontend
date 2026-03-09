@@ -11,9 +11,7 @@ export function Waitlist() {
     setError(null)
 
     try {
-      // signInWithGoogle() will redirect to Google OAuth
-      // After OAuth completes, Supabase will redirect to /auth/callback
-      // The AuthCallback component will handle session verification and approval check
+      // Sign in with Google - will redirect to OAuth
       await signInWithGoogle()
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Authentication failed'
@@ -44,7 +42,7 @@ export function Waitlist() {
           fontSize: 'var(--text-3xl)',
           marginBottom: 'var(--space-lg)',
         }}>
-          Join the Waitlist
+          Get Early Access Now
         </h1>
 
         <p style={{

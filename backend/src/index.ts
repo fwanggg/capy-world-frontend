@@ -39,6 +39,44 @@ app.get('/user/profile', requireAuth, async (req: AuthRequest, res) => {
   }
 })
 
+// Test endpoint - verify backend is responding
+app.get('/test', (req, res) => {
+  console.log('[TEST] Request received')
+  res.json({ ok: true, timestamp: new Date().toISOString() })
+})
+
+// Waitlist endpoint - creates user record when they sign in
+app.post('/waitlist/join', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId!
+    const email = req.userEmail || 'unknown@example.com'
+    const isDev = process.env.DEV === 'true'
+
+    console.log('[WAITLIST_JOIN] Request received', { userId, email, isDev })
+
+    // UPSERT user into waitlist - create if doesn't exist, update if does
+    const { data: user, error } = await supabase
+      .from('waitlist')
+      .upsert({
+        user_id: userId,
+        approval_status: isDev ? 'approved' : 'pending',
+      }, { onConflict: 'user_id' })
+      .select('approval_status')
+      .single()
+
+    if (error) {
+      console.error('[WAITLIST_JOIN] Upsert error:', error.message, error.details)
+      return res.status(500).json({ error: 'Failed to join waitlist', details: error.message })
+    }
+
+    console.log('[WAITLIST_JOIN] ✓ User created/updated:', userId, 'status:', user?.approval_status)
+    res.json({ approval_status: user?.approval_status })
+  } catch (error) {
+    console.error('[WAITLIST_JOIN] Exception:', error instanceof Error ? error.message : error)
+    res.status(500).json({ error: 'Failed to join waitlist' })
+  }
+})
+
 app.get('/api/hello', (req, res) => {
   res.json({
     message: 'Hello from the backend! 🚀'

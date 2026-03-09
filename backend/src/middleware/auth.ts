@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { verifyJWT, extractUserIdFromJWT } from '../utils/jwt'
+import { userIdToUUID } from '../utils/uuid'
 import { supabase } from 'shared'
 
 export interface AuthRequest extends Request {
@@ -9,6 +10,21 @@ export interface AuthRequest extends Request {
 
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
+    const isDev = process.env.DEV === 'true'
+
+    // In dev mode, accept x-user-id header for testing
+    if (isDev) {
+      const userIdHeader = req.headers['x-user-id']
+      if (userIdHeader) {
+        const userHeaderStr = String(userIdHeader)
+        const userId = userIdToUUID(userHeaderStr)
+        console.log('[AUTH] DEV MODE: Converting x-user-id header to UUID:', userHeaderStr, '=>', userId)
+        req.userId = userId
+        req.userEmail = 'dev@example.com'
+        return next()
+      }
+    }
+
     const authHeader = req.headers['authorization']
     console.log('[AUTH] Authorization header present:', !!authHeader)
 
@@ -39,6 +55,14 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 export async function requireApproval(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.userId) {
     return res.status(401).json({ error: 'Not authenticated' })
+  }
+
+  // Skip approval check for localhost (development)
+  const host = req.hostname || req.host || ''
+  const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1')
+  if (isLocalhost) {
+    console.log('[APPROVAL] Localhost detected, skipping approval check')
+    return next()
   }
 
   try {

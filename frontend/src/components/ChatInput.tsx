@@ -70,9 +70,17 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
 
   const handleSend = () => {
     if (input.trim()) {
-      // Strip @capybara prefix if present, but always send to Capybara in God Mode
-      const messageContent = input.replace(/^@capybara\s+/, '')
-      onSend(messageContent, undefined, 'capybara')
+      // Check if message starts with @capybara
+      const capybaraMatch = input.match(/^@capybara\s+(.*)/)
+
+      if (capybaraMatch) {
+        // Route to Capybara AI
+        onSend(capybaraMatch[1], undefined, 'capybara')
+      } else {
+        // Route to clones (don't specify target, let backend route based on active_clones)
+        onSend(input)
+      }
+
       setInput('')
       setShowMentions(false)
     }

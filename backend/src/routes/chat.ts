@@ -2,6 +2,7 @@ import { Router, Response } from 'express'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
 import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
+import { generateUUID } from '../utils/uuid'
 import {
   callCapybaraAI,
   callMultipleClones,
@@ -19,56 +20,86 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
     // User ID comes from JWT (set by requireAuth middleware)
     // Use Supabase user ID directly - no conversion needed
     const userId = req.userId!
+    const isDev = process.env.DEV === 'true'
 
     // Validate that mode is provided
     if (!mode || !['god', 'conversation'].includes(mode)) {
       return res.status(400).json({ error: 'Invalid mode. Must be "god" or "conversation"' })
     }
 
-    // In development mode, auto-approve users
-    const isDev = process.env.NODE_ENV === 'development' || process.env.DEV === 'true'
-
+    // In dev mode, auto-create user if not exists
     if (isDev) {
-      // Auto-approve user in dev mode
-      const { error: userError } = await supabase
+      console.log('[INIT] DEV MODE: Auto-creating user if needed:', userId)
+      // Try to insert, ignore if already exists
+      const { error: insertError } = await supabase
         .from('waitlist')
-        .update({ approval_status: 'approved' })
-        .eq('id', userId)
+        .insert({
+          user_id: userId,
+          approval_status: 'approved',
+        })
 
-      if (userError) {
-        console.log('[INIT] User approval update error:', userError.message)
-      }
-    } else {
-      // Production: check approval status
-      const { data: user, error: userError } = await supabase
-        .from('waitlist')
-        .select('approval_status')
-        .eq('id', userId)
-        .single()
-
-      if (userError || user?.approval_status !== 'approved') {
-        return res.status(403).json({ error: 'Not approved for access' })
+      if (insertError && !insertError.message?.includes('duplicate')) {
+        console.warn('[INIT] User insert warning:', insertError.message)
       }
     }
 
+    // Verify user exists in waitlist (skip in dev mode for testing)
+    if (!isDev) {
+      const { data: user, error: userError } = await supabase
+        .from('waitlist')
+        .select('id')
+        .eq('user_id', userId)
+        .single()
+
+      if (userError || !user) {
+        console.error('[INIT] User not found in waitlist:', userId)
+        return res.status(403).json({ error: 'Not on waitlist. Please sign up at /waitlist first.' })
+      }
+
+      console.log('[INIT] User found in waitlist, creating session:', userId)
+    } else {
+      console.log('[INIT] DEV MODE: Skipping waitlist check, creating session:', userId)
+    }
+
     // Create session
-    const { data: session, error } = await supabase
-      .from('chat_sessions')
-      .insert({
+    // In dev mode, don't require user record due to foreign key constraints
+    let session
+    let error
+
+    if (isDev) {
+      // Generate a proper UUID session for dev testing
+      const sessionId = generateUUID()
+      session = {
+        id: sessionId,
         user_id: userId,
         mode,
         active_clones: [],
         metadata: { thread_id: `session_${Date.now()}` },
-      })
-      .select()
-      .single()
+      }
+      console.log(`[INIT] DEV MODE: Created mock session ${session.id} for user ${userId}`)
+    } else {
+      const result = await supabase
+        .from('chat_sessions')
+        .insert({
+          user_id: userId,
+          mode,
+          active_clones: [],
+          metadata: { thread_id: `session_${Date.now()}` },
+        })
+        .select()
+        .single()
 
-    if (error) {
-      console.error('[INIT] Session creation error:', error)
-      throw error
+      session = result.data
+      error = result.error
+
+      if (error) {
+        console.error('[INIT] Session creation error:', error)
+        throw error
+      }
+
+      console.log(`[INIT] Created session ${session.id} for user ${userId}`)
     }
 
-    console.log(`[INIT] Created session ${session.id} for user ${userId}`)
     res.json(session)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
@@ -94,6 +125,9 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     }
 
     // Fetch session from database
+    const isDev = process.env.DEV === 'true'
+    let session
+
     const result = await supabase
       .from('chat_sessions')
       .select('*')
@@ -101,24 +135,50 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       .eq('user_id', userId)
       .single()
 
-    const session = result.data
+    session = result.data
     const sessionError = result.error
 
     if (sessionError) {
-      console.error('[MESSAGE] Session fetch error:', sessionError.message)
-      return res.status(500).json({ error: 'Failed to fetch session', details: sessionError.message })
+      // In dev mode, create a mock session instead of failing
+      if (isDev) {
+        console.log('[MESSAGE] DEV MODE: Session not in database, using mock:', session_id)
+        session = {
+          id: session_id,
+          user_id: userId,
+          mode: 'god',
+          active_clones: [],
+          metadata: { thread_id: `session_${Date.now()}` },
+        }
+      } else {
+        console.error('[MESSAGE] Session fetch error:', sessionError.message)
+        return res.status(500).json({ error: 'Failed to fetch session', details: sessionError.message })
+      }
     }
 
     if (!session) {
-      console.warn('[MESSAGE] Session not found for user:', userId, 'session_id:', session_id)
-      return res.status(404).json({ error: 'Session not found' })
+      if (isDev) {
+        console.log('[MESSAGE] DEV MODE: Creating mock session:', session_id)
+        session = {
+          id: session_id,
+          user_id: userId,
+          mode: 'god',
+          active_clones: [],
+          metadata: { thread_id: `session_${Date.now()}` },
+        }
+      } else {
+        console.warn('[MESSAGE] Session not found for user:', userId, 'session_id:', session_id)
+        return res.status(404).json({ error: 'Session not found' })
+      }
     }
 
     const threadId = session.metadata.thread_id
 
     // Save user message
     let userMessage: any
-    if (false) { // Never use mock mode - always use database
+    const devMessages: any[] = [] // In-memory storage for dev mode
+
+    if (isDev) {
+      // Mock message for dev testing
       userMessage = {
         id: `msg_${Date.now()}`,
         session_id,
@@ -127,6 +187,8 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
         content,
         created_at: new Date().toISOString(),
       }
+      devMessages.push(userMessage)
+      console.log('[MESSAGE] DEV MODE: Saved user message (mock)')
     } else {
       const result = await supabase
         .from('chat_messages')
@@ -143,14 +205,22 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       userMessage = result.data
     }
 
-    // Load last 10 messages for context
-    const messageResult = await supabase
-      .from('chat_messages')
-      .select('role, sender_id, content')
-      .eq('session_id', session_id)
-      .order('created_at', { ascending: true })
-      .limit(10)
-    const lastMessages = messageResult.data || []
+    // Load last 20 messages for context
+    let lastMessages: any[] = []
+
+    if (isDev) {
+      // In dev mode, use empty message history (no previous context)
+      lastMessages = []
+      console.log('[MESSAGE] DEV MODE: Using empty message history for context')
+    } else {
+      const messageResult = await supabase
+        .from('chat_messages')
+        .select('role, sender_id, content')
+        .eq('session_id', session_id)
+        .order('created_at', { ascending: true })
+        .limit(20)
+      lastMessages = messageResult.data || []
+    }
 
     // Convert messages to LangChain format
     const messageHistory: BaseMessage[] = (lastMessages || []).map((msg: any) => {
@@ -161,15 +231,26 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       }
     })
 
+    // Build labeled history for Capybara to analyze
+    const labeledHistory = lastMessages
+      .map((msg: any) => {
+        if (msg.role === 'user') return `[USER]: ${msg.content}`
+        if (msg.role === 'capybara') return `[CAPYBARA]: ${msg.content}`
+        if (msg.role === 'clone') return `[CLONE ${msg.sender_id}]: ${msg.content}`
+        return `[${msg.role.toUpperCase()}]: ${msg.content}`
+      })
+      .join('\n')
+
     // Route message based on target or mode
     let responses: Array<{ role: string; sender_id: string; content: string }> = []
     let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
 
-    // Determine routing: explicit target takes precedence, then mode
-    // Priority: target='capybara' > target_clones provided > session mode
+    // Determine routing: explicit target takes precedence
     const hasActiveClones = session.active_clones && session.active_clones.length > 0
     const hasExplicitClones = target_clones && target_clones.length > 0
-    const routeToCapybara = target === 'capybara' || (session.mode === 'god' && target !== 'clones' && !hasActiveClones && !hasExplicitClones)
+
+    // Route to Capybara only if explicitly requested OR if no clones available
+    const routeToCapybara = target === 'capybara' || (!hasActiveClones && !hasExplicitClones)
 
     console.log('[ROUTE] Decision:',{
       target,
@@ -182,9 +263,9 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
     // If routing to Capybara, send the message
     if (routeToCapybara) {
-      // Send to Capybara AI with message history
+      // Send to Capybara AI with message history and labeled history
       console.log('[ROUTE] Routing to Capybara AI')
-      const capybaraResult = await callCapybaraAI(session_id, content, messageHistory)
+      const capybaraResult = await callCapybaraAI(session_id, content, messageHistory, labeledHistory)
 
       responses = [
         {
@@ -214,14 +295,18 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       }))
     }
 
-    // Save AI responses - always save to database
-    for (const response of responses) {
-      await supabase.from('chat_messages').insert({
-        session_id,
-        role: response.role,
-        sender_id: response.sender_id,
-        content: response.content,
-      })
+    // Save AI responses - skip in dev mode due to foreign key constraints
+    if (!isDev) {
+      for (const response of responses) {
+        await supabase.from('chat_messages').insert({
+          session_id,
+          role: response.role,
+          sender_id: response.sender_id,
+          content: response.content,
+        })
+      }
+    } else {
+      console.log('[MESSAGE] DEV MODE: Skipped saving responses to database')
     }
 
     const responseBody: any = {

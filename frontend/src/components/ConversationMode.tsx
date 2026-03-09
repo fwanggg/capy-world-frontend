@@ -26,8 +26,9 @@ interface ConversationModeProps {
   activeClones: any[]
 }
 
-export function ConversationMode({ sessionId, activeClones }: ConversationModeProps) {
+export function ConversationMode({ sessionId, activeClones: initialClones }: ConversationModeProps) {
   const [messages, setMessages] = useState<ChatMessageData[]>([])
+  const [activeClones, setActiveClones] = useState<any[]>(initialClones)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,6 +42,17 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
       if (!content.trim()) {
         throw new Error('Message cannot be empty')
       }
+
+      // Show user message immediately
+      const userMsg: ChatMessageData = {
+        id: `msg_${Date.now()}`,
+        content,
+        sender: 'user',
+        timestamp: Date.now(),
+        role: 'user',
+        sender_id: 'you',
+      }
+      setMessages((prev) => [...prev, userMsg])
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -61,7 +73,7 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
         requestBody.target_clones = targetClones
       }
 
-      const response = await fetch('/api/chat/message', {
+      const response = await fetch('/chat/message', {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody),
@@ -75,15 +87,17 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
 
       const data: ChatResponse = await response.json()
 
-      // Add messages
-      if (data.user_message) {
-        setMessages((prev) => [...prev, data.user_message])
-      }
-
+      // Add AI responses
       if (data.ai_responses && data.ai_responses.length > 0) {
         setMessages((prev) => [...prev, ...data.ai_responses])
       } else {
-        setError('No responses received from clones')
+        setError('No responses received')
+      }
+
+      // Update active clones if session_transition occurred
+      if (data.session_transition?.clone_names) {
+        console.log('[CONVERSATION_MODE] Updating clones:', data.session_transition.clone_names)
+        setActiveClones(data.session_transition.clone_names)
       }
     } catch (err: any) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -92,7 +106,11 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
       }
       const errorMsg = err.message || 'An unexpected error occurred'
       setError(errorMsg)
-      console.error('ConversationMode error:', err)
+      console.error('[CONVERSATION_MODE] Error:', {
+        message: errorMsg,
+        stack: err?.stack,
+        response: err?.response,
+      })
     } finally {
       setLoading(false)
     }

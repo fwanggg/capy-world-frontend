@@ -26,8 +26,8 @@ export function Docs() {
             {[
               {
                 step: '1',
-                title: 'Join the Waitlist',
-                desc: 'Click "Join Waitlist" to sign up with Google. We\'ll review your request and grant access shortly.',
+                title: 'Get Early Access Now',
+                desc: 'Click "Get Early Access Now" to sign up with Google. We\'ll review your request and grant access shortly.',
               },
               {
                 step: '2',

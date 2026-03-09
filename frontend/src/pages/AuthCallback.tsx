@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../services/auth'
+import { supabase, getAuthHeaders } from '../services/auth'
 
 export function AuthCallback() {
   const navigate = useNavigate()
@@ -11,7 +11,8 @@ export function AuthCallback() {
 
     const handleCallback = async () => {
       try {
-        console.log('[AUTH_CALLBACK] Starting callback handler')
+        console.log('[AUTH_CALLBACK] ========== STARTING CALLBACK HANDLER ==========')
+        console.log('[AUTH_CALLBACK] Current URL:', window.location.href)
 
         // Wait a moment for Supabase to process the URL fragment
         await new Promise(resolve => setTimeout(resolve, 500))
@@ -34,8 +35,44 @@ export function AuthCallback() {
         if (!isMounted) return
 
         if (session?.user) {
-          // User is authenticated, redirect to chat
-          console.log('[AUTH_CALLBACK] Session found, redirecting to /chat')
+          console.log('[AUTH_CALLBACK] Session found, user:', session.user.id, 'email:', session.user.email)
+
+          // Create waitlist record directly
+          try {
+            console.log('[AUTH_CALLBACK] Checking waitlist record...')
+            const { data: existing, error: selectError } = await supabase
+              .from('waitlist')
+              .select('id')
+              .eq('user_id', session.user.id)
+              .single()
+
+            if (selectError?.code === 'PGRST116') {
+              // User doesn't exist, create one
+              console.log('[AUTH_CALLBACK] Creating new waitlist record...')
+              const { error: insertError } = await supabase
+                .from('waitlist')
+                .insert({
+                  id: session.user.id,
+                  user_id: session.user.id,
+                  email: session.user.email || 'unknown@example.com',
+                  approval_status: 'pending',
+                  joined_at: new Date().toISOString(),
+                })
+              if (insertError) {
+                console.error('[AUTH_CALLBACK] Creation error:', insertError.message)
+              } else {
+                console.log('[AUTH_CALLBACK] ✓ Waitlist record created')
+              }
+            } else if (!selectError) {
+              console.log('[AUTH_CALLBACK] ✓ Waitlist record already exists')
+            } else {
+              console.error('[AUTH_CALLBACK] Error checking record:', selectError.message)
+            }
+          } catch (err) {
+            console.error('[AUTH_CALLBACK] Error:', err instanceof Error ? err.message : err)
+          }
+
+          console.log('[AUTH_CALLBACK] Redirecting to /chat...')
           navigate('/chat', { replace: true })
         } else {
           console.warn('[AUTH_CALLBACK] No session found, redirecting to /waitlist')

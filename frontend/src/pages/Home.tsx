@@ -29,7 +29,7 @@ export function Home() {
           </p>
 
           <a href="/waitlist" className="btn btn-primary" style={{ marginTop: 'var(--space-lg)' }}>
-            Join the Waitlist
+            Get Early Access Now
           </a>
         </div>
       </section>
@@ -103,7 +103,7 @@ export function Home() {
                 </li>
                 <li style={{ marginBottom: 'var(--space-sm)' }}>
                   <a href="/waitlist" style={{ color: 'var(--color-gray-300)', textDecoration: 'none', fontSize: 'var(--text-sm)' }}>
-                    Join Waitlist
+                    Get Early Access Now
                   </a>
                 </li>
                 <li>
