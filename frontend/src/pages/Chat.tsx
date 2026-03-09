@@ -23,6 +23,8 @@ export function Chat() {
   }, [])
 
   const initializeSession = async () => {
+    const controller = new AbortController()
+
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -32,19 +34,25 @@ export function Chat() {
         headers['Authorization'] = authHeaders['Authorization']
       }
 
-      const response = await fetch('http://localhost:3001/chat/init', {
+      const response = await fetch('/api/chat/init', {
         method: 'POST',
         headers,
         body: JSON.stringify({ mode: 'god' }),
+        signal: controller.signal,
       })
 
-      const session = await response.json()
       if (!response.ok) {
-        throw new Error(session.error || 'Failed to initialize chat')
+        const error = await response.json().catch(() => ({ error: 'Request failed' }))
+        throw new Error(error.error || `HTTP ${response.status}`)
       }
 
+      const session = await response.json()
       setSessionId(session.id)
     } catch (err: any) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Session initialization cancelled')
+        return
+      }
       setError(err.message || 'Session init error')
     } finally {
       setLoading(false)

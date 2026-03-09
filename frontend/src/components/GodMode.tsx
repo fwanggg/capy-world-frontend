@@ -3,13 +3,31 @@ import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { getAuthHeaders } from '../services/auth'
 
+interface ChatMessageData {
+  id: string
+  content: string
+  sender: 'user' | 'ai'
+  timestamp: number
+  role: 'user' | 'capybara' | 'clone'
+  sender_id: string
+}
+
+interface ChatResponse {
+  ai_responses: ChatMessageData[]
+  user_message: ChatMessageData
+  session_transition?: {
+    clone_ids: number[]
+    clone_names: string[]
+  }
+}
+
 interface GodModeProps {
   sessionId: string
   onEnterConversation: (clones: string[]) => void
 }
 
 export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
-  const [messages, setMessages] = useState<any[]>([])
+  const [messages, setMessages] = useState<ChatMessageData[]>([])
   const [loading, setLoading] = useState(false)
   const [searchingPersonas, setSearchingPersonas] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -18,6 +36,8 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
     setError(null)
     setLoading(true)
     setSearchingPersonas(target === 'capybara')
+
+    const controller = new AbortController()
 
     try {
       if (!content.trim()) {
@@ -37,17 +57,19 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         requestBody.target = 'capybara'
       }
 
-      const response = await fetch('http://localhost:3001/chat/message', {
+      const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody),
+        signal: controller.signal,
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send message')
+        const error = await response.json().catch(() => ({ error: 'Request failed' }))
+        throw new Error(error.error || `HTTP ${response.status}`)
       }
+
+      const data: ChatResponse = await response.json()
 
       // Add messages to history
       if (data.user_message) {
@@ -64,6 +86,10 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         onEnterConversation(clone_names)
       }
     } catch (err: any) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Message request cancelled')
+        return
+      }
       const errorMsg = err.message || 'An unexpected error occurred'
       setError(errorMsg)
       console.error('GodMode error:', err)
