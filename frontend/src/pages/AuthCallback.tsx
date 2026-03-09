@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase, getAuthHeaders } from '../services/auth'
 
 export function AuthCallback() {
   const navigate = useNavigate()
+  const [pending, setPending] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -41,8 +42,8 @@ export function AuthCallback() {
               // User is approved, redirect to chat
               navigate('/chat')
             } else {
-              // User is not approved yet, show waitlist message
-              navigate('/waitlist', { state: { message: 'Your account is pending approval. We will notify you when approved.' } })
+              // User is not approved yet, show pending approval message
+              setPending(true)
             }
           } catch (profileError) {
             console.error('[AUTH_CALLBACK] Profile check error:', profileError)
@@ -68,6 +69,80 @@ export function AuthCallback() {
       isMounted = false
     }
   }, [navigate])
+
+  if (pending) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: 'var(--color-gray-50)',
+      }}>
+        <div style={{
+          maxWidth: '450px',
+          width: '100%',
+          backgroundColor: 'var(--color-white)',
+          borderRadius: '0.75rem',
+          padding: 'var(--space-3xl)',
+          boxShadow: 'var(--shadow-lg)',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            fontSize: '2.5rem',
+            marginBottom: 'var(--space-lg)',
+          }}>
+            ✓
+          </div>
+          <h1 style={{
+            fontSize: 'var(--text-2xl)',
+            marginBottom: 'var(--space-base)',
+            color: 'var(--color-navy)',
+          }}>
+            Account Created!
+          </h1>
+          <p style={{
+            color: 'var(--color-gray-500)',
+            marginBottom: 'var(--space-lg)',
+            fontSize: 'var(--text-base)',
+            lineHeight: 'var(--line-relaxed)',
+          }}>
+            You're on the beta waitlist for Capybara AI.
+          </p>
+          <p style={{
+            color: 'var(--color-gray-500)',
+            marginBottom: 'var(--space-2xl)',
+            fontSize: 'var(--text-base)',
+            lineHeight: 'var(--line-relaxed)',
+          }}>
+            Early access typically granted within 1-2 weeks. We'll send you an email as soon as you're approved.
+          </p>
+          <button
+            onClick={() => window.location.href = '/'}
+            style={{
+              padding: 'var(--space-sm) var(--space-xl)',
+              fontSize: 'var(--text-base)',
+              fontWeight: 600,
+              backgroundColor: 'var(--color-teal)',
+              color: 'var(--color-white)',
+              border: 'none',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-teal-light)'
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-teal)'
+            }}
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{
