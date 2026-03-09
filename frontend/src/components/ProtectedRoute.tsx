@@ -10,24 +10,47 @@ export function ProtectedRoute({ component }: ProtectedRouteProps) {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
 
   useEffect(() => {
-    // Listen to auth state changes - this is more reliable than checking manually
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('[PROTECTED_ROUTE] Auth state changed:', {
-          event,
-          hasSession: !!session,
-          userId: session?.user?.id
-        })
+    let isMounted = true
 
-        if (session?.user) {
-          setIsAuthorized(true)
-        } else {
+    const checkAuth = async () => {
+      try {
+        // First, get the current session
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (isMounted) {
+          console.log('[PROTECTED_ROUTE] Initial session check:', {
+            hasSession: !!session,
+            userId: session?.user?.id
+          })
+          setIsAuthorized(!!session?.user)
+        }
+      } catch (error) {
+        console.error('[PROTECTED_ROUTE] Session check error:', error)
+        if (isMounted) {
           setIsAuthorized(false)
+        }
+      }
+    }
+
+    // Check initial session
+    checkAuth()
+
+    // Also listen to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (isMounted) {
+          console.log('[PROTECTED_ROUTE] Auth state changed:', {
+            event,
+            hasSession: !!session,
+            userId: session?.user?.id
+          })
+          setIsAuthorized(!!session?.user)
         }
       }
     )
 
     return () => {
+      isMounted = false
       subscription?.unsubscribe()
     }
   }, [])
