@@ -17,6 +17,12 @@ export default defineConfig({
       '/auth': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        bypass: (req) => {
+          // Don't proxy /auth/callback - let frontend handle OAuth callback
+          if (req.url === '/auth/callback') {
+            return req.url
+          }
+        },
       },
       '/clones': {
         target: 'http://localhost:3001',
