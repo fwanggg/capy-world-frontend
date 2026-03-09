@@ -40,9 +40,10 @@ const generateUUID = (): string => {
 router.post('/init', async (req: AuthRequest, res: Response) => {
   try {
     const { mode } = req.body // 'god' or 'conversation'
-    const userHeader = req.userId!
-    // Convert user header to deterministic UUID
-    const userId = userHeaderToUUID(userHeader)
+    // User ID comes from JWT (set by requireAuth middleware)
+    const userIdFromJWT = req.userId!
+    // Convert to UUID format for database compatibility
+    const userId = userHeaderToUUID(userIdFromJWT)
 
     // Validate that mode is provided
     if (!mode || !['god', 'conversation'].includes(mode)) {
@@ -57,8 +58,8 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
       const { error: userError } = await supabase.from('app_users').upsert({
         id: userId,
         approved: true,
-        email: `${userHeader}@dev.local`,
-        google_id: `dev_${userHeader}`, // Required field
+        email: `${userIdFromJWT}@dev.local`,
+        google_id: `dev_${userIdFromJWT}`, // Required field
       }, { onConflict: 'id' })
       if (userError) {
         console.log('[INIT] User upsert error:', userError.message)
