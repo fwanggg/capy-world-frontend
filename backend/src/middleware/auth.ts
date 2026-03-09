@@ -1,25 +1,63 @@
 import { Request, Response, NextFunction } from 'express'
+import { verifyJWT, extractUserIdFromJWT } from '../utils/jwt'
+import { supabase } from 'shared'
 
 export interface AuthRequest extends Request {
   userId?: string
+  userEmail?: string
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
-  const userId = req.headers['x-user-id'] as string
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const authHeader = req.headers['authorization']
 
-  if (!userId) {
-    return res.status(401).json({ error: 'Not authenticated' })
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Not authenticated' })
+    }
+
+    const token = authHeader.slice(7) // Remove 'Bearer ' prefix
+    const payload = await verifyJWT(token)
+
+    if (!payload) {
+      return res.status(401).json({ error: 'Invalid token' })
+    }
+
+    const userId = extractUserIdFromJWT(payload)
+    req.userId = userId
+    req.userEmail = payload.email
+
+    next()
+  } catch (error) {
+    console.error('[AUTH] Middleware error:', error instanceof Error ? error.message : String(error))
+    return res.status(401).json({ error: 'Authentication failed' })
   }
-
-  req.userId = userId
-  next()
 }
 
-export function requireApproval(req: AuthRequest, res: Response, next: NextFunction) {
-  // Check approval status (will be added in DB lookup)
-  // For now, just ensure auth middleware ran first
+export async function requireApproval(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.userId) {
     return res.status(401).json({ error: 'Not authenticated' })
   }
-  next()
+
+  try {
+    const { data: user, error } = await supabase
+      .from('app_users')
+      .select('approved')
+      .eq('id', req.userId)
+      .single()
+
+    if (error || !user) {
+      console.log('[APPROVAL] User not found in app_users:', req.userId)
+      // User will be created on first chat init, allow to proceed to show pending approval UI
+      return next()
+    }
+
+    if (!user.approved) {
+      return res.status(403).json({ error: 'Pending approval' })
+    }
+
+    next()
+  } catch (error) {
+    console.error('[APPROVAL] Check failed:', error instanceof Error ? error.message : String(error))
+    return res.status(500).json({ error: 'Approval check failed' })
+  }
 }
