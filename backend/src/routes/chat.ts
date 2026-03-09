@@ -11,8 +11,8 @@ import {
 const router = Router()
 
 // Helper: Generate deterministic UUID v4 from string
-const userHeaderToUUID = (header: string): string => {
-  const hash = createHash('md5').update(header).digest('hex')
+const userIdToUUID = (userId: string): string => {
+  const hash = createHash('md5').update(userId).digest('hex')
   // Convert first 16 hex chars to UUID v4 format
   return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`
 }
@@ -43,7 +43,7 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
     // User ID comes from JWT (set by requireAuth middleware)
     const userIdFromJWT = req.userId!
     // Convert to UUID format for database compatibility
-    const userId = userHeaderToUUID(userIdFromJWT)
+    const userId = userIdToUUID(userIdFromJWT)
 
     // Validate that mode is provided
     if (!mode || !['god', 'conversation'].includes(mode)) {
@@ -111,8 +111,9 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
 router.post('/message', async (req: AuthRequest, res: Response) => {
   try {
     const { session_id, content, target_clones, target } = req.body
-    const userHeader = req.userId!
-    const userId = userHeaderToUUID(userHeader)
+    // Extract and convert user ID from JWT token
+    const userIdFromJWT = req.userId!
+    const userId = userIdToUUID(userIdFromJWT)
 
     // Validate input
     if (!session_id || !content) {
