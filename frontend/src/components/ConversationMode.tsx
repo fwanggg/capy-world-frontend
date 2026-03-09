@@ -233,7 +233,7 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
         )}
       </div>
 
-      <ChatInput onSend={handleSendMessage} disabled={loading} placeholder="Ask your clones a question..." />
+      <ChatInput onSend={handleSendMessage} disabled={loading} placeholder="Ask your clones a question..." activeClones={activeClones} />
     </div>
   )
 }

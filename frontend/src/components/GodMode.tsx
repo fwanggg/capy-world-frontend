@@ -184,7 +184,7 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
           </div>
         )}
       </div>
-      <ChatInput onSend={handleSendMessage} disabled={loading} placeholder="Describe your research goal..." />
+      <ChatInput onSend={handleSendMessage} disabled={loading} placeholder="Describe your research goal..." activeClones={[]} />
     </div>
   )
 }

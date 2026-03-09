@@ -1,13 +1,72 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 interface ChatInputProps {
   onSend: (message: string, targetClones?: string[], target?: 'capybara' | 'clones') => void
   disabled?: boolean
   placeholder?: string
+  activeClones?: string[]
 }
 
-export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
+interface MentionOption {
+  name: string
+  label: string
+}
+
+export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: ChatInputProps) {
   const [input, setInput] = useState('')
+  const [showMentions, setShowMentions] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const mentionOptions: MentionOption[] = [
+    { name: 'capybara', label: 'Capybara AI (Orchestrator)' },
+    ...activeClones.map(clone => ({ name: clone, label: `@${clone}` }))
+  ]
+
+  const filteredMentions = mentionQuery.length > 0
+    ? mentionOptions.filter(m => m.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : mentionOptions
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value
+    setInput(text)
+
+    // Check if user is typing a mention
+    const lastAtIndex = text.lastIndexOf('@')
+    if (lastAtIndex !== -1) {
+      const textAfterAt = text.substring(lastAtIndex + 1)
+      // Only show mentions if user hasn't typed a space after @
+      if (!textAfterAt.includes(' ')) {
+        setMentionQuery(textAfterAt)
+        setShowMentions(true)
+        setSelectedMentionIndex(0)
+      } else {
+        setShowMentions(false)
+      }
+    } else {
+      setShowMentions(false)
+    }
+  }
+
+  const insertMention = (mentionName: string) => {
+    const lastAtIndex = input.lastIndexOf('@')
+    if (lastAtIndex !== -1) {
+      const beforeMention = input.substring(0, lastAtIndex)
+      const newInput = beforeMention + '@' + mentionName + ' '
+      setInput(newInput)
+      setShowMentions(false)
+      setMentionQuery('')
+      // Focus textarea and move cursor to end
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus()
+          textareaRef.current.selectionStart = newInput.length
+          textareaRef.current.selectionEnd = newInput.length
+        }
+      }, 0)
+    }
+  }
 
   const handleSend = () => {
     if (input.trim()) {
@@ -15,15 +74,35 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       const messageContent = input.replace(/^@capybara\s+/, '')
       onSend(messageContent, undefined, 'capybara')
       setInput('')
+      setShowMentions(false)
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (showMentions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedMentionIndex((prev) => (prev + 1) % filteredMentions.length)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedMentionIndex((prev) => (prev - 1 + filteredMentions.length) % filteredMentions.length)
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        if (filteredMentions[selectedMentionIndex]) {
+          insertMention(filteredMentions[selectedMentionIndex].name)
+        }
+      } else if (e.key === 'Escape') {
+        setShowMentions(false)
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
   }
+
+  useEffect(() => {
+    setSelectedMentionIndex(0)
+  }, [mentionQuery])
 
   return (
     <div style={{
@@ -34,14 +113,56 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       borderTop: '1px solid var(--color-gray-200)',
       backgroundColor: 'var(--color-white)',
       flexShrink: 0,
+      position: 'relative',
     }}>
+      {/* Mention autocomplete dropdown */}
+      {showMentions && filteredMentions.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '100%',
+          left: 'var(--space-lg)',
+          backgroundColor: 'var(--color-white)',
+          border: '1px solid var(--color-gray-200)',
+          borderRadius: '0.5rem',
+          boxShadow: 'var(--shadow-lg)',
+          maxHeight: '200px',
+          overflowY: 'auto',
+          zIndex: 10,
+          minWidth: '250px',
+          marginBottom: 'var(--space-sm)',
+        }}>
+          {filteredMentions.map((option, index) => (
+            <div
+              key={option.name}
+              onClick={() => insertMention(option.name)}
+              style={{
+                padding: 'var(--space-sm) var(--space-lg)',
+                backgroundColor: index === selectedMentionIndex ? 'var(--color-gray-50)' : 'transparent',
+                cursor: 'pointer',
+                borderBottom: index < filteredMentions.length - 1 ? '1px solid var(--color-gray-100)' : 'none',
+                transition: 'background-color var(--transition-fast)',
+              }}
+              onMouseEnter={() => setSelectedMentionIndex(index)}
+            >
+              <div style={{ fontWeight: '500', color: 'var(--color-navy)' }}>
+                @{option.name}
+              </div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-gray-500)' }}>
+                {option.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{
         display: 'flex',
         gap: 'var(--space-base)',
       }}>
         <textarea
+          ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder || 'Type your message... (use @capybara for the orchestrator)'}
           disabled={disabled}
@@ -106,7 +227,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         margin: 0,
         fontStyle: 'italic',
       }}>
-        Tip: Type @capybara to ask the orchestrator
+        Tip: Type @ to mention (↑↓ to navigate, Enter to select)
       </p>
     </div>
   )
