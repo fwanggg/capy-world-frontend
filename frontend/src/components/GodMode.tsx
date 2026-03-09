@@ -57,6 +57,12 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         requestBody.target = 'capybara'
       }
 
+      console.log('[GODMODE] Sending message:', {
+        content,
+        target,
+        requestBody: JSON.stringify(requestBody)
+      })
+
       const response = await fetch('/chat/message', {
         method: 'POST',
         headers,
@@ -64,12 +70,20 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         signal: controller.signal,
       })
 
+      console.log('[GODMODE] Response status:', response.status)
+
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Request failed' }))
         throw new Error(error.error || `HTTP ${response.status}`)
       }
 
       const data: ChatResponse = await response.json()
+
+      console.log('[GODMODE] Response data:', {
+        userMessage: data.user_message,
+        aiResponses: data.ai_responses?.map((r: any) => ({ role: r.role, sender_id: r.sender_id })),
+        sessionTransition: data.session_transition
+      })
 
       // Add messages to history
       if (data.user_message) {
