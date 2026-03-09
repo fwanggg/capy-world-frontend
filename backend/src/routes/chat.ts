@@ -2,7 +2,6 @@ import { Router, Response } from 'express'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
 import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
-import { userIdToUUID } from '../utils/uuid'
 import {
   callCapybaraAI,
   callMultipleClones,
@@ -18,38 +17,36 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
   try {
     const { mode } = req.body // 'god' or 'conversation'
     // User ID comes from JWT (set by requireAuth middleware)
-    const userIdFromJWT = req.userId!
-    // Convert to UUID format for database compatibility
-    const userId = userIdToUUID(userIdFromJWT)
+    // Use Supabase user ID directly - no conversion needed
+    const userId = req.userId!
 
     // Validate that mode is provided
     if (!mode || !['god', 'conversation'].includes(mode)) {
       return res.status(400).json({ error: 'Invalid mode. Must be "god" or "conversation"' })
     }
 
-    // In development mode, skip approval check and ensure user exists
+    // In development mode, auto-approve users
     const isDev = process.env.NODE_ENV === 'development' || process.env.DEV === 'true'
 
     if (isDev) {
-      // Auto-create user if doesn't exist
-      const { error: userError } = await supabase.from('app_users').upsert({
-        id: userId,
-        approved: true,
-        email: `${userIdFromJWT}@dev.local`,
-        google_id: `dev_${userIdFromJWT}`, // Required field
-      }, { onConflict: 'id' })
+      // Auto-approve user in dev mode
+      const { error: userError } = await supabase
+        .from('waitlist')
+        .update({ approval_status: 'approved' })
+        .eq('id', userId)
+
       if (userError) {
-        console.log('[INIT] User upsert error:', userError.message)
+        console.log('[INIT] User approval update error:', userError.message)
       }
     } else {
-      // Production: check approval
+      // Production: check approval status
       const { data: user, error: userError } = await supabase
-        .from('app_users')
-        .select('approved')
+        .from('waitlist')
+        .select('approval_status')
         .eq('id', userId)
         .single()
 
-      if (userError || !user?.approved) {
+      if (userError || user?.approval_status !== 'approved') {
         return res.status(403).json({ error: 'Not approved for access' })
       }
     }
@@ -88,9 +85,8 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
 router.post('/message', async (req: AuthRequest, res: Response) => {
   try {
     const { session_id, content, target_clones, target } = req.body
-    // Extract and convert user ID from JWT token
-    const userIdFromJWT = req.userId!
-    const userId = userIdToUUID(userIdFromJWT)
+    // Extract user ID from JWT token - use directly without conversion
+    const userId = req.userId!
 
     // Validate input
     if (!session_id || !content) {
@@ -266,9 +262,8 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 router.get('/history', async (req: AuthRequest, res: Response) => {
   try {
     const { session_id } = req.query
-    // Extract and convert user ID from JWT token
-    const userIdFromJWT = req.userId!
-    const userId = userIdToUUID(userIdFromJWT)
+    // Extract user ID from JWT token - use directly without conversion
+    const userId = req.userId!
 
     if (!session_id || typeof session_id !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid session_id' })

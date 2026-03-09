@@ -43,18 +43,18 @@ export async function requireApproval(req: AuthRequest, res: Response, next: Nex
 
   try {
     const { data: user, error } = await supabase
-      .from('app_users')
-      .select('approved')
+      .from('waitlist')
+      .select('approval_status')
       .eq('id', req.userId)
       .single()
 
     if (error || !user) {
-      console.log('[APPROVAL] User not found in app_users:', req.userId)
-      // User will be created on first chat init, allow to proceed to show pending approval UI
+      console.log('[APPROVAL] User not found in waitlist:', req.userId)
+      // User will be created on first signin, allow to proceed
       return next()
     }
 
-    if (!user.approved) {
+    if (user.approval_status !== 'approved') {
       return res.status(403).json({ error: 'Pending approval' })
     }
 

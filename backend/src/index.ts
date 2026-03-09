@@ -4,7 +4,6 @@ import chatRoutes from './routes/chat'
 import cloneRoutes from './routes/clones'
 import { requireAuth, requireApproval, AuthRequest } from './middleware/auth'
 import { supabase } from 'shared'
-import { userIdToUUID } from './utils/uuid'
 
 const app = express()
 const PORT = 3001
@@ -22,14 +21,11 @@ app.use('/clones', requireAuth, cloneRoutes)
 app.get('/user/profile', requireAuth, async (req: AuthRequest, res) => {
   try {
     // User ID comes from Authorization header (verified by requireAuth middleware)
-    // req.userId is guaranteed by requireAuth middleware
-    const userIdFromJWT = req.userId!
-
-    // Convert JWT user ID to UUID for database lookup
-    const userId = userIdToUUID(userIdFromJWT)
+    // req.userId is guaranteed by requireAuth middleware and is the Supabase auth user ID
+    const userId = req.userId!
 
     const { data: user, error } = await supabase
-      .from('app_users')
+      .from('waitlist')
       .select('*')
       .eq('id', userId)
       .single()
