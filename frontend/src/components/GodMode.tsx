@@ -44,6 +44,17 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         throw new Error('Message cannot be empty')
       }
 
+      // Add user message immediately
+      const userMsg: ChatMessageData = {
+        id: `msg_${Date.now()}`,
+        content: content,
+        sender: 'user',
+        timestamp: Date.now(),
+        role: 'user',
+        sender_id: 'user'
+      }
+      setMessages((prev) => [...prev, userMsg])
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
@@ -85,11 +96,7 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         sessionTransition: data.session_transition
       })
 
-      // Add messages to history
-      if (data.user_message) {
-        setMessages((prev) => [...prev, data.user_message])
-      }
-
+      // Add AI responses
       if (data.ai_responses) {
         setMessages((prev) => [...prev, ...data.ai_responses])
       }
