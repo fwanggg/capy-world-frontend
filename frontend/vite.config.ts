@@ -13,6 +13,12 @@ export default defineConfig({
       '/chat': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        bypass: (req) => {
+          // Let frontend handle /chat page route - only proxy API endpoints
+          if (req.url === '/chat' || req.url === '/chat/') {
+            return req.url
+          }
+        },
       },
       '/auth': {
         target: 'http://localhost:3001',
