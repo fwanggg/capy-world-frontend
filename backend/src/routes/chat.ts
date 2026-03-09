@@ -2,7 +2,7 @@ import { Router, Response } from 'express'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
 import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
-import { userIdToUUID, generateUUID } from '../utils/uuid'
+import { userIdToUUID } from '../utils/uuid'
 import {
   callCapybaraAI,
   callMultipleClones,

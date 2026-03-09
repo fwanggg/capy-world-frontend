@@ -34,11 +34,8 @@ app.use('/clones', requireAuth, cloneRoutes)
 app.get('/user/profile', requireAuth, async (req: AuthRequest, res) => {
   try {
     // User ID comes from Authorization header (verified by requireAuth middleware)
-    const userIdFromJWT = req.userId
-
-    if (!userIdFromJWT) {
-      return res.status(401).json({ error: 'Not authenticated' })
-    }
+    // req.userId is guaranteed by requireAuth middleware
+    const userIdFromJWT = req.userId!
 
     // Convert JWT user ID to UUID for database lookup
     const userId = userIdToUUID(userIdFromJWT)
