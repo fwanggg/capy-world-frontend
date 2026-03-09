@@ -66,25 +66,86 @@ export function Home() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section style={{
+      {/* Footer */}
+      <footer style={{
         backgroundColor: 'var(--color-navy)',
-        color: 'var(--color-white)',
-        padding: 'var(--space-4xl) var(--space-xl)',
-        textAlign: 'center',
+        color: 'var(--color-gray-300)',
+        padding: 'var(--space-3xl) var(--space-xl)',
+        borderTop: '1px solid var(--color-gray-700)',
       }}>
-        <div className="container">
-          <h2 style={{ color: 'var(--color-white)', marginBottom: 'var(--space-xl)' }}>
-            Ready to Transform Your Research?
-          </h2>
-          <p style={{ color: 'var(--color-gray-300)', marginBottom: 'var(--space-2xl)' }}>
-            Join founders and marketers who are validating ideas faster than ever.
-          </p>
-          <a href="/waitlist" className="btn btn-primary">
-            Get Early Access
-          </a>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 'var(--space-3xl)',
+            marginBottom: 'var(--space-3xl)',
+          }}>
+            {/* Company Info */}
+            <div>
+              <h3 style={{ color: 'var(--color-white)', marginBottom: 'var(--space-base)', fontSize: 'var(--text-lg)' }}>
+                Capybara AI
+              </h3>
+              <p style={{ fontSize: 'var(--text-sm)', lineHeight: '1.6' }}>
+                AI-powered user research for founders and marketers.
+              </p>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h4 style={{ color: 'var(--color-white)', marginBottom: 'var(--space-base)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                Product
+              </h4>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                <li style={{ marginBottom: 'var(--space-sm)' }}>
+                  <a href="/" style={{ color: 'var(--color-gray-300)', textDecoration: 'none', fontSize: 'var(--text-sm)' }}>
+                    Home
+                  </a>
+                </li>
+                <li style={{ marginBottom: 'var(--space-sm)' }}>
+                  <a href="/waitlist" style={{ color: 'var(--color-gray-300)', textDecoration: 'none', fontSize: 'var(--text-sm)' }}>
+                    Join Waitlist
+                  </a>
+                </li>
+                <li>
+                  <a href="/docs" style={{ color: 'var(--color-gray-300)', textDecoration: 'none', fontSize: 'var(--text-sm)' }}>
+                    Docs
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 style={{ color: 'var(--color-white)', marginBottom: 'var(--space-base)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+                Legal
+              </h4>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                <li style={{ marginBottom: 'var(--space-sm)' }}>
+                  <a href="#" style={{ color: 'var(--color-gray-300)', textDecoration: 'none', fontSize: 'var(--text-sm)' }}>
+                    Privacy
+                  </a>
+                </li>
+                <li>
+                  <a href="#" style={{ color: 'var(--color-gray-300)', textDecoration: 'none', fontSize: 'var(--text-sm)' }}>
+                    Terms
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Copyright */}
+          <div style={{
+            borderTop: '1px solid var(--color-gray-700)',
+            paddingTop: 'var(--space-2xl)',
+            textAlign: 'center',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--color-gray-400)',
+          }}>
+            <p>© 2025 Capybara AI. All rights reserved.</p>
+          </div>
         </div>
-      </section>
+      </footer>
     </div>
   )
 }

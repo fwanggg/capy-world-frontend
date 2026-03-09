@@ -44,10 +44,14 @@ export async function getAuthToken(): Promise<string | null> {
 export async function getCurrentUser() {
   try {
     const { data, error } = await supabase.auth.getUser()
-    if (error || !data.user) return null
+    if (error) {
+      console.error('[AUTH] getUser error:', error.message, error.status)
+      return null
+    }
+    if (!data.user) return null
     return data.user
   } catch (error) {
-    console.error('Failed to get current user:', error)
+    console.error('[AUTH] Failed to get current user:', error)
     return null
   }
 }

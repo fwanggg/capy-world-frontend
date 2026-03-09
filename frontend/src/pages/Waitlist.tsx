@@ -44,7 +44,7 @@ export function Waitlist() {
           fontSize: 'var(--text-3xl)',
           marginBottom: 'var(--space-lg)',
         }}>
-          Join Capybara
+          Join the Waitlist
         </h1>
 
         <p style={{
@@ -52,7 +52,7 @@ export function Waitlist() {
           color: 'var(--color-gray-500)',
           marginBottom: 'var(--space-2xl)',
         }}>
-          Sign in with Google to get early access and start testing your ideas with AI-powered user research.
+          Get early access to Capybara AI and start testing your ideas with AI-powered user research.
         </p>
 
         {error && (

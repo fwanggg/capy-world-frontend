@@ -34,7 +34,7 @@ export function Chat() {
         headers['Authorization'] = authHeaders['Authorization']
       }
 
-      const response = await fetch('/api/chat/init', {
+      const response = await fetch('/chat/init', {
         method: 'POST',
         headers,
         body: JSON.stringify({ mode: 'god' }),

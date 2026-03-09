@@ -11,9 +11,14 @@ export function ProtectedRoute({ component }: ProtectedRouteProps) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Check if user has valid JWT session
-      const isLogged = await isLoggedIn()
-      setIsAuthorized(isLogged)
+      try {
+        // Check if user has valid JWT session
+        const isLogged = await isLoggedIn()
+        setIsAuthorized(isLogged)
+      } catch (error) {
+        console.error('[PROTECTED_ROUTE] Auth check error:', error)
+        setIsAuthorized(false)
+      }
     }
 
     checkAuth()
