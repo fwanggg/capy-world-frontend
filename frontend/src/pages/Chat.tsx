@@ -11,11 +11,15 @@ export function Chat() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isApproved()) {
-      window.location.href = '/waitlist'
-      return
+    const checkApprovalAndInit = async () => {
+      const approved = await isApproved()
+      if (!approved) {
+        window.location.href = '/waitlist'
+        return
+      }
+      initializeSession()
     }
-    initializeSession()
+    checkApprovalAndInit()
   }, [])
 
   const initializeSession = async () => {
@@ -23,9 +27,9 @@ export function Chat() {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
-      const authHeaders = getAuthHeaders()
-      if (authHeaders['x-user-id']) {
-        headers['x-user-id'] = authHeaders['x-user-id']
+      const authHeaders = await getAuthHeaders()
+      if ('Authorization' in authHeaders) {
+        headers['Authorization'] = authHeaders['Authorization']
       }
 
       const response = await fetch('http://localhost:3001/chat/init', {

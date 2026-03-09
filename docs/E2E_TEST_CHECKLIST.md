@@ -1,4 +1,4 @@
-# E2E Testing Checklist for Copybar MVP
+# E2E Testing Checklist for Capybara AI MVP
 
 ## Manual Testing (after starting dev server)
 

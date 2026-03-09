@@ -246,23 +246,49 @@ Each clone has authentic personality based on Reddit history:
 
 ---
 
-## Test Execution Commands
+## Test Execution (Organic E2E via Standard APIs)
+
+All testing performed using only standard API endpoints - no debug endpoints.
+
+**See [E2E_TESTING.md](./E2E_TESTING.md) for complete testing guide.**
+
+### Quick Test Commands
 
 ```bash
-# Full feature test suite
-bash /tmp/comprehensive_test.sh
+# Initialize a session
+curl -X POST http://localhost:3001/chat/init \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: test-user-001" \
+  -d '{ "mode": "god" }'
 
-# Edge cases & stress tests
-bash /tmp/edge_case_tests.sh
+# Send message to Capybara (triggers clone search & activation)
+curl -X POST http://localhost:3001/chat/message \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: test-user-001" \
+  -d '{"session_id": "YOUR_SESSION_ID", "content": "Test my pitch on startup founders"}'
 
-# Single clone test (verify real system prompt)
-curl http://localhost:3001/api/debug/call-clone/11
+# Send message to clones (after activation)
+curl -X POST http://localhost:3001/chat/message \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: test-user-001" \
+  -d '{"session_id": "YOUR_SESSION_ID", "content": "Here is my pitch..."}'
 
-# View debug clone list
-curl http://localhost:3001/api/debug/clones | jq
+# Ask Capybara to synthesize
+curl -X POST http://localhost:3001/chat/message \
+  -H "Content-Type: application/json" \
+  -H "x-user-id: test-user-001" \
+  -d '{"session_id": "YOUR_SESSION_ID", "content": "@capybara what patterns do you see?", "target": "capybara"}'
 
-# Check server logs
-tail -f /tmp/dev.log | grep "\[CLONE\]\|\[ORCHESTRATOR\]\|\[ROUTE\]"
+# View conversation history
+curl http://localhost:3001/chat/history?session_id=YOUR_SESSION_ID \
+  -H "x-user-id: test-user-001"
+```
+
+### Check Server Logs
+
+```bash
+# Watch for routing, orchestration, and clone execution
+npm run dev --workspace=backend 2>&1 | grep "\[CLONE\]\|\[ORCHESTRATOR\]\|\[ROUTE\]"
 ```
 
 ---

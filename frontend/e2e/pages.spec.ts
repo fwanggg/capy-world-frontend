@@ -15,7 +15,7 @@ test.describe('Landing Pages', () => {
 
   test('should load docs page', async ({ page }) => {
     await page.goto('/docs')
-    await expect(page.locator('h1')).toContainText('Getting Started with Copybar')
+    await expect(page.locator('h1')).toContainText('Getting Started with Capybara')
     await expect(page.locator('h2')).toContainText('Pro Tips')
   })
 
@@ -27,7 +27,7 @@ test.describe('Landing Pages', () => {
     await page.locator('a:has-text("Docs")').click()
     await expect(page).toHaveURL('/docs')
 
-    await page.locator('a:has-text("Copybar")').click()
+    await page.locator('a:has-text("Capybara")').click()
     await expect(page).toHaveURL('/')
   })
 })
@@ -35,7 +35,7 @@ test.describe('Landing Pages', () => {
 test.describe('Waitlist Page', () => {
   test('should display waitlist page', async ({ page }) => {
     await page.goto('/waitlist')
-    await expect(page.locator('h1')).toContainText('Join Copybar')
+    await expect(page.locator('h1')).toContainText('Join Capybara')
     // Check for the waitlist message text
     await expect(page.locator('text=early access')).toBeVisible()
   })
@@ -77,7 +77,7 @@ test.describe('Navigation Component', () => {
     await page.goto('/')
 
     const nav = page.locator('nav')
-    await expect(nav.locator('a:has-text("Copybar")')).toBeVisible()
+    await expect(nav.locator('a:has-text("Capybara")')).toBeVisible()
     await expect(nav.locator('a:has-text("About")')).toBeVisible()
     await expect(nav.locator('a:has-text("Docs")')).toBeVisible()
     await expect(nav.locator('a:has-text("Join Waitlist")')).toBeVisible()

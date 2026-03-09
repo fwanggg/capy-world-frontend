@@ -12,19 +12,21 @@ export function ProtectedRoute({ component }: ProtectedRouteProps) {
   useEffect(() => {
     const checkAuth = async () => {
       // Check local auth status first
-      if (!isLoggedIn()) {
+      const isLogged = await isLoggedIn()
+      if (!isLogged) {
         setIsAuthorized(false)
         return
       }
 
-      if (!isApproved()) {
+      const approved = await isApproved()
+      if (!approved) {
         setIsAuthorized(false)
         return
       }
 
       // Verify with backend
       try {
-        const headers = getAuthHeaders()
+        const headers = await getAuthHeaders()
         const response = await fetch('http://localhost:3001/user/profile', {
           headers: headers as HeadersInit,
         })

@@ -1,37 +1,33 @@
 # Capybara AI - Feature Requirements & Implementation
 
-## Core Features (MVP)
+## Core Concept
 
-### 1. God Mode (Default)
-**Status:** ✅ IMPLEMENTED & TESTED
-
-- User starts in God Mode when chat initializes
-- Capybara AI is the only agent responding
-- Capybara has access to two tools:
-  - `search_clones()` - Find relevant digital clones from `agent_memory` table
-  - `create_conversation_session()` - Activate N clones (default 5, configurable)
-- Capybara asks clarifying questions to understand research goal before searching
-- After clones activated, session switches to Conversation Mode
-
-**Test Coverage:**
-- ✅ Session initialized in god mode
-- ✅ Capybara agentic loop with tool use works
-- ✅ Clones correctly activated from database
+**Single Unified Session** with intelligent message routing:
+- User initiates one session (not switching between modes)
+- Capybara AI starts as the default receiver
+- User can activate digital clones via Capybara's tools
+- Message routing determined by `target` parameter + `active_clones` state
+- User can synthesize insights via @capybara mentions at any time
 
 ---
 
-### 2. Conversation Mode
+## Core Features (MVP)
+
+### 1. Capybara AI Orchestration
 **Status:** ✅ IMPLEMENTED & TESTED
 
-- Activated when Capybara calls `create_conversation_session` tool
-- Session.mode = 'conversation', session.active_clones = [list of IDs]
-- All user messages route to active clones by default
-- Each clone responds with their own perspective
-- Clones fetch real system prompts from `agent_memory` table
-- Each clone's response includes:
-  - `role: "clone"`
-  - `sender_id: "User_{clone_id}"`
-  - `content: {clone's response}`
+**Capybara's Capabilities:**
+- Agentic loop with tool binding (max 5 iterations)
+- Tool access:
+  - `search_clones()` - Find relevant digital clones from `agent_memory` table
+  - `create_conversation_session()` - Activate N clones (default 5, configurable)
+- Asks clarifying questions to understand research goal before searching
+- Auto-activates clones when user requests feedback/testing/pitches
+
+**When Capybara Responds:**
+- Initially: All messages route to Capybara (no active clones)
+- With clones active: Use `target: "capybara"` or @capybara mention to reach Capybara
+- Capybara always has full conversation history for context
 
 **Real System Prompt Sources:**
 Each clone is a persona simulator that:
@@ -40,39 +36,74 @@ Each clone is a persona simulator that:
 - Maintains consistency with their documented perspectives
 
 **Test Coverage:**
-- ✅ 2 clones activated and responded
-- ✅ Clone responses are distinct and personalized
-- ✅ System prompts fetched from agent_memory table (logged)
+- ✅ Agentic loop with tool use works correctly
+- ✅ Tools execute in sequence and update session state
+- ✅ Capybara receives conversation history
+- ✅ Session transition tracking works
 
 ---
 
-### 3. Message Routing (@capybara mentions)
+### 2. Digital Clones (When Activated)
 **Status:** ✅ IMPLEMENTED & TESTED
 
-**Backend API:**
-- POST /chat/message accepts optional `target` field
-- `target: "capybara"` → Route to Capybara AI (agentic loop, can use tools)
-- `target: "clones"` or undefined → Route to session.active_clones
-- In god mode with no active clones: defaults to Capybara
+**What Happens:**
+- Capybara calls `create_conversation_session([clone_ids])` tool
+- Session updates: `active_clones = [11, 12, 13, 14, 15]`
+- Frontend receives `session_transition` event showing clone names
+- User can now message clones directly
 
-**Frontend Implementation (TODO):**
-- Parse `@capybara <message>` in chat input
+**Clone Responses:**
+- Each clone fetches real system prompt from `agent_memory` table
+- Clones execute in parallel (concurrent responses)
+- Each response includes:
+  - `role: "clone"`
+  - `sender_id: "User_{clone_id}"`
+  - `content: {clone's authentic response}`
+- Clone personalities remain consistent throughout conversation
+
+**Test Coverage:**
+- ✅ Multiple clones activated and responded correctly
+- ✅ Clone responses are distinct and personalized
+- ✅ System prompts fetched from agent_memory table (logged)
+- ✅ Parallel clone execution verified
+
+---
+
+### 3. Message Routing (Smart Destination Selection)
+**Status:** ✅ IMPLEMENTED & TESTED
+
+**Routing Rules:**
+```
+if (target === 'capybara')
+  → Capybara AI (agentic loop, tool access, synthesis)
+else if (session.active_clones.length > 0)
+  → All active clones (group conversation)
+else
+  → Capybara AI (default when no clones active)
+```
+
+**Target Parameter in Request:**
+- `target: "capybara"` - Explicitly route to Capybara for synthesis/orchestration
+- Omit target or `target: "clones"` - Route to active clones (if any exist)
+
+**Frontend Implementation (✅ DONE):**
+- Parse `@capybara <message>` in chat input (ChatInput.tsx)
 - Strip @capybara prefix before sending
 - Send with `target: "capybara"` in request body
-- Show @mention hint in input field
+- Show @mention hint in input placeholder
 
-**Routing Logic:**
-```
-if (target === 'capybara') → Capybara AI
-else if (session.mode === 'conversation' && session.active_clones.length > 0) → Clones
-else if (target === 'clones') → Clones (explicit)
-else → Capybara AI (fallback)
-```
+**Synthesis Workflow:**
+1. Clones respond to user message with their perspectives
+2. User: "@capybara what patterns do you see?"
+3. Frontend sends `target: "capybara"`
+4. Capybara receives full conversation history
+5. Capybara synthesizes patterns/insights from clone feedback
 
 **Test Coverage:**
 - ✅ Explicit target=capybara routing works
-- ✅ Capybara receives full conversation history as context
-- ✅ Capybara can synthesize patterns from clone feedback
+- ✅ Capybara synthesis from conversation history works
+- ✅ @capybara parsing and routing verified
+- ✅ Clone responses appear before synthesis
 
 ---
 
@@ -97,20 +128,17 @@ else → Capybara AI (fallback)
 
 ---
 
-## Excluded Features (Out of Scope)
+## Design Decisions (Not Included)
 
-### ❌ Conversation Mode Toggle Button
-- **Decision:** Removed from MVP
-- **Reason:** Capybara activates clones automatically via tools
-- **User Journey:** God Mode → Capybara finds clones → Clones activated → Conversation begins
-
-### ❌ Clone Selection UI
+### ❌ Manual Clone Selection UI
 - **Decision:** Capybara selects clones intelligently via search_clones tool
 - **Reason:** LLM better at understanding research goals than dropdown menus
+- **UX:** "Test my pitch on startup founders" → Capybara automatically finds relevant clones
 
-### ❌ Manual Mode Switching
-- **Decision:** Mode switches automatically via create_conversation_session tool
-- **Reason:** Simplified UX - no manual state management needed
+### ❌ Explicit Mode Toggle
+- **Decision:** No mode switching UI needed (single session)
+- **Reason:** Routing determined by message state, not explicit mode selection
+- **UX:** Seamless - send message → route determined automatically based on active_clones
 
 ---
 
@@ -172,10 +200,15 @@ CONTEXT: User's Interaction History:
   "user_id": "uuid",
   "mode": "god",
   "active_clones": [],
-  "metadata": { "thread_id": "uuid" },
+  "metadata": { "thread_id": "session_1234567890" },
   "created_at": "2026-03-07T..."
 }
 ```
+
+**Notes:**
+- `active_clones: []` initially (no clones activated yet)
+- Mode starts as "god" but changes to "conversation" when clones are activated via tool
+- Session ID is a proper UUID, persists throughout conversation
 
 ### POST /chat/message
 **Request:**
@@ -227,23 +260,31 @@ CONTEXT: User's Interaction History:
 ## Testing Checklist
 
 ### Backend (✅ All Passing)
-- [x] Session initialization in god mode
-- [x] Capybara tool use (search_clones)
-- [x] Clone activation (create_conversation_session)
-- [x] Routing to active clones
-- [x] Routing to Capybara with target parameter
-- [x] Real system prompt fetching from agent_memory
-- [x] Message persistence in chat_messages
-- [x] History endpoint
-- [x] 2+ clones responding in parallel
+- [x] Session initialization with UUID
+- [x] Capybara agentic loop with tool binding (max 5 iterations)
+- [x] search_clones tool execution and results
+- [x] create_conversation_session tool updates session state
+- [x] Message routing based on target parameter
+- [x] Message routing based on active_clones state
+- [x] Real system prompt fetching from agent_memory table
+- [x] All messages persisted to chat_messages table
+- [x] Session state persisted to chat_sessions table
+- [x] History endpoint retrieves full conversation
+- [x] Multiple clones responding in parallel (2+ concurrent)
+- [x] Development mode (DEV=true) auto-creates users
+- [x] Error handling and edge cases
 
-### Frontend (TODO)
-- [ ] @capybara mention parsing
-- [ ] Message routing with target parameter
-- [ ] Loading states during tool execution
-- [ ] Error handling for failed responses
-- [ ] Message history UI
-- [ ] Real-time clone response display
+### Frontend (✅ Implemented)
+- [x] @capybara mention parsing in ChatInput
+- [x] Message routing with target parameter in requests
+- [x] Visual distinction for Capybara responses (teal styling)
+- [x] Loading states during tool execution
+
+### Frontend (TODO - Enhancement)
+- [ ] Real-time clone response streaming
+- [ ] Message history UI view
+- [ ] Clone personality display cards
+- [ ] Error toast notifications
 
 ---
 

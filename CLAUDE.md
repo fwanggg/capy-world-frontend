@@ -160,15 +160,226 @@ All three workspaces extend the root `tsconfig.json`:
 
 - **Frontend**: 3000 (Vite dev server)
 - **Backend**: 3001 (Express server)
-- Frontend proxies `/api/*` requests to backend
+- Frontend proxies `/api/*`, `/chat/*`, `/auth/*`, `/clones/*` requests to backend
 
 Change ports in:
 - `frontend/vite.config.ts` (frontend port + proxy config)
 - `backend/src/index.ts` (backend port)
 
+---
+
+## Capybara AI Feature: Agentic Tool System
+
+### Overview
+Capybara AI is an intelligent orchestrator that:
+1. **Receives** user messages via agentic loop with tool binding
+2. **Searches** for relevant digital clones from `agent_memory` table
+3. **Activates** selected clones as a group conversation
+4. **Routes** subsequent messages to clones or back to Capybara for synthesis
+
+**Key Principle:** Single unified session with intelligent message routing — no mode switching.
+
+### Core Architecture
+
+**Session State:**
+- `active_clones: []` (initial) → routes messages to Capybara
+- `active_clones: [11, 12, 13, 14, 15]` → routes messages to clones by default
+- `target: "capybara"` (explicit) → always routes to Capybara (even with active clones)
+
+**Message Flow:**
+```
+User → /chat/message
+  ↓
+Routing Decision:
+  if (target === 'capybara')        → Capybara AI (agentic loop with tools)
+  else if (active_clones.length > 0) → All active clones (parallel execution)
+  else                               → Capybara AI (default)
+  ↓
+Response saved to chat_messages table
+  ↓
+Frontend receives response + optional session_transition
+```
+
+### Key Implementation Files
+
+**Backend:**
+- `backend/src/routes/chat.ts` - Message routing logic, session management
+- `backend/src/services/langgraph-orchestrator.ts` - Agentic loop, clone execution
+- `backend/src/middleware/auth.ts` - Authentication middleware
+
+**Frontend:**
+- `frontend/src/components/ChatInput.tsx` - @capybara mention parsing (line 14-19)
+- `frontend/src/components/GodMode.tsx` - Initial message handling, clone activation UI
+- `frontend/src/components/ConversationMode.tsx` - Group chat with clones
+- `frontend/src/components/ChatMessage.tsx` - Message rendering with role-based styling
+
+**Database:**
+- `agent_memory` - Clone definitions with reddit_username and system_prompt
+- `chat_sessions` - Session state (id, user_id, active_clones, metadata)
+- `chat_messages` - Conversation history (role, sender_id, content)
+- `app_users` - User profiles (auto-created in DEV mode)
+
+### Agentic Loop (Capybara AI)
+
+Located in `backend/src/services/langgraph-orchestrator.ts:callCapybaraAI()`
+
+```typescript
+1. Bind tools: search_clones, create_conversation_session
+2. Loop (max 5 iterations):
+   a. Invoke LLM with messages
+   b. Check response.tool_calls
+   c. If tool_calls:
+      - Execute each tool
+      - Append ToolMessage with tool_call_id + result
+      - Continue loop
+   d. If no tool_calls:
+      - Extract finalResponse
+      - Break loop
+3. Return { response, session_transition? }
+```
+
+**Important:** Session ID passed into loop so `create_conversation_session` can update the right session.
+
+### Message Routing Logic
+
+**Backend (`backend/src/routes/chat.ts` POST /chat/message):**
+
+```typescript
+// Routing decision (lines 187-200)
+const hasActiveClones = session.active_clones?.length > 0
+const hasExplicitClones = target_clones?.length > 0
+const routeToCapybara = target === 'capybara'
+  || (session.mode === 'god' && target !== 'clones' && !hasActiveClones && !hasExplicitClones)
+
+if (routeToCapybara) {
+  callCapybaraAI(session_id, content, messageHistory)
+} else {
+  callMultipleClones(target_clones || session.active_clones, threadId, content)
+}
+```
+
+**Frontend (@capybara parsing in `ChatInput.tsx`):**
+
+```typescript
+const capybaraMatch = input.match(/^@capybara\s+(.*)/)
+if (capybaraMatch) {
+  const message = capybaraMatch[1]
+  onSend(message, undefined, 'capybara') // target='capybara'
+}
+```
+
+### Clone Execution
+
+**Each Clone (backend/src/services/langgraph-orchestrator.ts:callClone):**
+
+1. Fetch clone from `agent_memory` table - **ALWAYS queries database, never mocks**
+2. Log: `[CLONE] ✓✓✓ FETCHED CLONE X FROM agent_memory TABLE ✓✓✓`
+3. Create LangChain messages with real system_prompt
+4. Invoke LLM
+5. Return response
+
+**Multiple Clones (backend/src/services/langgraph-orchestrator.ts:callMultipleClones):**
+- Execute all clones in parallel via Promise.all
+- Return array of { clone_id, content }
+
+### Real System Prompts
+
+Each clone's `system_prompt` in agent_memory contains:
+- Persona simulation instructions
+- User's actual Reddit post/comment history (JSON)
+- Context about their communication style
+- Enables authentic, personalized responses
+
+Example clone: User 11 (dryisnotwet) - infrastructure engineer with specific posting patterns
+
+### UUID Mapping
+
+**Why needed:** Supabase foreign keys require proper UUID format
+
+**Implementation (backend/src/routes/chat.ts):**
+```typescript
+const userHeaderToUUID = (header: string): string => {
+  const hash = createHash('md5').update(header).digest('hex')
+  // MD5 hex → UUID v4 format
+  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`
+}
+```
+
+DEV mode: x-user-id header (any string) → deterministic UUID
+Session ID: generateUUID() → random UUID v4
+
+### Development Mode
+
+**Enable with:** `DEV=true npm run dev --workspace=backend`
+
+**Features:**
+- Auto-creates users in app_users table
+- Sets `approved: true` (skips approval check)
+- Sets `google_id: 'dev_' + userHeader` (required field)
+- Uses real database for all persistence
+
+**Why needed:** Allows E2E testing without OAuth setup
+
+### API Contracts
+
+**POST /chat/init**
+- Request: `{ mode: "god" }`
+- Response: Session with `active_clones: []`, UUID id
+
+**POST /chat/message**
+- Request: `{ session_id, content, target?: "capybara" | "clones" }`
+- Response: `{ user_message, ai_responses[], session_transition? }`
+- `session_transition` appears when clones are activated (contains clone_ids + clone_names)
+
+**GET /chat/history**
+- Query: `session_id={uuid}`
+- Response: Array of all messages in chronological order
+
+### Testing
+
+**See:** `docs/E2E_TESTING.md` for complete testing guide with curl examples and bash scripts.
+
+**Quick test flow:**
+1. `POST /chat/init` → get session_id
+2. `POST /chat/message` "test my pitch on startup founders" → Capybara activates clones
+3. Look for `session_transition` in response
+4. `POST /chat/message` "here's my pitch..." → clones respond
+5. `POST /chat/message` "@capybara what patterns?" with `target: "capybara"` → synthesis
+
+**Verification:**
+- Check backend logs for `[CLONE] FETCHED`, `[ORCHESTRATOR]`, `[ROUTE]` prefixes
+- Query `chat_messages` table to verify persistence
+- Run `GET /chat/history` to retrieve full conversation
+
+### Common Tasks
+
+**Modifying message routing:**
+- Location: `backend/src/routes/chat.ts` lines 187-220
+- Always check: target parameter first, then active_clones state
+- Test: All three routing paths (capybara, clones, fallback)
+
+**Adding a new tool for Capybara:**
+- Define function in `langgraph-orchestrator.ts`
+- Create tool wrapper with schema using `tool()` from @langchain/core/tools
+- Add to tools array in `llmWithTools = llm.bindTools([...])`
+- Implement execution logic in tool_calls loop
+
+**Adjusting clone behavior:**
+- Edit system_prompt in agent_memory table
+- CloneId fetch happens in real-time (no caching in callClone)
+- Changes take effect immediately on next message
+
+**Testing a new feature:**
+- Use `docs/E2E_TESTING.md` bash script as template
+- Always test with DEV=true and x-user-id header
+- Verify backend logs show expected routing
+- Check database for message persistence
+
+---
+
 ## Next Steps
 
 1. Run `npm install` to install dependencies
-2. Run `npm run dev` to start development
+2. Run `npm run dev` to start development (or `DEV=true npm run dev --workspace=backend` for backend-only with dev mode)
 3. Open `http://localhost:3000` to see the app
-4. Start building!
+4. Follow `docs/E2E_TESTING.md` to test the full flow

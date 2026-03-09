@@ -1,4 +1,4 @@
-# Copybar MVP Implementation Plan
+# Capybara MVP Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
@@ -1096,7 +1096,7 @@ export function Navigation() {
 
   return (
     <nav style={{ display: 'flex', gap: '1rem', padding: '1rem', borderBottom: '1px solid #ccc' }}>
-      <a href="/">Copybar</a>
+      <a href="/">Capybara</a>
       <a href="/about">About</a>
       <a href="/docs">Docs</a>
       {!isAuth && <a href="/waitlist">Join Waitlist</a>}
@@ -1116,7 +1116,7 @@ export function Home() {
       <h1>Talk to 10 Digital Clones. Get Honest Feedback in Minutes.</h1>
       <p>Instant, actionable user research — not aggregated summaries.</p>
       <div>
-        <h2>Why Copybar?</h2>
+        <h2>Why Capybara?</h2>
         <ul>
           <li><strong>Speed:</strong> Get feedback in minutes, not weeks</li>
           <li><strong>Depth:</strong> Real user perspectives, not patterns</li>
@@ -1139,9 +1139,9 @@ export function Home() {
 export function About() {
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
-      <h1>About Copybar</h1>
+      <h1>About Capybara</h1>
       <p>
-        Copybar is built for early-stage founders and marketers who need honest, immediate feedback on their
+        Capybara is built for early-stage founders and marketers who need honest, immediate feedback on their
         product positioning, sales pitches, and marketing messages.
       </p>
       <p>
@@ -1170,7 +1170,7 @@ export function About() {
 export function Docs() {
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
-      <h1>Getting Started with Copybar</h1>
+      <h1>Getting Started with Capybara</h1>
       <h2>1. Join the Waitlist</h2>
       <p>Click "Join Waitlist" to sign up with Google. We'll review your request and grant access shortly.</p>
       <h2>2. Enter God Mode</h2>
@@ -1178,7 +1178,7 @@ export function Docs() {
         Once approved, log in and describe your research goal. Example: "Test my sales pitch on early-stage SaaS
         founders."
       </p>
-      <p>Copybar AI will suggest relevant digital clones to chat with.</p>
+      <p>Capybara AI will suggest relevant digital clones to chat with.</p>
       <h2>3. Enter Conversation Mode</h2>
       <p>Select your clones and ask them questions. Each clone responds with their individual perspective.</p>
       <h2>4. Get Insights</h2>

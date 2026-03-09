@@ -1,17 +1,23 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, User } from '@supabase/supabase-js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321'
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
 
+// Validate environment variables
+if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+  console.warn(
+    'Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.'
+  )
+}
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(credential: string) {
   try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    // Exchange Google credential token for Supabase session
+    const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      token: credential,
     })
 
     if (error) throw error
@@ -54,7 +60,7 @@ export async function logout() {
   }
 }
 
-export function onAuthStateChange(callback: (user: any) => void) {
+export function onAuthStateChange(callback: (user: User | null) => void) {
   return supabase.auth.onAuthStateChange((event, session) => {
     callback(session?.user || null)
   })

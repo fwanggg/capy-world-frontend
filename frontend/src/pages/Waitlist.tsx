@@ -12,9 +12,18 @@ export function Waitlist() {
     setError(null)
 
     try {
-      const data = await signInWithGoogle(credentialResponse.credential)
+      await signInWithGoogle(credentialResponse.credential)
 
-      if (data.approved) {
+      // After successful sign-in, check approval status via backend
+      // The backend will create app_users entry if it doesn't exist
+      const headers = { 'Content-Type': 'application/json' }
+      const response = await fetch('http://localhost:3001/user/profile', {
+        headers: headers as HeadersInit,
+      })
+
+      const userData = await response.json()
+
+      if (userData.approved) {
         setMessage('You are approved! Redirecting to chat...')
         setTimeout(() => {
           window.location.href = '/chat'
@@ -51,7 +60,7 @@ export function Waitlist() {
           fontSize: 'var(--text-3xl)',
           marginBottom: 'var(--space-lg)',
         }}>
-          Join Copybar
+          Join Capybara
         </h1>
 
         <p style={{

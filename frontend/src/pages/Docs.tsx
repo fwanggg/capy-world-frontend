@@ -10,7 +10,7 @@ export function Docs() {
         backgroundColor: 'var(--color-gray-50)',
       }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <h1 style={{ marginBottom: 'var(--space-lg)' }}>Getting Started with Copybar</h1>
+          <h1 style={{ marginBottom: 'var(--space-lg)' }}>Getting Started with Capybara</h1>
           <p style={{ fontSize: 'var(--text-lg)' }}>
             Launch your research in four simple steps. Test your ideas against real user personas in minutes.
           </p>
@@ -32,7 +32,7 @@ export function Docs() {
               {
                 step: '2',
                 title: 'Enter God Mode',
-                desc: 'Once approved, log in and describe your research goal. Example: "Test my sales pitch on early-stage SaaS founders." Copybar AI will suggest relevant digital clones to chat with.',
+                desc: 'Once approved, log in and describe your research goal. Example: "Test my sales pitch on early-stage SaaS founders." Capybara AI will suggest relevant digital clones to chat with.',
               },
               {
                 step: '3',

@@ -25,9 +25,9 @@ export function ConversationMode({ sessionId, activeClones }: ConversationModePr
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
-      const authHeaders = getAuthHeaders()
-      if (authHeaders['x-user-id']) {
-        headers['x-user-id'] = authHeaders['x-user-id']
+      const authHeaders = await getAuthHeaders()
+      if ('Authorization' in authHeaders) {
+        headers['Authorization'] = authHeaders['Authorization']
       }
 
       const requestBody: any = {

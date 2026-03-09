@@ -1,14 +1,14 @@
-# Copybar MVP Design Document
+# Capybara MVP Design Document
 
 **Date:** 2026-03-06
-**Product:** Copybar — AI-powered instant user research
+**Product:** Capybara — AI-powered instant user research
 **Status:** Design Approved
 
 ---
 
 ## Executive Summary
 
-Copybar is a platform for early-stage founders and marketers to test sales pitches, marketing statements, and product concepts against AI-simulated user personas. Unlike aggregated research tools, Copybar provides instant, actionable user-level insights by leveraging digital clones (AI agents) trained on real user personas crawled from the internet.
+Capybara is a platform for early-stage founders and marketers to test sales pitches, marketing statements, and product concepts against AI-simulated user personas. Unlike aggregated research tools, Capybara provides instant, actionable user-level insights by leveraging digital clones (AI agents) trained on real user personas crawled from the internet.
 
 **Core value proposition:**
 - **Speed:** Minutes instead of weeks

@@ -11,7 +11,7 @@ export function About() {
             The Problem with User Research Today
           </h1>
           <p style={{ fontSize: 'var(--text-lg)' }}>
-            Existing research tools are slow, expensive, and miss the nuance. You wait weeks for insights that don't capture implicit user needs. Copybar changes that.
+            Existing research tools are slow, expensive, and miss the nuance. You wait weeks for insights that don't capture implicit user needs. Capybara changes that.
           </p>
         </div>
       </section>
@@ -40,7 +40,7 @@ export function About() {
             For Early-Stage Founders & Marketers
           </h2>
           <p style={{ color: 'var(--color-gray-200)', marginBottom: 'var(--space-lg)' }}>
-            You're building something new. You need real feedback, not generic surveys. You need it fast. Copybar gives you honest, individual perspectives from AI personas trained on real user data.
+            You're building something new. You need real feedback, not generic surveys. You need it fast. Capybara gives you honest, individual perspectives from AI personas trained on real user data.
           </p>
           <p style={{ color: 'var(--color-gray-200)' }}>
             Validate your go-to-market strategy. Test messaging. Find product gaps. All in minutes.

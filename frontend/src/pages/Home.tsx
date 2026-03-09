@@ -45,7 +45,7 @@ export function Home() {
             marginBottom: 'var(--space-3xl)',
             fontSize: 'var(--text-3xl)',
           }}>
-            Why Copybar Works
+            Why Capybara Works
           </h2>
 
           <div className="grid grid-2" style={{ maxWidth: '1000px', margin: '0 auto' }}>
