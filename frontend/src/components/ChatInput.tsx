@@ -11,17 +11,9 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
 
   const handleSend = () => {
     if (input.trim()) {
-      // Check if message starts with @capybara
-      const capybaraMatch = input.match(/^@capybara\s+(.*)/)
-      if (capybaraMatch) {
-        // Send to Capybara AI, strip the @capybara prefix
-        const messageContent = capybaraMatch[1]
-        onSend(messageContent, undefined, 'capybara')
-      } else {
-        // Parse other @mentions for clones
-        const mentions = (input.match(/@\w+/g) || []).map((m) => m.slice(1))
-        onSend(input, mentions.length > 0 ? mentions : undefined, 'clones')
-      }
+      // Strip @capybara prefix if present, but always send to Capybara in God Mode
+      const messageContent = input.replace(/^@capybara\s+/, '')
+      onSend(messageContent, undefined, 'capybara')
       setInput('')
     }
   }
@@ -41,6 +33,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
       padding: 'var(--space-lg) var(--space-xl)',
       borderTop: '1px solid var(--color-gray-200)',
       backgroundColor: 'var(--color-white)',
+      flexShrink: 0,
     }}>
       <div style={{
         display: 'flex',

@@ -139,70 +139,69 @@ export function Chat() {
           Research Session
         </h1>
 
-        {/* Mode Switcher */}
-        <div style={{
-          display: 'flex',
-          gap: 'var(--space-base)',
-          backgroundColor: 'var(--color-gray-50)',
-          padding: 'var(--space-sm)',
-          borderRadius: '0.5rem',
-        }}>
-          <button
-            onClick={() => setMode('god')}
-            style={{
-              padding: 'var(--space-sm) var(--space-lg)',
-              backgroundColor: mode === 'god' ? 'var(--color-teal)' : 'transparent',
-              color: mode === 'god' ? 'var(--color-white)' : 'var(--color-gray-500)',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontWeight: '500',
-              fontSize: 'var(--text-sm)',
-              transition: 'all var(--transition-fast)',
-            }}
-            onMouseOver={(e) => {
-              if (mode !== 'god') {
-                e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'
-              }
-            }}
-            onMouseOut={(e) => {
-              if (mode !== 'god') {
-                e.currentTarget.style.backgroundColor = 'transparent'
-              }
-            }}
-          >
-            God Mode
-          </button>
-          <button
-            onClick={() => setMode('conversation')}
-            disabled={activeClones.length === 0}
-            style={{
-              padding: 'var(--space-sm) var(--space-lg)',
-              backgroundColor: mode === 'conversation' ? 'var(--color-teal)' : 'transparent',
-              color: mode === 'conversation' ? 'var(--color-white)' : 'var(--color-gray-500)',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: activeClones.length === 0 ? 'not-allowed' : 'pointer',
-              opacity: activeClones.length === 0 ? 0.5 : 1,
-              fontWeight: '500',
-              fontSize: 'var(--text-sm)',
-              transition: 'all var(--transition-fast)',
-            }}
-            onMouseOver={(e) => {
-              if (mode !== 'conversation' && activeClones.length > 0) {
-                e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'
-              }
-            }}
-            onMouseOut={(e) => {
-              if (mode !== 'conversation') {
-                e.currentTarget.style.backgroundColor = 'transparent'
-              }
-            }}
-            title={activeClones.length === 0 ? 'Select clones in God Mode first' : ''}
-          >
-            Conversation Mode {activeClones.length > 0 && `(${activeClones.length})`}
-          </button>
-        </div>
+        {/* Mode Switcher - Only show Conversation Mode when clones are selected */}
+        {activeClones.length > 0 && (
+          <div style={{
+            display: 'flex',
+            gap: 'var(--space-base)',
+            backgroundColor: 'var(--color-gray-50)',
+            padding: 'var(--space-sm)',
+            borderRadius: '0.5rem',
+          }}>
+            <button
+              onClick={() => setMode('god')}
+              style={{
+                padding: 'var(--space-sm) var(--space-lg)',
+                backgroundColor: mode === 'god' ? 'var(--color-teal)' : 'transparent',
+                color: mode === 'god' ? 'var(--color-white)' : 'var(--color-gray-500)',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                fontWeight: '500',
+                fontSize: 'var(--text-sm)',
+                transition: 'all var(--transition-fast)',
+              }}
+              onMouseOver={(e) => {
+                if (mode !== 'god') {
+                  e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'
+                }
+              }}
+              onMouseOut={(e) => {
+                if (mode !== 'god') {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                }
+              }}
+            >
+              God Mode
+            </button>
+            <button
+              onClick={() => setMode('conversation')}
+              style={{
+                padding: 'var(--space-sm) var(--space-lg)',
+                backgroundColor: mode === 'conversation' ? 'var(--color-teal)' : 'transparent',
+                color: mode === 'conversation' ? 'var(--color-white)' : 'var(--color-gray-500)',
+                border: 'none',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                fontWeight: '500',
+                fontSize: 'var(--text-sm)',
+                transition: 'all var(--transition-fast)',
+              }}
+              onMouseOver={(e) => {
+                if (mode !== 'conversation') {
+                  e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'
+                }
+              }}
+              onMouseOut={(e) => {
+                if (mode !== 'conversation') {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                }
+              }}
+            >
+              Conversation Mode ({activeClones.length})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Chat Content Area */}

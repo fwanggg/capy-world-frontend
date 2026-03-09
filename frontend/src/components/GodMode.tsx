@@ -57,7 +57,7 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         requestBody.target = 'capybara'
       }
 
-      const response = await fetch('/api/chat/message', {
+      const response = await fetch('/chat/message', {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody),
