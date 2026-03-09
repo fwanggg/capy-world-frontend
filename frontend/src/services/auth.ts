@@ -12,12 +12,14 @@ if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KE
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-export async function signInWithGoogle(credential: string) {
+export async function signInWithGoogle() {
   try {
-    // Exchange Google credential token for Supabase session
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    // Use Supabase OAuth flow to redirect to Google
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      token: credential,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     })
 
     if (error) throw error

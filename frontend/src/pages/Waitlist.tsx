@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { GoogleLogin, CredentialResponse } from '@react-oauth/google'
 import { signInWithGoogle, getAuthHeaders } from '../services/auth'
 
 export function Waitlist() {
@@ -7,16 +6,12 @@ export function Waitlist() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const handleGoogleLogin = async (credentialResponse: CredentialResponse) => {
+  const handleSignIn = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      if (!credentialResponse.credential) {
-        throw new Error('No credential received from Google')
-      }
-
-      await signInWithGoogle(credentialResponse.credential)
+      await signInWithGoogle()
 
       // After successful sign-in, check approval status via backend
       // The backend will create app_users entry if it doesn't exist
@@ -115,12 +110,34 @@ export function Waitlist() {
           justifyContent: 'center',
           marginBottom: 'var(--space-2xl)',
         }}>
-          <GoogleLogin
-            onSuccess={handleGoogleLogin}
-            onError={() => setError('Login failed')}
-            size="large"
-            theme="outline"
-          />
+          <button
+            onClick={handleSignIn}
+            disabled={loading}
+            style={{
+              padding: 'var(--space-sm) var(--space-xl)',
+              fontSize: 'var(--text-base)',
+              fontWeight: 600,
+              backgroundColor: loading ? 'var(--color-gray-300)' : 'var(--color-teal)',
+              color: 'var(--color-white)',
+              border: 'none',
+              borderRadius: '0.375rem',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                (e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-teal-light)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!loading) {
+                (e.target as HTMLButtonElement).style.backgroundColor = 'var(--color-teal)'
+              }
+            }}
+          >
+            {loading ? 'Signing in with Google...' : 'Sign in with Google'}
+          </button>
         </div>
 
         {loading && (
