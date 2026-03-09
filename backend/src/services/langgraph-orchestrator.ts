@@ -52,6 +52,7 @@ async function getDemographicSchema(): Promise<any> {
   const columns = ['age', 'gender', 'location', 'profession', 'spending_power']
   const schema: any = {}
 
+  // Get simple columns (scalar values)
   for (const column of columns) {
     const { data, error } = await supabase
       .from('personas')
@@ -64,6 +65,46 @@ async function getDemographicSchema(): Promise<any> {
       schema[column] = distinctValues
       console.log(`[TOOL] ${column} distinct values:`, distinctValues)
     }
+  }
+
+  // Handle interests column (array/JSON field)
+  console.log('[TOOL] Processing interests column (array/JSON field)')
+  const { data: interestsData, error: interestsError } = await supabase
+    .from('personas')
+    .select('interests')
+    .neq('interests', null)
+
+  if (!interestsError && interestsData) {
+    const allInterests = new Set<string>()
+
+    // Extract individual interests from array/JSON
+    for (const record of interestsData) {
+      const interests = record.interests
+
+      if (Array.isArray(interests)) {
+        // If it's an array
+        interests.forEach((interest: any) => {
+          if (typeof interest === 'string') {
+            allInterests.add(interest)
+          } else if (typeof interest === 'object' && interest?.name) {
+            allInterests.add(interest.name)
+          }
+        })
+      } else if (typeof interests === 'object' && interests !== null) {
+        // If it's a JSON object with keys as interests
+        Object.keys(interests).forEach((key) => {
+          allInterests.add(key)
+        })
+      } else if (typeof interests === 'string') {
+        // If it's a string (comma-separated or single value)
+        interests.split(',').forEach((interest) => {
+          allInterests.add(interest.trim())
+        })
+      }
+    }
+
+    schema.interests = Array.from(allInterests)
+    console.log(`[TOOL] interests distinct values:`, schema.interests)
   }
 
   return schema
@@ -97,6 +138,7 @@ Available demographic values in database:
 - Locations: ${demographicSchema.location?.join(', ') || 'various'}
 - Professions: ${demographicSchema.profession?.join(', ') || 'various'}
 - Spending Power: ${demographicSchema.spending_power?.join(', ') || 'various'}
+- Interests: ${demographicSchema.interests?.join(', ') || 'various'}
 
 Extract filter criteria from the user's goal. Return a JSON object with only the filters mentioned:
 {
@@ -106,10 +148,12 @@ Extract filter criteria from the user's goal. Return a JSON object with only the
   "age_min": null or number,
   "age_max": null or number,
   "spending_power": null or string value from available spending power,
+  "interests": null or array of interest strings from available interests,
   "reasoning": "explain how you matched user intent to available values"
 }
 
 Only include filters that are explicitly mentioned or strongly implied. Use null for filters not mentioned.
+For interests, return an array of matching interests if mentioned, or null otherwise.
   `
 
   const llm = createDeepSeekLLM()
@@ -133,7 +177,7 @@ Only include filters that are explicitly mentioned or strongly implied. Use null
   }
 
   // STEP 3: Execute search with verified filters
-  let query = supabase.from('personas').select('id, reddit_username, age, gender, location, profession, spending_power')
+  let query = supabase.from('personas').select('id, reddit_username, age, gender, location, profession, spending_power, interests')
 
   // Apply demographic filters
   if (extractedFilters.gender) {
@@ -155,10 +199,42 @@ Only include filters that are explicitly mentioned or strongly implied. Use null
     query = query.lte('age', extractedFilters.age_max)
   }
 
+  // Handle interests filter (needs client-side filtering since it's JSON/array)
   // Limit to requested count (default 5)
   query = query.limit(input.count || 5)
 
-  const { data, error } = await query
+  let { data, error } = await query
+
+  // Filter by interests on client side (since it's an array/JSON field)
+  if (!error && data && extractedFilters.interests && Array.isArray(extractedFilters.interests) && extractedFilters.interests.length > 0) {
+    console.log('[TOOL] Filtering results by interests:', extractedFilters.interests)
+    data = data.filter((persona: any) => {
+      const personaInterests = persona.interests
+      if (!personaInterests) return false
+
+      // Check if any of the requested interests are in the persona's interests
+      let hasMatchingInterest = false
+
+      if (Array.isArray(personaInterests)) {
+        hasMatchingInterest = personaInterests.some((pi: any) => {
+          const piStr = typeof pi === 'string' ? pi : pi?.name || ''
+          return extractedFilters.interests.some((requested: string) =>
+            piStr.toLowerCase().includes(requested.toLowerCase()) ||
+            requested.toLowerCase().includes(piStr.toLowerCase())
+          )
+        })
+      } else if (typeof personaInterests === 'object') {
+        hasMatchingInterest = Object.keys(personaInterests).some((key) =>
+          extractedFilters.interests.some((requested: string) =>
+            key.toLowerCase().includes(requested.toLowerCase()) ||
+            requested.toLowerCase().includes(key.toLowerCase())
+          )
+        )
+      }
+
+      return hasMatchingInterest
+    })
+  }
 
   if (error) {
     console.log('[TOOL] search_clones error:', error)
