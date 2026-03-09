@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { isLoggedIn } from '../services/auth'
+import { supabase } from '../services/auth'
 
 interface ProtectedRouteProps {
   component: React.ReactNode
@@ -10,18 +10,26 @@ export function ProtectedRoute({ component }: ProtectedRouteProps) {
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Check if user has valid JWT session
-        const isLogged = await isLoggedIn()
-        setIsAuthorized(isLogged)
-      } catch (error) {
-        console.error('[PROTECTED_ROUTE] Auth check error:', error)
-        setIsAuthorized(false)
-      }
-    }
+    // Listen to auth state changes - this is more reliable than checking manually
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('[PROTECTED_ROUTE] Auth state changed:', {
+          event,
+          hasSession: !!session,
+          userId: session?.user?.id
+        })
 
-    checkAuth()
+        if (session?.user) {
+          setIsAuthorized(true)
+        } else {
+          setIsAuthorized(false)
+        }
+      }
+    )
+
+    return () => {
+      subscription?.unsubscribe()
+    }
   }, [])
 
   if (isAuthorized === null) {
