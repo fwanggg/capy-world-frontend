@@ -1,4 +1,4 @@
-import { jwtVerify } from 'jose';
+import { jwtVerify, importJWK } from 'jose';
 
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
 
@@ -19,13 +19,14 @@ export async function verifyJWT(token: string): Promise<JWTPayload | null> {
     // Remove 'Bearer ' prefix if present
     const cleanToken = token.replace(/^Bearer\s+/i, '')
 
-    // Use Supabase's JWT secret (available in Supabase project settings)
-    const secret = new TextEncoder().encode(SUPABASE_JWT_SECRET)
+    // Parse the JWK from environment variable (guaranteed to exist by check above)
+    const jwk = JSON.parse(SUPABASE_JWT_SECRET!)
+    const secret = await importJWK(jwk, jwk.alg)
 
     const verified = await jwtVerify(cleanToken, secret)
     return verified.payload as JWTPayload
   } catch (error) {
-    console.error('[JWT] Verification failed')
+    console.error('[JWT] Verification failed:', error instanceof Error ? error.message : String(error))
     return null
   }
 }
