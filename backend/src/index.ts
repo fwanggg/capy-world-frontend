@@ -1,6 +1,5 @@
 import express from 'express'
 import cors from 'cors'
-import authRoutes from './routes/auth'
 import chatRoutes from './routes/chat'
 import cloneRoutes from './routes/clones'
 import { requireAuth, requireApproval, AuthRequest } from './middleware/auth'
@@ -12,17 +11,6 @@ const PORT = 3001
 
 app.use(cors())
 app.use(express.json())
-
-// CORS headers middleware for additional control
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000')
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x-user-id')
-  next()
-})
-
-// Auth routes
-app.use('/auth', authRoutes)
 
 // Protected chat routes
 app.use('/chat', requireAuth, requireApproval, chatRoutes)

@@ -377,6 +377,100 @@ Session ID: generateUUID() → random UUID v4
 
 ---
 
+## Authentication
+
+The project uses **Supabase Auth** with **Google OAuth** for user authentication.
+
+### Key Implementation Files
+
+- `backend/src/middleware/auth.ts` - JWT verification middleware
+- `backend/src/utils/jwt.ts` - JWT utility functions (verify, extract user ID)
+- `backend/src/routes/auth.ts` - Auth endpoints (profile, callback handling)
+- `frontend/src/services/auth.ts` - Auth SDK wrapper (sign-in, headers, user info)
+- `supabase/config.toml` - Supabase configuration with Google OAuth
+- `.env` - Secrets: `SUPABASE_JWT_SECRET`, `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`
+
+### Important Patterns
+
+**Backend:**
+- All protected routes use `requireAuth` middleware which sets `req.userId`
+- Additional `checkApproval` middleware ensures `app_users.approved = true`
+- JWT verification uses Supabase public key (from `SUPABASE_JWT_SECRET`)
+- Never trust claims without signature verification
+
+**Frontend:**
+- Use `await getAuthHeaders()` to get `Authorization: Bearer {token}` header
+- Supabase SDK automatically manages session and token refresh
+- Session stored in localStorage as `supabase.auth.token`
+- No x-user-id headers (deprecated) - only JWT Authorization headers
+
+**Database:**
+- `auth.users` table managed by Supabase (user_id, email, metadata)
+- `app_users` table for approval workflow (user_id, approved)
+- First login creates `app_users` entry with `approved: false` (or `true` in DEV)
+
+### Development Setup
+
+```bash
+# With development mode (auto-approves users)
+DEV=true npm run dev --workspace=backend
+
+# Or with frontend+backend
+DEV=true npm run dev
+```
+
+Features:
+- Auto-creates users in `app_users` table with `approved: true`
+- Allows testing without manual approval
+- Uses real database for persistence
+
+### Testing Auth Flow
+
+1. Start development servers: `DEV=true npm run dev`
+2. Navigate to `http://localhost:3000/waitlist`
+3. Click "Sign in with Google"
+4. Complete OAuth flow
+5. Verify Authorization header in network requests (DevTools → Network)
+6. Check localStorage for `supabase.auth.token`
+
+**Testing protected endpoints:**
+```bash
+TOKEN=$(curl -s http://localhost:3001/auth/session | jq -r '.session.access_token')
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/chat/init
+```
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "Invalid JWT" | Token expired | Supabase SDK auto-refreshes; re-authenticate if needed |
+| "User not approved" (403) | `app_users.approved = false` | Enable `DEV=true` or admin approval |
+| "Missing Authorization header" (401) | Frontend not including JWT | Verify `getAuthHeaders()` called before fetch |
+| Google OAuth fails | Bad credentials or redirect URI | Check Google Cloud Console and `supabase/config.toml` |
+
+### Adding Protected Endpoints
+
+```typescript
+// backend/src/routes/myroute.ts
+app.post('/api/protected', requireAuth, checkApproval, (req, res) => {
+  const userId = req.userId  // Available after requireAuth
+  // Protected logic here
+  res.json({ data: 'protected' })
+})
+```
+
+Frontend usage:
+```typescript
+const headers = await getAuthHeaders()
+const res = await fetch('/api/protected', {
+  method: 'POST',
+  headers: { ...headers, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ data: 'example' })
+})
+```
+
+---
+
 ## Next Steps
 
 1. Run `npm install` to install dependencies

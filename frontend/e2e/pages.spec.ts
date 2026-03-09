@@ -55,9 +55,9 @@ test.describe('Chat Page Protection', () => {
 
   test('should allow access if authenticated and approved', async ({ page, context }) => {
     // Set auth tokens in localStorage via context
+    // Note: Supabase Auth tokens would be set automatically on successful OAuth
     await context.addInitScript(() => {
       localStorage.setItem('user_id', 'test-user-123')
-      localStorage.setItem('session_token', 'test-token')
       localStorage.setItem('approved', 'true')
       localStorage.setItem('email', 'test@example.com')
     })

@@ -12,9 +12,9 @@ test.describe('Chat UI Components', () => {
 test.describe('Chat Page Structure', () => {
   test.beforeEach(async ({ page, context }) => {
     // Setup auth for chat tests
+    // Note: Supabase Auth tokens would be set automatically on successful OAuth
     await context.addInitScript(() => {
       localStorage.setItem('user_id', 'test-user-123')
-      localStorage.setItem('session_token', 'test-token')
       localStorage.setItem('approved', 'true')
       localStorage.setItem('email', 'test@example.com')
     })
