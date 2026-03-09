@@ -1,37 +1,14 @@
 import { Router, Response } from 'express'
-import { createHash } from 'crypto'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
 import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
+import { userIdToUUID, generateUUID } from '../utils/uuid'
 import {
   callCapybaraAI,
   callMultipleClones,
 } from '../services/langgraph-orchestrator'
 
 const router = Router()
-
-// Helper: Generate deterministic UUID v4 from string
-const userIdToUUID = (userId: string): string => {
-  const hash = createHash('md5').update(userId).digest('hex')
-  // Convert first 16 hex chars to UUID v4 format
-  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`
-}
-
-// Helper: Generate random UUID v4
-const generateUUID = (): string => {
-  const chars = '0123456789abcdef'
-  let uuid = ''
-  for (let i = 0; i < 36; i++) {
-    if (i === 8 || i === 13 || i === 18 || i === 23) {
-      uuid += '-'
-    } else if (i === 14) {
-      uuid += '4' // UUID v4
-    } else {
-      uuid += chars[Math.floor(Math.random() * (i === 19 ? 4 : 16))]
-    }
-  }
-  return uuid
-}
 
 /**
  * POST /chat/init

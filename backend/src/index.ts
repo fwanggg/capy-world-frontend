@@ -3,8 +3,9 @@ import cors from 'cors'
 import authRoutes from './routes/auth'
 import chatRoutes from './routes/chat'
 import cloneRoutes from './routes/clones'
-import { requireAuth, requireApproval } from './middleware/auth'
+import { requireAuth, requireApproval, AuthRequest } from './middleware/auth'
 import { supabase } from 'shared'
+import { userIdToUUID } from './utils/uuid'
 
 const app = express()
 const PORT = 3001
@@ -30,15 +31,18 @@ app.use('/chat', requireAuth, requireApproval, chatRoutes)
 app.use('/clones', requireAuth, cloneRoutes)
 
 // User profile endpoint
-app.get('/user/profile', async (req, res) => {
+app.get('/user/profile', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const userId = req.headers['x-user-id'] as string
+    // User ID comes from Authorization header (verified by requireAuth middleware)
+    const userIdFromJWT = req.userId
 
-    if (!userId) {
+    if (!userIdFromJWT) {
       return res.status(401).json({ error: 'Not authenticated' })
     }
 
-    const { supabase } = await import('shared')
+    // Convert JWT user ID to UUID for database lookup
+    const userId = userIdToUUID(userIdFromJWT)
+
     const { data: user, error } = await supabase
       .from('app_users')
       .select('*')
