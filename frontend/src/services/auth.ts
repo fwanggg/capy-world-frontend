@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'http://localhost:54321'
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'your-anon-key'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321'
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -69,4 +69,10 @@ export async function getAuthHeaders(): Promise<{ Authorization: string } | {}> 
   const token = await getAuthToken()
   if (!token) return {}
   return { Authorization: `Bearer ${token}` }
+}
+
+export async function isApproved(): Promise<boolean> {
+  // In the new system, approval is checked on the backend via requireApproval middleware
+  // For now, this always returns true - the server will enforce approval checks
+  return true
 }
