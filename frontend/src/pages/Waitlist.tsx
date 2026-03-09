@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GoogleLogin } from '@react-oauth/google'
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google'
 import { signInWithGoogle, getAuthHeaders } from '../services/auth'
 
 export function Waitlist() {
@@ -7,11 +7,15 @@ export function Waitlist() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const handleGoogleLogin = async (credentialResponse: any) => {
+  const handleGoogleLogin = async (credentialResponse: CredentialResponse) => {
     setLoading(true)
     setError(null)
 
     try {
+      if (!credentialResponse.credential) {
+        throw new Error('No credential received from Google')
+      }
+
       await signInWithGoogle(credentialResponse.credential)
 
       // After successful sign-in, check approval status via backend
@@ -21,9 +25,13 @@ export function Waitlist() {
         'Content-Type': 'application/json',
         ...authHeaders,
       }
-      const response = await fetch('http://localhost:3001/user/profile', {
+      const response = await fetch('/user/profile', {
         headers: headers as HeadersInit,
       })
+
+      if (!response.ok) {
+        throw new Error(`Profile check failed: ${response.status}`)
+      }
 
       const userData = await response.json()
 
@@ -33,11 +41,12 @@ export function Waitlist() {
           window.location.href = '/chat'
         }, 1000)
       } else {
+        setLoading(false)
         setMessage('Success! You have been added to the waitlist. We will notify you when you are approved.')
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed')
-    } finally {
+      const message = err instanceof Error ? err.message : 'Authentication failed'
+      setError(message)
       setLoading(false)
     }
   }

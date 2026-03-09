@@ -27,9 +27,13 @@ export function ProtectedRoute({ component }: ProtectedRouteProps) {
       // Verify with backend
       try {
         const headers = await getAuthHeaders()
-        const response = await fetch('http://localhost:3001/user/profile', {
+        const response = await fetch('/user/profile', {
           headers: headers as HeadersInit,
         })
+
+        if (!response.ok) {
+          throw new Error(`Auth check failed: ${response.status}`)
+        }
 
         const user = await response.json()
         setIsAuthorized(user.approved === true)
