@@ -11,34 +11,10 @@ export function Waitlist() {
     setError(null)
 
     try {
+      // signInWithGoogle() will redirect to Google OAuth
+      // After OAuth completes, Supabase will redirect to /auth/callback
+      // The AuthCallback component will handle session verification and approval check
       await signInWithGoogle()
-
-      // After successful sign-in, check approval status via backend
-      // The backend will create app_users entry if it doesn't exist
-      const authHeaders = await getAuthHeaders()
-      const headers = {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-      }
-      const response = await fetch('/user/profile', {
-        headers: headers as HeadersInit,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Profile check failed: ${response.status}`)
-      }
-
-      const userData = await response.json()
-
-      if (userData.approved) {
-        setMessage('You are approved! Redirecting to chat...')
-        setTimeout(() => {
-          window.location.href = '/chat'
-        }, 1000)
-      } else {
-        setLoading(false)
-        setMessage('Success! You have been added to the waitlist. We will notify you when you are approved.')
-      }
     } catch (err: any) {
       const message = err instanceof Error ? err.message : 'Authentication failed'
       setError(message)

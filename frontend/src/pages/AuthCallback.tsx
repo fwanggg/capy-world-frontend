@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../services/auth'
+import { supabase, getAuthHeaders } from '../services/auth'
 
 export function AuthCallback() {
   const navigate = useNavigate()
@@ -19,8 +19,37 @@ export function AuthCallback() {
         if (!isMounted) return
 
         if (session?.user) {
-          // Redirect to chat
-          navigate('/chat')
+          // User is authenticated, check approval status
+          try {
+            const authHeaders = await getAuthHeaders()
+            const response = await fetch('/user/profile', {
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+              } as HeadersInit,
+            })
+
+            if (!response.ok) {
+              throw new Error(`Profile check failed: ${response.status}`)
+            }
+
+            const userData = await response.json()
+
+            if (!isMounted) return
+
+            if (userData.approved) {
+              // User is approved, redirect to chat
+              navigate('/chat')
+            } else {
+              // User is not approved yet, show waitlist message
+              navigate('/waitlist', { state: { message: 'Your account is pending approval. We will notify you when approved.' } })
+            }
+          } catch (profileError) {
+            console.error('[AUTH_CALLBACK] Profile check error:', profileError)
+            if (!isMounted) return
+            // If profile check fails, still redirect to chat - backend will handle approval
+            navigate('/chat')
+          }
         } else {
           navigate('/waitlist')
         }
