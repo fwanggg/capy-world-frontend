@@ -43,44 +43,116 @@ After activation, users can chat with the personas directly.`
 }
 
 /**
- * Search personas by research goal with optional demographic filters
- * Returns list of persona IDs and usernames (never exposes prompt)
+ * Get demographic schema - distinct values for each demographic column
+ * This helps the LLM understand what values actually exist in the database
+ */
+async function getDemographicSchema(): Promise<any> {
+  console.log('[TOOL] Getting demographic schema from personas table')
+
+  const columns = ['age', 'gender', 'location', 'profession', 'spending_power']
+  const schema: any = {}
+
+  for (const column of columns) {
+    const { data, error } = await supabase
+      .from('personas')
+      .select(column)
+      .neq(column, null)
+
+    if (!error && data) {
+      // Get distinct values
+      const distinctValues = [...new Set(data.map((d: any) => d[column]))]
+      schema[column] = distinctValues
+      console.log(`[TOOL] ${column} distinct values:`, distinctValues)
+    }
+  }
+
+  return schema
+}
+
+/**
+ * Search personas by research goal
+ * Two-step process:
+ * 1. Get distinct demographic values from database
+ * 2. Convert natural language goal to actual filter values
+ * 3. Execute search with verified filters
  */
 async function searchClones(input: {
   research_goal: string
   count?: number
-  filters?: {
-    age_min?: number
-    age_max?: number
-    gender?: string
-    location?: string
-    profession?: string
-    spending_power?: string
-  }
 }): Promise<string> {
-  console.log('[TOOL] search_clones called with goal:', input.research_goal)
-  console.log('[TOOL] search_clones count:', input.count, 'filters:', input.filters)
+  console.log('[TOOL] search_clones called with goal:', input.research_goal, 'count:', input.count || 5)
 
+  // STEP 1: Get demographic schema
+  const demographicSchema = await getDemographicSchema()
+  console.log('[TOOL] Demographic schema retrieved for filter matching')
+
+  // STEP 2: Use LLM to convert natural language goal to filter values
+  // Build a prompt for the LLM to understand the user's intent
+  const filterExtractionPrompt = `
+Given the user's research goal: "${input.research_goal}"
+
+Available demographic values in database:
+- Ages: ${demographicSchema.age?.join(', ') || 'various'}
+- Genders: ${demographicSchema.gender?.join(', ') || 'various'}
+- Locations: ${demographicSchema.location?.join(', ') || 'various'}
+- Professions: ${demographicSchema.profession?.join(', ') || 'various'}
+- Spending Power: ${demographicSchema.spending_power?.join(', ') || 'various'}
+
+Extract filter criteria from the user's goal. Return a JSON object with only the filters mentioned:
+{
+  "gender": null or string value from available genders,
+  "location": null or string value from available locations,
+  "profession": null or string value from available professions,
+  "age_min": null or number,
+  "age_max": null or number,
+  "spending_power": null or string value from available spending power,
+  "reasoning": "explain how you matched user intent to available values"
+}
+
+Only include filters that are explicitly mentioned or strongly implied. Use null for filters not mentioned.
+  `
+
+  const llm = createDeepSeekLLM()
+  const filterResponse = await llm.invoke([new HumanMessage(filterExtractionPrompt)])
+
+  let extractedFilters: any = {}
+  try {
+    const responseText = typeof filterResponse.content === 'string'
+      ? filterResponse.content
+      : String(filterResponse.content)
+
+    // Extract JSON from response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      extractedFilters = parsed
+      console.log('[TOOL] Extracted filters from natural language:', extractedFilters)
+    }
+  } catch (e) {
+    console.log('[TOOL] Filter extraction parsing error:', e)
+  }
+
+  // STEP 3: Execute search with verified filters
   let query = supabase.from('personas').select('id, reddit_username, age, gender, location, profession, spending_power')
 
   // Apply demographic filters
-  if (input.filters?.gender) {
-    query = query.eq('gender', input.filters.gender)
+  if (extractedFilters.gender) {
+    query = query.eq('gender', extractedFilters.gender)
   }
-  if (input.filters?.location) {
-    query = query.ilike('location', `%${input.filters.location}%`)
+  if (extractedFilters.location) {
+    query = query.eq('location', extractedFilters.location)
   }
-  if (input.filters?.profession) {
-    query = query.ilike('profession', `%${input.filters.profession}%`)
+  if (extractedFilters.profession) {
+    query = query.eq('profession', extractedFilters.profession)
   }
-  if (input.filters?.spending_power) {
-    query = query.ilike('spending_power', `%${input.filters.spending_power}%`)
+  if (extractedFilters.spending_power) {
+    query = query.eq('spending_power', extractedFilters.spending_power)
   }
-  if (input.filters?.age_min) {
-    query = query.gte('age', input.filters.age_min)
+  if (extractedFilters.age_min !== null && extractedFilters.age_min !== undefined) {
+    query = query.gte('age', extractedFilters.age_min)
   }
-  if (input.filters?.age_max) {
-    query = query.lte('age', input.filters.age_max)
+  if (extractedFilters.age_max !== null && extractedFilters.age_max !== undefined) {
+    query = query.lte('age', extractedFilters.age_max)
   }
 
   // Limit to requested count (default 5)
@@ -103,9 +175,10 @@ async function searchClones(input: {
       profession: d.profession,
       spending_power: d.spending_power,
     })) || [],
+    filters_used: extractedFilters,
   }
 
-  console.log('[TOOL] search_clones returning:', result.personas.length, 'personas')
+  console.log('[TOOL] search_clones returning:', result.personas.length, 'personas with filters:', extractedFilters)
   return JSON.stringify(result)
 }
 
@@ -168,21 +241,10 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
 // Define tools for LLM binding
 const searchClonesTool = tool(searchClones, {
   name: 'search_clones',
-  description: 'Search for relevant digital personas based on research goal with demographic filters. IMPORTANT: Always extract filters from user request! If user mentions profession (engineer, founder, developer, manager, etc.), ALWAYS include profession filter. If user mentions age range, gender, location, or spending level, ALWAYS include those filters too.',
+  description: 'Search for relevant digital personas based on research goal. The tool automatically extracts demographic filters from the natural language goal by: 1) querying the database for distinct demographic values, 2) using LLM to match user intent to actual values, 3) returning matching personas.',
   schema: z.object({
-    research_goal: z.string().describe('The research goal or persona type to search for'),
-    count: z.number().optional().describe('How many personas to activate — infer from user request, default 5'),
-    filters: z
-      .object({
-        age_min: z.number().optional().describe('Minimum age filter - include if user mentions age like "30s", "20-30", "millennial", etc.'),
-        age_max: z.number().optional().describe('Maximum age filter - include if user mentions age range'),
-        gender: z.string().optional().describe('Gender filter like "female", "male", "non-binary" - include if user mentions gender'),
-        location: z.string().optional().describe('Location filter like "NYC", "San Francisco", "Austin" - include if user mentions location'),
-        profession: z.string().optional().describe('Profession filter like "engineer", "founder", "developer", "manager", "designer" - ALWAYS include if user mentions job title or profession'),
-        spending_power: z.string().optional().describe('Spending power filter like "high", "medium", "low" - include if user mentions budget or spending level'),
-      })
-      .optional()
-      .describe('REQUIRED: Extract demographic filters from user request. Do NOT leave filters empty if user mentioned any demographics.'),
+    research_goal: z.string().describe('The user\'s natural language research goal (e.g., "software engineers in their 30s", "female founders from NYC")'),
+    count: z.number().optional().describe('How many personas to return - infer from user request, default 5'),
   }),
 })
 
