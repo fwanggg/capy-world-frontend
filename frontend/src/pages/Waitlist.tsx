@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
-import { signInWithGoogle } from '../services/auth'
+import { signInWithGoogle, getAuthHeaders } from '../services/auth'
 
 export function Waitlist() {
   const [loading, setLoading] = useState(false)
@@ -16,7 +16,11 @@ export function Waitlist() {
 
       // After successful sign-in, check approval status via backend
       // The backend will create app_users entry if it doesn't exist
-      const headers = { 'Content-Type': 'application/json' }
+      const authHeaders = await getAuthHeaders()
+      const headers = {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      }
       const response = await fetch('http://localhost:3001/user/profile', {
         headers: headers as HeadersInit,
       })
