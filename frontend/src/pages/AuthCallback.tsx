@@ -23,6 +23,9 @@ export function AuthCallback() {
           // User is authenticated, check approval status
           try {
             const authHeaders = await getAuthHeaders()
+            console.log('[AUTH_CALLBACK] Auth headers:', Object.keys(authHeaders))
+            console.log('[AUTH_CALLBACK] Session token:', session.access_token?.substring(0, 20) + '...')
+
             const response = await fetch('/user/profile', {
               headers: {
                 'Content-Type': 'application/json',

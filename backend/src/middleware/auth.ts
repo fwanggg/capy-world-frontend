@@ -10,12 +10,15 @@ export interface AuthRequest extends Request {
 export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers['authorization']
+    console.log('[AUTH] Authorization header present:', !!authHeader)
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('[AUTH] Missing or invalid Authorization header')
       return res.status(401).json({ error: 'Not authenticated' })
     }
 
     const token = authHeader.slice(7) // Remove 'Bearer ' prefix
+    console.log('[AUTH] Token preview:', token.substring(0, 20) + '...')
     const payload = await verifyJWT(token)
 
     if (!payload) {
