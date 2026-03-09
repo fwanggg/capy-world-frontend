@@ -165,15 +165,28 @@ For interests, return an array of matching interests if mentioned, or null other
       ? filterResponse.content
       : String(filterResponse.content)
 
+    console.log('[NLP_CONVERSION] LLM Raw Response:')
+    console.log(responseText)
+    console.log('[NLP_CONVERSION] ---END RAW RESPONSE---')
+
     // Extract JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0])
       extractedFilters = parsed
-      console.log('[TOOL] Extracted filters from natural language:', extractedFilters)
+
+      console.log('[NLP_CONVERSION] Successfully extracted filters:')
+      console.log('[NLP_CONVERSION] profession:', extractedFilters.profession)
+      console.log('[NLP_CONVERSION] age_min:', extractedFilters.age_min)
+      console.log('[NLP_CONVERSION] age_max:', extractedFilters.age_max)
+      console.log('[NLP_CONVERSION] gender:', extractedFilters.gender)
+      console.log('[NLP_CONVERSION] location:', extractedFilters.location)
+      console.log('[NLP_CONVERSION] spending_power:', extractedFilters.spending_power)
+      console.log('[NLP_CONVERSION] interests:', extractedFilters.interests)
+      console.log('[NLP_CONVERSION] reasoning:', extractedFilters.reasoning)
     }
   } catch (e) {
-    console.log('[TOOL] Filter extraction parsing error:', e)
+    console.log('[NLP_CONVERSION] Filter extraction parsing error:', e)
   }
 
   // STEP 3: Execute search with verified filters
@@ -203,11 +216,29 @@ For interests, return an array of matching interests if mentioned, or null other
   // Limit to requested count (default 5)
   query = query.limit(input.count || 5)
 
+  // Build and log the SQL query
+  const sqlQueryLog = `
+[SEARCH_SQL] Generated Query:
+  SELECT id, reddit_username, age, gender, location, profession, spending_power, interests
+  FROM personas
+  WHERE 1=1
+  ${extractedFilters.profession ? `AND profession = '${extractedFilters.profession}'` : ''}
+  ${extractedFilters.gender ? `AND gender = '${extractedFilters.gender}'` : ''}
+  ${extractedFilters.location ? `AND location = '${extractedFilters.location}'` : ''}
+  ${extractedFilters.spending_power ? `AND spending_power = '${extractedFilters.spending_power}'` : ''}
+  ${extractedFilters.age_min !== null && extractedFilters.age_min !== undefined ? `AND age >= ${extractedFilters.age_min}` : ''}
+  ${extractedFilters.age_max !== null && extractedFilters.age_max !== undefined ? `AND age <= ${extractedFilters.age_max}` : ''}
+  LIMIT ${input.count || 5};
+  `
+  console.log(sqlQueryLog)
+
   let { data, error } = await query
+
+  console.log(`[SEARCH_SQL] Database returned ${data?.length || 0} rows before interest filtering`)
 
   // Filter by interests on client side (since it's an array/JSON field)
   if (!error && data && extractedFilters.interests && Array.isArray(extractedFilters.interests) && extractedFilters.interests.length > 0) {
-    console.log('[TOOL] Filtering results by interests:', extractedFilters.interests)
+    console.log('[SEARCH_FILTER] Filtering results by interests:', extractedFilters.interests)
     data = data.filter((persona: any) => {
       const personaInterests = persona.interests
       if (!personaInterests) return false
