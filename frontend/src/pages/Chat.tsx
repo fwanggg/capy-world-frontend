@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { GodMode } from '../components/GodMode'
 import { ConversationMode } from '../components/ConversationMode'
-import { getAuthHeaders, isApproved, supabase } from '../services/auth'
+import { getAuthHeaders, isApproved, supabase, waitForAuthInitialization } from '../services/auth'
 
 export function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -38,12 +38,18 @@ export function Chat() {
     const controller = new AbortController()
 
     try {
+      // Wait for Supabase to load the session from storage
+      await waitForAuthInitialization()
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       }
       const authHeaders = await getAuthHeaders()
       if ('Authorization' in authHeaders) {
         headers['Authorization'] = authHeaders['Authorization']
+        console.log('[CHAT_INIT] Auth header set successfully')
+      } else {
+        console.warn('[CHAT_INIT] No Authorization header available')
       }
 
       const response = await fetch('/chat/init', {

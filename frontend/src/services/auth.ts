@@ -19,6 +19,24 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 })
 
+// Wait for Supabase to initialize the session from storage
+export async function waitForAuthInitialization(): Promise<void> {
+  return new Promise((resolve) => {
+    // If session exists, resolve immediately
+    supabase.auth.getSession().then(() => resolve())
+
+    // Also use onAuthStateChange which fires when session is ready
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      resolve()
+    })
+
+    // Fallback timeout in case events don't fire
+    setTimeout(resolve, 1000)
+
+    return () => subscription?.unsubscribe()
+  })
+}
+
 export async function signInWithGoogle() {
   try {
     // Use Supabase OAuth flow to redirect to Google
