@@ -274,7 +274,9 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 router.get('/history', async (req: AuthRequest, res: Response) => {
   try {
     const { session_id } = req.query
-    const userId = req.userId!
+    // Extract and convert user ID from JWT token
+    const userIdFromJWT = req.userId!
+    const userId = userIdToUUID(userIdFromJWT)
 
     if (!session_id || typeof session_id !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid session_id' })
