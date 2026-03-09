@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { getAuthHeaders, isLoggedIn, isApproved } from '../services/auth'
+import { isLoggedIn } from '../services/auth'
 
 interface ProtectedRouteProps {
   component: React.ReactNode
@@ -11,36 +11,9 @@ export function ProtectedRoute({ component }: ProtectedRouteProps) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Check local auth status first
+      // Check if user has valid JWT session
       const isLogged = await isLoggedIn()
-      if (!isLogged) {
-        setIsAuthorized(false)
-        return
-      }
-
-      const approved = await isApproved()
-      if (!approved) {
-        setIsAuthorized(false)
-        return
-      }
-
-      // Verify with backend
-      try {
-        const headers = await getAuthHeaders()
-        const response = await fetch('/user/profile', {
-          headers: headers as HeadersInit,
-        })
-
-        if (!response.ok) {
-          throw new Error(`Auth check failed: ${response.status}`)
-        }
-
-        const user = await response.json()
-        setIsAuthorized(user.approved === true)
-      } catch (error) {
-        console.error('Auth check error:', error)
-        setIsAuthorized(false)
-      }
+      setIsAuthorized(isLogged)
     }
 
     checkAuth()
