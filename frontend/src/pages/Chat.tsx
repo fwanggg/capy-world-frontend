@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { GodMode } from '../components/GodMode'
 import { ConversationMode } from '../components/ConversationMode'
-import { getAuthHeaders, isApproved, supabase, waitForAuthInitialization } from '../services/auth'
+import { getAuthHeaders, supabase, waitForAuthInitialization } from '../services/auth'
 
 export function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -19,15 +19,8 @@ export function Chat() {
       }
     })
 
-    const checkApprovalAndInit = async () => {
-      const approved = await isApproved()
-      if (!approved) {
-        window.location.href = '/waitlist'
-        return
-      }
-      initializeSession()
-    }
-    checkApprovalAndInit()
+    // Initialize chat session - backend will check approval via requireApproval middleware
+    initializeSession()
 
     return () => {
       subscription?.unsubscribe()
