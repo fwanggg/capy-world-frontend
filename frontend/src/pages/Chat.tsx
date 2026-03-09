@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { GodMode } from '../components/GodMode'
 import { ConversationMode } from '../components/ConversationMode'
-import { getAuthHeaders, isApproved } from '../services/auth'
+import { getAuthHeaders, isApproved, supabase } from '../services/auth'
 
 export function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -11,6 +11,14 @@ export function Chat() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Monitor auth state - redirect if session is lost
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session) {
+        console.log('[CHAT] Session lost, redirecting to waitlist')
+        window.location.href = '/waitlist'
+      }
+    })
+
     const checkApprovalAndInit = async () => {
       const approved = await isApproved()
       if (!approved) {
@@ -20,6 +28,10 @@ export function Chat() {
       initializeSession()
     }
     checkApprovalAndInit()
+
+    return () => {
+      subscription?.unsubscribe()
+    }
   }, [])
 
   const initializeSession = async () => {
@@ -43,6 +55,11 @@ export function Chat() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Request failed' }))
+        // If 401 Unauthorized, redirect to waitlist
+        if (response.status === 401) {
+          window.location.href = '/waitlist'
+          return
+        }
         throw new Error(error.error || `HTTP ${response.status}`)
       }
 
