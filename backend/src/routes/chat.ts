@@ -108,7 +108,13 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     const session = result.data
     const sessionError = result.error
 
-    if (sessionError || !session) {
+    if (sessionError) {
+      console.error('[MESSAGE] Session fetch error:', sessionError.message)
+      return res.status(500).json({ error: 'Failed to fetch session', details: sessionError.message })
+    }
+
+    if (!session) {
+      console.warn('[MESSAGE] Session not found for user:', userId, 'session_id:', session_id)
       return res.status(404).json({ error: 'Session not found' })
     }
 
@@ -233,13 +239,22 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
     res.json(responseBody)
   } catch (error) {
-    console.error('Message error:', error instanceof Error ? error.message : String(error))
+    let errorMessage = 'Unknown error'
     if (error instanceof Error) {
-      console.error('Stack:', error.stack)
+      errorMessage = error.message
+      console.error('[MESSAGE] Error:', errorMessage)
+      console.error('[MESSAGE] Stack:', error.stack)
+    } else if (typeof error === 'object' && error !== null) {
+      errorMessage = JSON.stringify(error)
+      console.error('[MESSAGE] Object error:', errorMessage)
+    } else {
+      errorMessage = String(error)
+      console.error('[MESSAGE] Error:', errorMessage)
     }
+
     res.status(500).json({
       error: 'Failed to process message',
-      details: error instanceof Error ? error.message : String(error),
+      details: errorMessage,
     })
   }
 })
