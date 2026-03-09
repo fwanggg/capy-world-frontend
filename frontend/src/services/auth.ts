@@ -58,10 +58,18 @@ export async function signInWithGoogle() {
 export async function getAuthToken(): Promise<string | null> {
   try {
     const { data, error } = await supabase.auth.getSession()
-    if (error || !data.session) return null
+    if (error) {
+      console.error('[GET_TOKEN] Session error:', error)
+      return null
+    }
+    if (!data.session) {
+      console.warn('[GET_TOKEN] No session found')
+      return null
+    }
+    console.log('[GET_TOKEN] Token found, length:', data.session.access_token.length)
     return data.session.access_token
   } catch (error) {
-    console.error('Failed to get auth token:', error)
+    console.error('[GET_TOKEN] Failed to get auth token:', error)
     return null
   }
 }

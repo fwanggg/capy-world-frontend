@@ -10,8 +10,16 @@ export function AuthCallback() {
 
     const handleCallback = async () => {
       try {
+        console.log('[AUTH_CALLBACK] Starting callback handler')
         // Get the session from the URL (Supabase stores it automatically)
         const { data: { session }, error } = await supabase.auth.getSession()
+
+        console.log('[AUTH_CALLBACK] Session result:', {
+          hasSession: !!session,
+          hasUser: !!session?.user,
+          userId: session?.user?.id,
+          error: error?.message
+        })
 
         if (error) throw error
 
@@ -21,8 +29,10 @@ export function AuthCallback() {
         if (session?.user) {
           // User is authenticated, redirect to chat
           // Chat init will create user in app_users if needed
+          console.log('[AUTH_CALLBACK] Session found, redirecting to /chat')
           navigate('/chat')
         } else {
+          console.warn('[AUTH_CALLBACK] No session found, redirecting to /waitlist')
           navigate('/waitlist')
         }
       } catch (error) {
