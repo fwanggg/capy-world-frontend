@@ -69,43 +69,34 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
     }
 
     // Create session
-    // In dev mode, don't require user record due to foreign key constraints
+    // Always save to database so it can be fetched in subsequent /chat/message calls
     let session
     let error
 
-    if (isDev) {
-      // Generate a proper UUID session for dev testing
-      const sessionId = generateUUID()
-      session = {
-        id: sessionId,
+    const result = await supabase
+      .from('chat_sessions')
+      .insert({
         user_id: userId,
         mode,
         active_clones: [],
         metadata: { thread_id: `session_${Date.now()}` },
-      }
-      console.log(`[INIT] DEV MODE: Created mock session ${session.id} for user ${userId}`)
-    } else {
-      const result = await supabase
-        .from('chat_sessions')
-        .insert({
-          user_id: userId,
-          mode,
-          active_clones: [],
-          metadata: { thread_id: `session_${Date.now()}` },
-        })
-        .select()
-        .single()
+      })
+      .select()
+      .single()
 
-      session = result.data
-      error = result.error
-
-      if (error) {
-        console.error('[INIT] Session creation error:', error)
-        throw error
-      }
-
-      console.log(`[INIT] Created session ${session.id} for user ${userId}`)
+    if (isDev) {
+      console.log(`[INIT] DEV MODE: Created session ${result.data?.id} for user ${userId}`)
     }
+
+    session = result.data
+    error = result.error
+
+    if (error) {
+      console.error('[INIT] Session creation error:', error)
+      throw error
+    }
+
+    console.log(`[INIT] Created session ${session.id} for user ${userId}`)
 
     log.info('chat.session_init', `Session initialized with mode: ${mode}`, {
       sourceFile: 'chat.ts',

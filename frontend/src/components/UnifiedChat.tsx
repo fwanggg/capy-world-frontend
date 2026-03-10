@@ -81,13 +81,34 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: U
       }
 
       const requestBody: any = { session_id: sessionId, content }
+
       if (target === 'capybara') {
         requestBody.target = 'capybara'
+      } else if (target === 'clones') {
+        // Routing to clones - set target_clones with recipient(s)
+        if (recipient === 'all_participants') {
+          // Route to all active clones
+          requestBody.target = 'clones'
+        } else if (recipient) {
+          // Route to specific clone by name - convert name to ID
+          const cloneRecord = activeClones.find(c => c.name === recipient)
+          if (cloneRecord) {
+            requestBody.target_clones = [cloneRecord.id]
+          } else {
+            // Fallback: use recipient as-is (might be an ID or name)
+            requestBody.target_clones = [recipient]
+          }
+        } else {
+          // No specific recipient, route to all active clones
+          requestBody.target = 'clones'
+        }
       }
 
       console.log('[UNIFIED_CHAT] Sending message:', {
         content,
         target,
+        recipient,
+        activeClones: activeClones.map(c => ({ id: c.id, name: c.name })),
         requestBody: JSON.stringify(requestBody)
       })
 
