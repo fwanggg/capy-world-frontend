@@ -292,7 +292,7 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
       responses = cloneResponses.map((response) => ({
         role: 'clone',
-        sender_id: `User_${response.clone_id.slice(0, 4)}`,
+        sender_id: response.clone_id,
         content: String(response.content),
       }))
     }
