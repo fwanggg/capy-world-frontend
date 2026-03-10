@@ -59,7 +59,7 @@ export function ChatMessage({ role, sender_id, content, reasoning, recipient }: 
           borderLeft: isCapybara ? '4px solid var(--color-teal)' : undefined,
           boxShadow: isUser ? 'var(--shadow-sm)' : isCapybara ? '0 0 0 3px rgba(13, 148, 136, 0.1)' : 'none',
         }}>
-          {recipient && (
+          {recipient && recipient.trim() && (
             <span style={{
               fontWeight: 'bold',
               color: 'var(--color-teal)',
