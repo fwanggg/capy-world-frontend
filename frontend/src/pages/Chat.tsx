@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { GodMode } from '../components/GodMode'
-import { ConversationMode } from '../components/ConversationMode'
+import { ParticipantSidebar } from '../components/ParticipantSidebar'
+import { UnifiedChat } from '../components/UnifiedChat'
 import { getAuthHeaders, supabase, waitForAuthInitialization } from '../services/auth'
 
 export function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [mode, setMode] = useState<'god' | 'conversation'>('god')
-  const [activeClones, setActiveClones] = useState<any[]>([])
+  const [activeClones, setActiveClones] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -19,7 +18,7 @@ export function Chat() {
       }
     })
 
-    // Initialize chat session - backend will check approval via requireApproval middleware
+    // Initialize chat session
     initializeSession()
 
     return () => {
@@ -53,13 +52,12 @@ export function Chat() {
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Request failed' }))
-        // If 401 Unauthorized, redirect to waitlist
+        const errorData = await response.json().catch(() => ({ error: 'Request failed' }))
         if (response.status === 401) {
           window.location.href = '/waitlist'
           return
         }
-        throw new Error(error.error || `HTTP ${response.status}`)
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
 
       const session = await response.json()
@@ -136,14 +134,11 @@ export function Chat() {
       flexDirection: 'column',
       backgroundColor: 'var(--color-white)',
     }}>
-      {/* Header with Mode Switcher */}
+      {/* Header */}
       <div style={{
         backgroundColor: 'var(--color-white)',
         borderBottom: '1px solid var(--color-gray-100)',
         padding: 'var(--space-lg) var(--space-xl)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         boxShadow: 'var(--shadow-sm)',
       }}>
         <h1 style={{
@@ -152,89 +147,18 @@ export function Chat() {
           color: 'var(--color-navy)',
           margin: 0,
         }}>
-          Research Session
+          Capy Studyroom
         </h1>
-
-        {/* Mode Switcher - Only show Conversation Mode when clones are selected */}
-        {activeClones.length > 0 && (
-          <div style={{
-            display: 'flex',
-            gap: 'var(--space-base)',
-            backgroundColor: 'var(--color-gray-50)',
-            padding: 'var(--space-sm)',
-            borderRadius: '0.5rem',
-          }}>
-            <button
-              onClick={() => setMode('god')}
-              style={{
-                padding: 'var(--space-sm) var(--space-lg)',
-                backgroundColor: mode === 'god' ? 'var(--color-teal)' : 'transparent',
-                color: mode === 'god' ? 'var(--color-white)' : 'var(--color-gray-500)',
-                border: 'none',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                fontWeight: '500',
-                fontSize: 'var(--text-sm)',
-                transition: 'all var(--transition-fast)',
-              }}
-              onMouseOver={(e) => {
-                if (mode !== 'god') {
-                  e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'
-                }
-              }}
-              onMouseOut={(e) => {
-                if (mode !== 'god') {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                }
-              }}
-            >
-              God Mode
-            </button>
-            <button
-              onClick={() => setMode('conversation')}
-              style={{
-                padding: 'var(--space-sm) var(--space-lg)',
-                backgroundColor: mode === 'conversation' ? 'var(--color-teal)' : 'transparent',
-                color: mode === 'conversation' ? 'var(--color-white)' : 'var(--color-gray-500)',
-                border: 'none',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                fontWeight: '500',
-                fontSize: 'var(--text-sm)',
-                transition: 'all var(--transition-fast)',
-              }}
-              onMouseOver={(e) => {
-                if (mode !== 'conversation') {
-                  e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'
-                }
-              }}
-              onMouseOut={(e) => {
-                if (mode !== 'conversation') {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                }
-              }}
-            >
-              Conversation Mode ({activeClones.length})
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Chat Content Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {mode === 'god' && (
-          <GodMode
-            sessionId={sessionId}
-            onEnterConversation={(clones) => {
-              setActiveClones(clones)
-              setMode('conversation')
-            }}
-          />
-        )}
-
-        {mode === 'conversation' && (
-          <ConversationMode sessionId={sessionId} activeClones={activeClones} />
-        )}
+      {/* Main Layout: Sidebar + Chat */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        overflow: 'hidden',
+      }}>
+        <ParticipantSidebar currentUserId="you" activeClones={activeClones} />
+        <UnifiedChat sessionId={sessionId} onActiveClonesChange={setActiveClones} />
       </div>
     </div>
   )
