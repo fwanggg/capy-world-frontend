@@ -20,6 +20,7 @@ interface ChatMessageData {
   role: 'user' | 'capybara' | 'clone'
   sender_id: string
   reasoning?: ReasoningStep[]
+  recipient?: string
 }
 
 interface ChatResponse {
@@ -62,6 +63,7 @@ export function ConversationMode({ sessionId, activeClones: initialClones }: Con
         timestamp: Date.now(),
         role: 'user',
         sender_id: 'you',
+        recipient: recipient,
       }
       setMessages((prev) => [...prev, userMsg])
 
@@ -245,6 +247,7 @@ export function ConversationMode({ sessionId, activeClones: initialClones }: Con
             sender_id={msg.sender_id}
             content={msg.content}
             reasoning={msg.reasoning}
+            recipient={msg.recipient}
           />
         ))}
         {error && (
