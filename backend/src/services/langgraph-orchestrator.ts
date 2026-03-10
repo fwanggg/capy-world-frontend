@@ -7,35 +7,30 @@ import { z } from 'zod'
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
   return `You are Capybara AI. Your job is to search for and activate digital personas.
 
-REQUIRED WORKFLOW - ALWAYS FOLLOW THIS:
-1. When user mentions clones, research goals, testing, pitches, or feedback:
-   - EXTRACT demographics from user request: profession, age range, gender, location, spending power
-   - Call search_clones(research_goal, count, filters) with EXTRACTED filters
-   - Get back list of personas with IDs
-   - IMMEDIATELY call create_conversation_session with top persona IDs
-   - Respond: "I've activated [count] personas: [list their usernames from tool response]"
+REQUIRED WORKFLOW:
+1. When user asks to find personas:
+   - Call get_demographic_segments() to see available demographic fields
+   - Call get_demographic_values({segments: [...]}) for fields mentioned by user
+   - Call search_clones({...filters..., count: N}) to find personas
+   - Call create_conversation_session with returned persona IDs
+   - Respond: "I've activated [count] personas: [list their usernames]"
 
-2. IMPORTANT - FILTER EXTRACTION:
-   - If user says "engineers" → add profession: "engineer" to filters
-   - If user says "female founders in their 30s from NYC" → add gender: "female", age_min: 30, age_max: 39, location: "NYC"
-   - If user says "high spending power users" → add spending_power: "high"
-   - ALWAYS extract ALL mentioned demographics into filters object
+2. Available tools:
+   - get_demographic_segments(): Returns list of demographic field names available in database
+   - get_demographic_values(segments): Given list of field names, returns unique values for each
+   - search_clones(filters): Query personas with demographic filters
+   - create_conversation_session(clone_ids, session_id): Activate personas in session
 
-3. CRITICAL: You MUST make TWO tool calls in sequence:
-   - First: search_clones (with extracted filters!)
-   - Then: create_conversation_session (DO NOT WAIT for user approval)
+3. Example flow:
+   User: "Find 3 female engineers in their 30s from NYC"
+   → get_demographic_segments() → ["profession", "age", "gender", "location", "spending_power", "interests"]
+   → get_demographic_values({segments: ["profession", "gender", "location"]})
+   → Returns: {profession: ["engineer", "student", "dancer"], gender: ["female", "male"], location: ["NYC", "Boston", ...]}
+   → search_clones({profession: "engineer", gender: "female", age_min: 30, age_max: 39, location: "NYC", count: 3})
+   → create_conversation_session with returned persona IDs
 
-4. Session ID for this chat: ${sessionId}
-   - Use this in create_conversation_session calls
-   - Never ask the user for the session ID
-   - You already have it: just pass it along
-
-5. When user asks for analysis (e.g., "what objections came up?"), use CONVERSATION HISTORY to reference specific personas by username
-
-FILTER EXAMPLES:
-- "2 software engineers" → search_clones(count=2, filters={profession: "engineer"})
-- "3 female founders in their 30s from NYC" → search_clones(count=3, filters={gender: "female", profession: "founder", age_min: 30, age_max: 39, location: "NYC"})
-- "5 high-spending power users" → search_clones(count=5, filters={spending_power: "high"})
+4. Session ID: ${sessionId}
+   - Pass this to create_conversation_session calls
 
 ${labeledHistory ? `CONVERSATION HISTORY:\n${labeledHistory}\n` : ''}
 
@@ -43,220 +38,179 @@ After activation, users can chat with the personas directly.`
 }
 
 /**
- * Get demographic schema - distinct values for each demographic column
- * This helps the LLM understand what values actually exist in the database
+ * Tool 1: Get available demographic segment names
+ * Simple function - no LLM calls needed
  */
-async function getDemographicSchema(): Promise<any> {
-  console.log('[TOOL] Getting demographic schema from personas table')
+async function getDemographicSegments(): Promise<string> {
+  console.log('[TOOL] get_demographic_segments called')
 
-  const columns = ['age', 'gender', 'location', 'profession', 'spending_power']
-  const schema: any = {}
+  const segments = ['age', 'gender', 'location', 'profession', 'spending_power', 'interests']
 
-  // Get simple columns (scalar values)
-  for (const column of columns) {
-    const { data, error } = await supabase
-      .from('personas')
-      .select(column)
-      .neq(column, null)
-
-    if (!error && data) {
-      // Get distinct values
-      const distinctValues = [...new Set(data.map((d: any) => d[column]))]
-      schema[column] = distinctValues
-      console.log(`[TOOL] ${column} distinct values:`, distinctValues)
-    }
-  }
-
-  // Handle interests column (array/JSON field)
-  console.log('[TOOL] Processing interests column (array/JSON field)')
-  const { data: interestsData, error: interestsError } = await supabase
-    .from('personas')
-    .select('interests')
-    .neq('interests', null)
-
-  if (!interestsError && interestsData) {
-    const allInterests = new Set<string>()
-
-    // Extract individual interests from array/JSON
-    for (const record of interestsData) {
-      const interests = record.interests
-
-      if (Array.isArray(interests)) {
-        // If it's an array
-        interests.forEach((interest: any) => {
-          if (typeof interest === 'string') {
-            allInterests.add(interest)
-          } else if (typeof interest === 'object' && interest?.name) {
-            allInterests.add(interest.name)
-          }
-        })
-      } else if (typeof interests === 'object' && interests !== null) {
-        // If it's a JSON object with keys as interests
-        Object.keys(interests).forEach((key) => {
-          allInterests.add(key)
-        })
-      } else if (typeof interests === 'string') {
-        // If it's a string (comma-separated or single value)
-        interests.split(',').forEach((interest) => {
-          allInterests.add(interest.trim())
-        })
-      }
-    }
-
-    schema.interests = Array.from(allInterests)
-    console.log(`[TOOL] interests distinct values:`, schema.interests)
-  }
-
-  return schema
+  console.log('[TOOL] Available segments:', segments)
+  return JSON.stringify({
+    segments,
+    description: 'These are the demographic fields you can filter by in the personas database'
+  })
 }
 
 /**
- * Search personas by research goal
- * Two-step process:
- * 1. Get distinct demographic values from database
- * 2. Convert natural language goal to actual filter values
- * 3. Execute search with verified filters
+ * Tool 2: Get unique values for specified demographic segments
+ * Input: list of segment names
+ * Output: distinct values for each segment
+ * No LLM calls needed - pure data retrieval
  */
-async function searchClones(input: {
-  research_goal: string
-  count?: number
+async function getDemographicValues(input: {
+  segments: string[]
 }): Promise<string> {
-  console.log('[TOOL] search_clones called with goal:', input.research_goal, 'count:', input.count || 5)
+  console.log('[TOOL] get_demographic_values called with segments:', input.segments)
 
-  // STEP 1: Get demographic schema
-  const demographicSchema = await getDemographicSchema()
-  console.log('[TOOL] Demographic schema retrieved for filter matching')
+  const result: any = {}
+  const columns = ['age', 'gender', 'location', 'profession', 'spending_power']
 
-  // STEP 2: Use LLM to convert natural language goal to filter values
-  // Build a prompt for the LLM to understand the user's intent
-  const filterExtractionPrompt = `
-Given the user's research goal: "${input.research_goal}"
+  // Get scalar columns
+  for (const segment of input.segments) {
+    if (columns.includes(segment)) {
+      const { data, error } = await supabase
+        .from('personas')
+        .select(segment)
+        .neq(segment, null)
 
-Available demographic values in database:
-- Ages: ${demographicSchema.age?.join(', ') || 'various'}
-- Genders: ${demographicSchema.gender?.join(', ') || 'various'}
-- Locations: ${demographicSchema.location?.join(', ') || 'various'}
-- Professions: ${demographicSchema.profession?.join(', ') || 'various'}
-- Spending Power: ${demographicSchema.spending_power?.join(', ') || 'various'}
-- Interests: ${demographicSchema.interests?.join(', ') || 'various'}
+      if (!error && data) {
+        const distinctValues = [...new Set(data.map((d: any) => d[segment]))]
+        result[segment] = distinctValues
+        console.log(`[TOOL] ${segment} values:`, distinctValues)
+      }
+    }
+  }
 
-Extract filter criteria from the user's goal. Return a JSON object with only the filters mentioned:
-{
-  "gender": null or string value from available genders,
-  "location": null or string value from available locations,
-  "profession": null or string value from available professions,
-  "age_min": null or number,
-  "age_max": null or number,
-  "spending_power": null or string value from available spending power,
-  "interests": null or array of interest strings from available interests,
-  "reasoning": "explain how you matched user intent to available values"
+  // Handle interests (array/JSON field)
+  if (input.segments.includes('interests')) {
+    const { data: interestsData, error: interestsError } = await supabase
+      .from('personas')
+      .select('interests')
+      .neq('interests', null)
+
+    if (!interestsError && interestsData) {
+      const allInterests = new Set<string>()
+
+      for (const record of interestsData) {
+        const interests = record.interests
+
+        if (Array.isArray(interests)) {
+          interests.forEach((interest: any) => {
+            if (typeof interest === 'string') {
+              allInterests.add(interest)
+            } else if (typeof interest === 'object' && interest?.name) {
+              allInterests.add(interest.name)
+            }
+          })
+        } else if (typeof interests === 'object' && interests !== null) {
+          Object.keys(interests).forEach((key) => {
+            allInterests.add(key)
+          })
+        } else if (typeof interests === 'string') {
+          interests.split(',').forEach((interest) => {
+            allInterests.add(interest.trim())
+          })
+        }
+      }
+
+      result.interests = Array.from(allInterests)
+      console.log('[TOOL] interests values:', result.interests)
+    }
+  }
+
+  console.log('[TOOL] Returning demographic values:', JSON.stringify(result))
+  return JSON.stringify(result)
 }
 
-Only include filters that are explicitly mentioned or strongly implied. Use null for filters not mentioned.
-For interests, return an array of matching interests if mentioned, or null otherwise.
-  `
+/**
+ * Tool 3: Search personas with demographic filters
+ * Simple database query - NO LLM calls
+ * LLM does the translation in the agentic loop
+ */
+async function searchClones(input: {
+  count?: number
+  profession?: string
+  age_min?: number
+  age_max?: number
+  gender?: string
+  location?: string
+  spending_power?: string
+  interests?: string[]
+}): Promise<string> {
+  console.log('[TOOL] search_clones called with filters:', JSON.stringify(input, null, 2))
 
-  const llm = createDeepSeekLLM()
-  const filterResponse = await llm.invoke([new HumanMessage(filterExtractionPrompt)])
-
-  let extractedFilters: any = {}
-  try {
-    const responseText = typeof filterResponse.content === 'string'
-      ? filterResponse.content
-      : String(filterResponse.content)
-
-    console.log('[NLP_CONVERSION] LLM Raw Response:')
-    console.log(responseText)
-    console.log('[NLP_CONVERSION] ---END RAW RESPONSE---')
-
-    // Extract JSON from response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0])
-      extractedFilters = parsed
-
-      console.log('[NLP_CONVERSION] Successfully extracted filters:')
-      console.log('[NLP_CONVERSION] profession:', extractedFilters.profession)
-      console.log('[NLP_CONVERSION] age_min:', extractedFilters.age_min)
-      console.log('[NLP_CONVERSION] age_max:', extractedFilters.age_max)
-      console.log('[NLP_CONVERSION] gender:', extractedFilters.gender)
-      console.log('[NLP_CONVERSION] location:', extractedFilters.location)
-      console.log('[NLP_CONVERSION] spending_power:', extractedFilters.spending_power)
-      console.log('[NLP_CONVERSION] interests:', extractedFilters.interests)
-      console.log('[NLP_CONVERSION] reasoning:', extractedFilters.reasoning)
-    }
-  } catch (e) {
-    console.log('[NLP_CONVERSION] Filter extraction parsing error:', e)
-  }
-
-  // STEP 3: Execute search with verified filters
+  // STEP 1: Build query with filters
   let query = supabase.from('personas').select('id, reddit_username, age, gender, location, profession, spending_power, interests')
 
-  // Apply demographic filters
-  if (extractedFilters.gender) {
-    query = query.eq('gender', extractedFilters.gender)
+  // Apply demographic filters - NO LLM CALLS, just query building
+  if (input.profession) {
+    query = query.eq('profession', input.profession)
   }
-  if (extractedFilters.location) {
-    query = query.eq('location', extractedFilters.location)
+  if (input.gender) {
+    query = query.eq('gender', input.gender)
   }
-  if (extractedFilters.profession) {
-    query = query.eq('profession', extractedFilters.profession)
+  if (input.location) {
+    query = query.eq('location', input.location)
   }
-  if (extractedFilters.spending_power) {
-    query = query.eq('spending_power', extractedFilters.spending_power)
+  if (input.spending_power) {
+    query = query.eq('spending_power', input.spending_power)
   }
-  if (extractedFilters.age_min !== null && extractedFilters.age_min !== undefined) {
-    query = query.gte('age', extractedFilters.age_min)
+  if (input.age_min !== null && input.age_min !== undefined) {
+    query = query.gte('age', input.age_min)
   }
-  if (extractedFilters.age_max !== null && extractedFilters.age_max !== undefined) {
-    query = query.lte('age', extractedFilters.age_max)
+  if (input.age_max !== null && input.age_max !== undefined) {
+    query = query.lte('age', input.age_max)
   }
 
-  // Handle interests filter (needs client-side filtering since it's JSON/array)
-  // Limit to requested count (default 5)
   query = query.limit(input.count || 5)
 
-  // Build and log the SQL query
+  // Log the SQL query for debugging
   const sqlQueryLog = `
-[SEARCH_SQL] Generated Query:
+[SEARCH_SQL] Query:
   SELECT id, reddit_username, age, gender, location, profession, spending_power, interests
   FROM personas
   WHERE 1=1
-  ${extractedFilters.profession ? `AND profession = '${extractedFilters.profession}'` : ''}
-  ${extractedFilters.gender ? `AND gender = '${extractedFilters.gender}'` : ''}
-  ${extractedFilters.location ? `AND location = '${extractedFilters.location}'` : ''}
-  ${extractedFilters.spending_power ? `AND spending_power = '${extractedFilters.spending_power}'` : ''}
-  ${extractedFilters.age_min !== null && extractedFilters.age_min !== undefined ? `AND age >= ${extractedFilters.age_min}` : ''}
-  ${extractedFilters.age_max !== null && extractedFilters.age_max !== undefined ? `AND age <= ${extractedFilters.age_max}` : ''}
+  ${input.profession ? `AND profession = '${input.profession}'` : ''}
+  ${input.gender ? `AND gender = '${input.gender}'` : ''}
+  ${input.location ? `AND location = '${input.location}'` : ''}
+  ${input.spending_power ? `AND spending_power = '${input.spending_power}'` : ''}
+  ${input.age_min !== null && input.age_min !== undefined ? `AND age >= ${input.age_min}` : ''}
+  ${input.age_max !== null && input.age_max !== undefined ? `AND age <= ${input.age_max}` : ''}
   LIMIT ${input.count || 5};
   `
   console.log(sqlQueryLog)
 
   let { data, error } = await query
 
-  console.log(`[SEARCH_SQL] Database returned ${data?.length || 0} rows before interest filtering`)
+  if (error) {
+    console.log('[TOOL] search_clones error:', error)
+    return JSON.stringify({ error: 'Failed to search personas' })
+  }
 
-  // Filter by interests on client side (since it's an array/JSON field)
-  if (!error && data && extractedFilters.interests && Array.isArray(extractedFilters.interests) && extractedFilters.interests.length > 0) {
-    console.log('[SEARCH_FILTER] Filtering results by interests:', extractedFilters.interests)
+  console.log(`[TOOL] Database returned ${data?.length || 0} rows`)
+
+  // Client-side interests filtering (array/JSON field)
+  if (data && input.interests && Array.isArray(input.interests) && input.interests.length > 0) {
+    console.log('[TOOL] Client-side interest filtering:', input.interests)
     data = data.filter((persona: any) => {
       const personaInterests = persona.interests
       if (!personaInterests) return false
 
-      // Check if any of the requested interests are in the persona's interests
       let hasMatchingInterest = false
 
       if (Array.isArray(personaInterests)) {
         hasMatchingInterest = personaInterests.some((pi: any) => {
           const piStr = typeof pi === 'string' ? pi : pi?.name || ''
-          return extractedFilters.interests.some((requested: string) =>
+          return input.interests!.some((requested: string) =>
             piStr.toLowerCase().includes(requested.toLowerCase()) ||
             requested.toLowerCase().includes(piStr.toLowerCase())
           )
         })
       } else if (typeof personaInterests === 'object') {
         hasMatchingInterest = Object.keys(personaInterests).some((key) =>
-          extractedFilters.interests.some((requested: string) =>
+          input.interests!.some((requested: string) =>
             key.toLowerCase().includes(requested.toLowerCase()) ||
             requested.toLowerCase().includes(key.toLowerCase())
           )
@@ -265,11 +219,7 @@ For interests, return an array of matching interests if mentioned, or null other
 
       return hasMatchingInterest
     })
-  }
-
-  if (error) {
-    console.log('[TOOL] search_clones error:', error)
-    return JSON.stringify({ error: 'Failed to search personas' })
+    console.log(`[TOOL] After filtering: ${data.length} rows`)
   }
 
   const result = {
@@ -282,10 +232,9 @@ For interests, return an array of matching interests if mentioned, or null other
       profession: d.profession,
       spending_power: d.spending_power,
     })) || [],
-    filters_used: extractedFilters,
   }
 
-  console.log('[TOOL] search_clones returning:', result.personas.length, 'personas with filters:', extractedFilters)
+  console.log('[TOOL] Found:', result.personas.length, 'personas')
   return JSON.stringify(result)
 }
 
@@ -346,27 +295,56 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
 }
 
 // Define tools for LLM binding
+const demographicSegmentsTool = tool(getDemographicSegments, {
+  name: 'get_demographic_segments',
+  description: 'Get list of available demographic segments (field names) that can be used for filtering personas. Call this first to understand what demographic attributes are available.',
+  schema: z.object({}),
+})
+
+const demographicValuesTool = tool(getDemographicValues, {
+  name: 'get_demographic_values',
+  description: 'Get unique values for specified demographic segments. Pass the segment names you want to explore, get back all available values in the database for each.',
+  schema: z.object({
+    segments: z.array(z.string()).describe('List of demographic segment names to get values for (e.g., ["profession", "gender", "location"])'),
+  }),
+})
+
 const searchClonesTool = tool(searchClones, {
   name: 'search_clones',
-  description: 'Search for relevant digital personas based on research goal. The tool automatically extracts demographic filters from the natural language goal by: 1) querying the database for distinct demographic values, 2) using LLM to match user intent to actual values, 3) returning matching personas.',
+  description: 'Search personas database with specific demographic filters. Pass exact filter values (not natural language). Use get_demographic_values to find available values first.',
   schema: z.object({
-    research_goal: z.string().describe('The user\'s natural language research goal (e.g., "software engineers in their 30s", "female founders from NYC")'),
-    count: z.number().optional().describe('How many personas to return - infer from user request, default 5'),
+    count: z.number().optional().describe('How many personas to return, default 5'),
+    profession: z.string().optional().describe('Exact profession value to filter by'),
+    age_min: z.number().optional().describe('Minimum age'),
+    age_max: z.number().optional().describe('Maximum age'),
+    gender: z.string().optional().describe('Exact gender value to filter by'),
+    location: z.string().optional().describe('Exact location value to filter by'),
+    spending_power: z.string().optional().describe('Exact spending power value to filter by'),
+    interests: z.array(z.string()).optional().describe('Array of interest values to filter by'),
   }),
 })
 
 const createConversationSessionTool = tool(createConversationSession, {
   name: 'create_conversation_session',
-  description:
-    'Create a conversation session with selected clones. Updates the session to activate the clones and switch to conversation mode.',
+  description: 'Activate personas in a session to enable group conversation. Call after search_clones to activate the found personas.',
   schema: z.object({
     clone_ids: z.array(z.string()).describe('Array of clone IDs to activate'),
     session_id: z.string().describe('The chat session ID to update'),
   }),
 })
 
+export interface ReasoningStep {
+  iteration: number
+  action: string
+  toolName: string
+  input?: any
+  output?: any
+  summary: string
+}
+
 export interface CallCapybaraAIResponse {
   response: string
+  reasoning: ReasoningStep[]
   session_transition?: {
     clone_ids: string[]
     clone_names: string[]
@@ -385,8 +363,8 @@ export async function callCapybaraAI(
 ): Promise<CallCapybaraAIResponse> {
   const llm = createDeepSeekLLM()
 
-  // Bind tools to LLM
-  const llmWithTools = llm.bindTools([searchClonesTool, createConversationSessionTool])
+  // Bind tools to LLM - LLM will intelligently pick which tools to call and in what order
+  const llmWithTools = llm.bindTools([demographicSegmentsTool, demographicValuesTool, searchClonesTool, createConversationSessionTool])
 
   // Build messages with system prompt (including session ID and conversation history) and message history
   const systemPrompt = getCapybaraSystemPrompt(sessionId, labeledHistory)
@@ -397,9 +375,10 @@ export async function callCapybaraAI(
   ]
 
   let iterations = 0
-  const maxIterations = 5
+  const maxIterations = 10  // Allow for: segments → values → search(es) → create_session → response
   let finalResponse: string | null = null
   let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
+  const reasoning: ReasoningStep[] = []
 
   while (iterations < maxIterations) {
     iterations++
@@ -418,37 +397,94 @@ export async function callCapybaraAI(
       // Process tool calls
       for (const toolCall of response.tool_calls) {
         let toolResult: string
+        let toolOutput: any = null
         console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
 
         try {
-          if (toolCall.name === 'search_clones') {
-            // Call the search clones function directly
-            toolResult = await searchClones(toolCall.args as { research_goal: string })
+          if (toolCall.name === 'get_demographic_segments') {
+            // Tool 1: Get list of available demographic segments
+            toolResult = await getDemographicSegments()
+            toolOutput = JSON.parse(toolResult)
+            reasoning.push({
+              iteration: iterations,
+              action: `Exploring available demographic fields`,
+              toolName: toolCall.name,
+              output: toolOutput,
+              summary: `Found ${toolOutput.segments?.length || 0} demographic segments: ${toolOutput.segments?.join(', ')}`
+            })
+          } else if (toolCall.name === 'get_demographic_values') {
+            // Tool 2: Get unique values for specified segments
+            const args = toolCall.args as { segments: string[] }
+            toolResult = await getDemographicValues(args)
+            toolOutput = JSON.parse(toolResult)
+            const segmentsList = Object.keys(toolOutput).map(seg => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`).join(', ')
+            reasoning.push({
+              iteration: iterations,
+              action: `Fetching available values for: ${args.segments.join(', ')}`,
+              toolName: toolCall.name,
+              input: args,
+              output: toolOutput,
+              summary: `Retrieved: ${segmentsList}`
+            })
+          } else if (toolCall.name === 'search_clones') {
+            // Tool 3: Search personas with specific filters
+            const args = toolCall.args as any
+            toolResult = await searchClones(args)
+            toolOutput = JSON.parse(toolResult)
+            const filterDesc = Object.entries(args)
+              .filter(([k, v]) => v !== undefined && k !== 'count')
+              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .join(', ') || 'no filters'
+            reasoning.push({
+              iteration: iterations,
+              action: `Searching with filters: ${filterDesc}`,
+              toolName: toolCall.name,
+              input: args,
+              output: { count: toolOutput.personas?.length || 0, personas: toolOutput.personas },
+              summary: `Found ${toolOutput.personas?.length || 0} persona(s) matching criteria`
+            })
           } else if (toolCall.name === 'create_conversation_session') {
-            // Add sessionId to the tool call
+            // Tool 4: Activate personas in session
             const toolArgs = {
               ...(toolCall.args as any),
               session_id: sessionId,
             }
             toolResult = await createConversationSession(toolArgs as { clone_ids: string[]; session_id: string })
+            toolOutput = JSON.parse(toolResult)
 
-            // Parse the result to extract clone info for session transition
-            try {
-              const result = JSON.parse(toolResult)
-              if (result.success) {
-                sessionTransition = {
-                  clone_ids: result.clone_ids,
-                  clone_names: result.clone_names,
-                }
-                console.log('[ORCHESTRATOR] Session transition set:', result.clone_names)
+            if (toolOutput.success) {
+              sessionTransition = {
+                clone_ids: toolOutput.clone_ids,
+                clone_names: toolOutput.clone_names,
               }
-            } catch {}
+              reasoning.push({
+                iteration: iterations,
+                action: `Activating personas in session`,
+                toolName: toolCall.name,
+                input: { clone_ids: toolArgs.clone_ids },
+                output: { clone_names: toolOutput.clone_names },
+                summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s): ${toolOutput.clone_names?.join(', ')}`
+              })
+              console.log('[ORCHESTRATOR] Session transition set:', toolOutput.clone_names)
+            }
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
+            reasoning.push({
+              iteration: iterations,
+              action: `Unknown tool called`,
+              toolName: toolCall.name,
+              summary: `Error: Unknown tool`
+            })
           }
         } catch (err) {
           console.log('[ORCHESTRATOR] Tool execution error:', err)
           toolResult = JSON.stringify({ error: `Tool execution failed: ${err}` })
+          reasoning.push({
+            iteration: iterations,
+            action: `Tool execution`,
+            toolName: toolCall.name,
+            summary: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`
+          })
         }
 
         // Append tool message to continue conversation
@@ -479,6 +515,7 @@ export async function callCapybaraAI(
   console.log('[ORCHESTRATOR] Returning response with session_transition:', !!sessionTransition)
   return {
     response: finalResponse || 'Unable to generate response',
+    reasoning,
     session_transition: sessionTransition,
   }
 }

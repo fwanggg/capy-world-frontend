@@ -3,6 +3,15 @@ import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { getAuthHeaders } from '../services/auth'
 
+interface ReasoningStep {
+  iteration: number
+  action: string
+  toolName: string
+  input?: any
+  output?: any
+  summary: string
+}
+
 interface ChatMessageData {
   id: string
   content: string
@@ -10,11 +19,13 @@ interface ChatMessageData {
   timestamp: number
   role: 'user' | 'capybara' | 'clone'
   sender_id: string
+  reasoning?: ReasoningStep[]
 }
 
 interface ChatResponse {
   ai_responses: ChatMessageData[]
   user_message: ChatMessageData
+  capybara_reasoning?: ReasoningStep[]
   session_transition?: {
     clone_ids: number[]
     clone_names: string[]
@@ -96,9 +107,14 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
         sessionTransition: data.session_transition
       })
 
-      // Add AI responses
+      // Add AI responses with reasoning (if from Capybara)
       if (data.ai_responses) {
-        setMessages((prev) => [...prev, ...data.ai_responses])
+        const responsesWithReasoning = data.ai_responses.map((response) => ({
+          ...response,
+          // Attach reasoning to Capybara responses
+          reasoning: response.role === 'capybara' ? data.capybara_reasoning : undefined
+        }))
+        setMessages((prev) => [...prev, ...responsesWithReasoning])
       }
 
       // If session_transition is present, auto-transition to conversation mode
@@ -156,7 +172,13 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
           </div>
         )}
         {messages.map((msg, i) => (
-          <ChatMessage key={i} role={msg.role} sender_id={msg.sender_id} content={msg.content} />
+          <ChatMessage
+            key={i}
+            role={msg.role}
+            sender_id={msg.sender_id}
+            content={msg.content}
+            reasoning={msg.reasoning}
+          />
         ))}
         {searchingPersonas && (
           <div style={{

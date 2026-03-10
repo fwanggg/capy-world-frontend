@@ -244,6 +244,7 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     // Route message based on target or mode
     let responses: Array<{ role: string; sender_id: string; content: string }> = []
     let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
+    let capybaraReasoning: any[] | undefined
 
     // Determine routing: explicit target takes precedence
     const hasActiveClones = session.active_clones && session.active_clones.length > 0
@@ -276,6 +277,7 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       ]
 
       sessionTransition = capybaraResult.session_transition
+      capybaraReasoning = capybaraResult.reasoning
     } else if (session.mode === 'conversation' || hasActiveClones || hasExplicitClones || target === 'clones') {
       // Send to selected clones
       console.log('[ROUTE] Routing to clones, explicit_clones:', target_clones, 'active:', session.active_clones)
@@ -316,6 +318,10 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
     if (sessionTransition) {
       responseBody.session_transition = sessionTransition
+    }
+
+    if (capybaraReasoning) {
+      responseBody.capybara_reasoning = capybaraReasoning
     }
 
     res.json(responseBody)
