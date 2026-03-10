@@ -43,7 +43,7 @@ export function ConversationMode({ sessionId, activeClones: initialClones }: Con
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSendMessage = async (content: string, targetClones?: string[], target?: 'capybara' | 'clones') => {
+  const handleSendMessage = async (content: string, targetClones?: string[], target?: 'capybara' | 'clones', recipient?: string) => {
     setError(null)
     setLoading(true)
 

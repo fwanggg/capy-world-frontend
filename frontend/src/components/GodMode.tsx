@@ -43,7 +43,7 @@ export function GodMode({ sessionId, onEnterConversation }: GodModeProps) {
   const [searchingPersonas, setSearchingPersonas] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSendMessage = async (content: string, _targetClones?: string[], target?: 'capybara' | 'clones') => {
+  const handleSendMessage = async (content: string, _targetClones?: string[], target?: 'capybara' | 'clones', _recipient?: string) => {
     setError(null)
     setLoading(true)
     setSearchingPersonas(target === 'capybara')
