@@ -41,6 +41,17 @@ npm run dev
 ```
 Runs frontend (port 3000) + backend (port 3001) concurrently.
 
+**Backend with dev mode** (auto-creates test users, skips OAuth):
+```bash
+DEV=true npm run dev --workspace=backend
+```
+Enables:
+- Auto-creates users in `app_users` table
+- Skips approval checks (sets `approved: true`)
+- Accepts `x-user-id` header for testing
+- Uses mock sessions to avoid foreign key constraints
+- Real database for all persistence
+
 **Frontend only:**
 ```bash
 npm run dev --workspace=frontend
@@ -170,14 +181,34 @@ Change ports in:
 
 ## Capybara AI Feature: Agentic Tool System
 
+### Recent Architecture Updates (Latest Session)
+
+✅ **Three Independent Tools** — Replaced nested LLM calls with clean tool-based architecture:
+- `get_demographic_segments()` — Explore available demographic fields
+- `get_demographic_values()` — Get unique values for specified fields
+- `search_clones()` — Query personas with demographic filters
+- `create_conversation_session()` — Activate selected personas
+
+✅ **Personas Table** — Switched from `agent_memory` to `personas` table with full demographic data
+
+✅ **Reasoning Chain Capture** — Every Capybara response includes complete reasoning showing:
+- Each tool call iteration
+- Tool inputs and outputs
+- Human-readable summaries
+- Displayed in frontend UI with expand/collapse
+
+✅ **No LLM Calls in Tools** — All intelligence in agentic loop, tools return pure data
+
 ### Overview
 Capybara AI is an intelligent orchestrator that:
 1. **Receives** user messages via agentic loop with tool binding
-2. **Searches** for relevant digital clones from `agent_memory` table
-3. **Activates** selected clones as a group conversation
-4. **Routes** subsequent messages to clones or back to Capybara for synthesis
+2. **Explores** available demographic segments using `get_demographic_segments()`
+3. **Retrieves** available values for relevant demographics using `get_demographic_values()`
+4. **Searches** for matching personas from `personas` table using `search_clones()`
+5. **Activates** selected personas as a group conversation using `create_conversation_session()`
+6. **Routes** subsequent messages to personas or back to Capybara for synthesis
 
-**Key Principle:** Single unified session with intelligent message routing — no mode switching.
+**Key Principle:** Single unified session with intelligent message routing — no mode switching. LLM orchestrates tool usage dynamically based on user intent.
 
 ### Core Architecture
 
@@ -213,32 +244,162 @@ Frontend receives response + optional session_transition
 - `frontend/src/components/ConversationMode.tsx` - Group chat with clones
 - `frontend/src/components/ChatMessage.tsx` - Message rendering with role-based styling
 
-**Database:**
-- `agent_memory` - Clone definitions with reddit_username and system_prompt
-- `chat_sessions` - Session state (id, user_id, active_clones, metadata)
-- `chat_messages` - Conversation history (role, sender_id, content)
-- `app_users` - User profiles (auto-created in DEV mode)
+**Database Tables:**
+
+**personas** — Digital personas with demographics and instructions
+- `id` — Unique identifier
+- `reddit_username` — Person's handle (e.g., "dryisnotwet")
+- `age` — Age in years (for age range filtering)
+- `gender` — "male", "female", or null
+- `location` — City/region (e.g., "Seattle, USA")
+- `profession` — Job/role (e.g., "engineer", "student", "dancer")
+- `spending_power` — "high", "mid", "low", or null
+- `interests` — Array of interests (e.g., ["technology", "startups"])
+- `prompt` — System prompt with persona description and Reddit history
+- `created_at`, `updated_at` — Timestamps
+
+**chat_sessions** — Session state for each conversation
+- `id` — Session UUID
+- `user_id` — User's auth UUID
+- `active_clones` — Array of persona IDs currently active (e.g., [17, 24])
+- `mode` — "god" (Capybara only) or "conversation" (with personas)
+- `metadata` — Additional context (JSON)
+- `created_at`, `updated_at` — Timestamps
+
+**chat_messages** — Conversation history
+- `id` — Message UUID
+- `session_id` — Session UUID (foreign key)
+- `role` — "user", "capybara", or "clone"
+- `sender_id` — User UUID or "capybara-ai" or persona ID
+- `content` — Message text
+- `created_at` — Timestamp
+
+**app_users** — User profiles and approval status
+- `user_id` — User UUID (foreign key to auth.users)
+- `approved` — Boolean (true = can access app)
+- `google_id` — OAuth identifier
+- `created_at`, `updated_at` — Timestamps
+
+### Three-Tool Architecture
+
+Capybara uses **three independent tools** with **no LLM calls inside them**. The LLM orchestrates tool usage in the agentic loop:
+
+**Tool 1: `get_demographic_segments()`**
+- Returns available demographic field names: `["age", "gender", "location", "profession", "spending_power", "interests"]`
+- Pure data retrieval — no computation
+
+**Tool 2: `get_demographic_values({segments: string[]})`**
+- Input: List of demographic field names to explore
+- Output: Distinct values for each field (e.g., `{profession: ["engineer", "student", "dancer"], gender: ["male", "female"]}`)
+- Pure database query — helps LLM understand available values before searching
+
+**Tool 3: `search_clones({profession?, age_min?, age_max?, gender?, location?, spending_power?, interests?, count?})`**
+- Input: Specific demographic filters (not natural language)
+- Output: Array of matching personas from `personas` table
+- Pure SQL query — LLM decides which filters to apply based on Tool 2 results
+
+**Tool 4: `create_conversation_session({clone_ids: string[], session_id: string})`**
+- Activates selected personas in the session
+- Triggers `session_transition` for frontend routing
 
 ### Agentic Loop (Capybara AI)
 
 Located in `backend/src/services/langgraph-orchestrator.ts:callCapybaraAI()`
 
 ```typescript
-1. Bind tools: search_clones, create_conversation_session
-2. Loop (max 5 iterations):
-   a. Invoke LLM with messages
+1. Bind all four tools to LLM
+2. Loop (max 10 iterations):
+   a. Invoke LLM with messages and tools
    b. Check response.tool_calls
    c. If tool_calls:
-      - Execute each tool
-      - Append ToolMessage with tool_call_id + result
+      - Execute each tool (1-4)
+      - Capture ReasoningStep for each execution
+      - Append ToolMessage with result
       - Continue loop
    d. If no tool_calls:
       - Extract finalResponse
       - Break loop
-3. Return { response, session_transition? }
+3. Return {
+     response: string,
+     reasoning: ReasoningStep[],
+     session_transition?: {...}
+   }
 ```
 
-**Important:** Session ID passed into loop so `create_conversation_session` can update the right session.
+**Intelligence Flow:**
+1. User: "Find 3 engineers in their 30s"
+2. Capybara calls `get_demographic_segments()` → learns what fields exist
+3. Capybara calls `get_demographic_values({segments: ["profession"]})` → learns available professions
+4. Capybara calls `search_clones({profession: "engineer", age_min: 30, age_max: 39, count: 3})` → finds matches
+5. Capybara calls `create_conversation_session({clone_ids: [...]})` → activates personas
+6. Capybara generates response: "I've activated 3 engineer personas..."
+
+**Important:**
+- No LLM calls inside tools — all intelligence happens in the agentic loop
+- LLM decides tool order and parameters dynamically
+- Session ID passed into loop so tools can update the right session
+
+### Reasoning Chain Capture & Display
+
+Every Capybara response includes a **reasoning chain** showing the thought process. This is captured during tool execution and displayed in the frontend UI.
+
+**Backend Capture** (`backend/src/services/langgraph-orchestrator.ts`):
+```typescript
+interface ReasoningStep {
+  iteration: number          // Which iteration (1, 2, 3...)
+  action: string            // What Capybara was trying to do
+  toolName: string          // Which tool was called
+  input?: any               // What was passed to the tool
+  output?: any              // What the tool returned
+  summary: string           // Human-readable explanation
+}
+```
+
+Each tool execution creates a `ReasoningStep` and stores in `reasoning[]` array.
+
+**API Response** (`backend/src/routes/chat.ts`):
+```json
+{
+  "user_message": {...},
+  "ai_responses": [{
+    "role": "capybara",
+    "sender_id": "capybara-ai",
+    "content": "I've activated 1 engineer persona: EQ4C..."
+  }],
+  "capybara_reasoning": [
+    {
+      "iteration": 1,
+      "action": "Exploring available demographic fields",
+      "toolName": "get_demographic_segments",
+      "summary": "Found 6 demographic segments: age, gender, location..."
+    },
+    {
+      "iteration": 2,
+      "action": "Fetching available values for: profession",
+      "toolName": "get_demographic_values",
+      "input": {"segments": ["profession"]},
+      "summary": "Retrieved: profession (6 values)"
+    },
+    ...
+  ],
+  "session_transition": {...}
+}
+```
+
+**Frontend Display** (`frontend/src/components/ChatMessage.tsx`):
+- Capybara messages show "▶ Show Capybara's Thinking (N steps)" button
+- On click, expands to show numbered steps with:
+  - Iteration circle badge
+  - Action description
+  - Tool name (code-formatted)
+  - Result summary
+  - Collapsible input/output details
+
+**Benefits:**
+- ✅ Transparency — customers see how decisions are made
+- ✅ Trust — demonstrates intelligent reasoning
+- ✅ Debuggability — understand why personas were selected
+- ✅ Non-intrusive — hidden by default, available on-demand
 
 ### Message Routing Logic
 
@@ -347,9 +508,31 @@ Session ID: generateUUID() → random UUID v4
 5. `POST /chat/message` "@capybara what patterns?" with `target: "capybara"` → synthesis
 
 **Verification:**
-- Check backend logs for `[CLONE] FETCHED`, `[ORCHESTRATOR]`, `[ROUTE]` prefixes
+- Check backend logs for `[ORCHESTRATOR]`, `[TOOL]`, `[ROUTE]` prefixes
+- Verify reasoning chain is captured in response (`capybara_reasoning` array)
 - Query `chat_messages` table to verify persistence
 - Run `GET /chat/history` to retrieve full conversation
+
+**Expected log flow for "Find 3 engineers in their 30s":**
+```
+[ORCHESTRATOR] Iteration 1/10
+[ORCHESTRATOR] Executing tool: get_demographic_segments
+[TOOL] Available segments: ['age', 'gender', 'location', 'profession', 'spending_power', 'interests']
+
+[ORCHESTRATOR] Iteration 2/10
+[ORCHESTRATOR] Executing tool: get_demographic_values
+[TOOL] profession values: ['engineer', 'student', 'dancer', ...]
+
+[ORCHESTRATOR] Iteration 3/10
+[ORCHESTRATOR] Executing tool: search_clones
+[SEARCH_SQL] Query: ... WHERE profession = 'engineer' AND age >= 30 AND age <= 39 LIMIT 3
+[TOOL] Found: 1 personas
+
+[ORCHESTRATOR] Iteration 4/10
+[ORCHESTRATOR] Executing tool: create_conversation_session
+[TOOL] Session activated with 1 persona(s): EQ4C
+[ORCHESTRATOR] Returning response with session_transition: true
+```
 
 ### Common Tasks
 
@@ -359,21 +542,29 @@ Session ID: generateUUID() → random UUID v4
 - Test: All three routing paths (capybara, clones, fallback)
 
 **Adding a new tool for Capybara:**
-- Define function in `langgraph-orchestrator.ts`
-- Create tool wrapper with schema using `tool()` from @langchain/core/tools
-- Add to tools array in `llmWithTools = llm.bindTools([...])`
-- Implement execution logic in tool_calls loop
+1. Define function in `langgraph-orchestrator.ts` (pure logic, NO LLM calls)
+2. Create tool definition with schema using `tool()` from @langchain/core/tools
+3. Add to tools array in `llmWithTools = llm.bindTools([...])`
+4. Handle execution in tool_calls loop with reasoning capture
+5. Return plain data — let LLM interpret results
 
-**Adjusting clone behavior:**
-- Edit system_prompt in agent_memory table
-- CloneId fetch happens in real-time (no caching in callClone)
+**Adjusting persona behavior:**
+- Edit `prompt` field in `personas` table (real-time effect)
+- Call `callClone()` which fetches from database (no caching)
 - Changes take effect immediately on next message
 
-**Testing a new feature:**
-- Use `docs/E2E_TESTING.md` bash script as template
-- Always test with DEV=true and x-user-id header
-- Verify backend logs show expected routing
-- Check database for message persistence
+**Testing the tool orchestration:**
+- Use `DEV=true npm run dev --workspace=backend` for testing
+- Test with `x-user-id: test_user` header
+- Verify in logs that LLM calls tools in logical order
+- Check `capybara_reasoning` in API response for reasoning steps
+- Use `docs/E2E_TESTING.md` as reference for curl commands
+
+**Reasoning display testing:**
+- Request should include `capybara_reasoning` array in response
+- Frontend shows "▶ Show Capybara's Thinking (N steps)" for Capybara messages
+- Expand to see iteration numbers, tool names, and summaries
+- Click "Show input" to see detailed filter parameters
 
 ---
 
