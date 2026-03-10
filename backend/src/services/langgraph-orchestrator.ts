@@ -547,12 +547,10 @@ export async function callClone(
     throw new Error(`Persona ${cloneId} not found in database`)
   }
 
-  // Log the FULL actual prompt being used (to prove it came from database)
+  // Log proof of database fetch without dumping the full prompt
   console.log(`[CLONE] ✓✓✓ FETCHED PERSONA ${cloneId} FROM personas TABLE ✓✓✓`)
   console.log(`[CLONE] ✓ Persona username: ${clone.reddit_username}`)
-  console.log(`[CLONE] ===== FULL PROMPT FROM DATABASE =====`)
-  console.log(clone.prompt)
-  console.log(`[CLONE] ===== END PROMPT =====`)
+  console.log(`[CLONE] ✓ System prompt for persona ${clone.reddit_username} (${clone.prompt.length} chars)`)
   console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding with REAL DATABASE PROMPT...`)
 
   const llm = createDeepSeekLLM()
