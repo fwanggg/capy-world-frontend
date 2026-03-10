@@ -68,7 +68,11 @@ logEvent('info', 'event.name', 'Message', {
 - **Environment detection**: Automatically detects `dev` or `prod` from NODE_ENV or DEV flag
 - **Error resilience**: If logging itself fails, errors are only logged to console (no infinite loops)
 
-## Current Coverage: Auth Flows
+## Current Coverage
+
+Coverage spans three critical areas: **Auth**, **Chat**, and **Orchestration**.
+
+### Auth Flows
 
 ### Authenticated Events
 
@@ -166,6 +170,102 @@ logEvent('info', 'event.name', 'Message', {
 - **When**: Approval middleware called without userId
 - **Purpose**: Detect middleware ordering issues
 - **Effect**: Returns 401 Unauthorized
+
+## Chat Routes
+
+Logging for REST API endpoints and message routing decisions.
+
+### Chat Initialization
+
+#### `chat.session_init` (INFO)
+- **When**: New chat session is successfully created
+- **Purpose**: Track session lifecycle
+- **Metadata**: `{ sessionId, mode }`
+
+#### `chat.init.invalid_mode` (ERROR)
+- **When**: Invalid mode provided to /chat/init
+- **Purpose**: Catch bad client requests
+- **Metadata**: `{ providedMode }`
+
+#### `chat.init_failed` (ERROR)
+- **When**: Unexpected error during session creation
+- **Purpose**: Track initialization failures
+- **Metadata**: `{ errorType, stack }`
+
+### Chat Messages
+
+#### `chat.message.invalid_input` (ERROR)
+- **When**: Required fields (session_id, content) are missing
+- **Purpose**: Validate API input
+- **Metadata**: `{ hasSessionId, hasContent }`
+
+#### `chat.route_decision` (INFO)
+- **When**: Message routing decision is made
+- **Purpose**: Track how messages are routed
+- **Metadata**: `{ target, sessionMode, hasActiveClones, hasExplicitClones, routingTo }`
+
+#### `chat.route_capybara` (INFO)
+- **When**: Message is routed to Capybara AI
+- **Purpose**: Track when Capybara handles messages
+- **Metadata**: `{ sessionId }`
+
+#### `chat.route_clones` (INFO)
+- **When**: Message is routed to clone personas
+- **Purpose**: Track parallel clone execution
+- **Metadata**: `{ sessionId, cloneCount, cloneIds }`
+
+#### `chat.route_clones_failed` (ERROR)
+- **When**: Attempted to route to clones but none are active
+- **Purpose**: Detect misconfigured sessions
+- **Metadata**: `{ sessionId }`
+
+#### `chat.message_failed` (ERROR)
+- **When**: Unexpected error during message processing
+- **Purpose**: Track message handling failures
+- **Metadata**: `{ errorType, errorMessage, stack }`
+
+## Orchestration (Agentic Loop & Clone Execution)
+
+Logging for Capybara's agentic loop with tool binding and persona responses.
+
+### Capybara AI Agentic Loop
+
+#### `orchestrator.capybara_start` (INFO)
+- **When**: Capybara AI agentic loop begins
+- **Purpose**: Track when Capybara is invoked
+- **Metadata**: `{ sessionId, hasHistory, messagePreview }`
+
+#### `orchestrator.tool_execution_failed` (ERROR)
+- **When**: Tool execution in agentic loop throws error
+- **Purpose**: Debug tool failures
+- **Metadata**: `{ sessionId, toolName, iteration, errorType }`
+
+### Clone Execution
+
+#### `orchestrator.clone_fetched` (INFO)
+- **When**: Persona is successfully fetched from database
+- **Purpose**: Verify database lookups work
+- **Metadata**: `{ cloneId, username, promptLength }`
+
+#### `orchestrator.clone_fetch_failed` (ERROR)
+- **When**: Persona lookup fails (not found or query error)
+- **Purpose**: Detect missing personas or database issues
+- **Metadata**: `{ cloneId, errorMessage }`
+
+#### `orchestrator.clones_start` (INFO)
+- **When**: Parallel clone execution begins
+- **Purpose**: Track when multiple personas respond
+- **Metadata**: `{ cloneIds, cloneCount, messagePreview }`
+
+#### `orchestrator.clone_complete` (INFO)
+- **When**: Individual clone response is received
+- **Purpose**: Track response latency and volume
+- **Metadata**: `{ cloneId, responseLength }`
+
+#### `orchestrator.clone_failed` (ERROR)
+- **When**: Clone execution throws error
+- **Purpose**: Detect issues with individual personas
+- **Metadata**: `{ cloneId, errorType }`
 
 ## Querying Logs
 
