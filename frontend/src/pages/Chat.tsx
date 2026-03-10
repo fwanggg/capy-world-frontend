@@ -3,9 +3,14 @@ import { ParticipantSidebar } from '../components/ParticipantSidebar'
 import { UnifiedChat } from '../components/UnifiedChat'
 import { getAuthHeaders, supabase, waitForAuthInitialization } from '../services/auth'
 
+export interface CloneEntry {
+  id: string
+  name: string
+}
+
 export function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [activeClones, setActiveClones] = useState<string[]>([])
+  const [activeClones, setActiveClones] = useState<CloneEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -158,7 +163,7 @@ export function Chat() {
         overflow: 'hidden',
       }}>
         <ParticipantSidebar currentUserId="you" activeClones={activeClones} />
-        <UnifiedChat sessionId={sessionId} onActiveClonesChange={setActiveClones} />
+        <UnifiedChat sessionId={sessionId} activeClones={activeClones} onActiveClonesChange={setActiveClones} />
       </div>
     </div>
   )

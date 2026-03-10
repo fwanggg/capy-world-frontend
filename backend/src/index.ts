@@ -8,6 +8,14 @@ import { supabase } from 'shared'
 const app = express()
 const PORT = 3001
 
+// ⚠️ DEV MODE WARNING
+if (process.env.DEV === 'true') {
+  console.warn('⚠️⚠️⚠️ DEVELOPMENT MODE ENABLED ⚠️⚠️⚠️')
+  console.warn('⚠️ JWT verification is DISABLED - tokens accepted without signature verification')
+  console.warn('⚠️ NEVER set DEV=true in production!')
+  console.warn('⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️')
+}
+
 app.use(cors())
 app.use(express.json())
 

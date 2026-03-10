@@ -6,36 +6,56 @@ import { z } from 'zod'
 import { log } from './logging'
 
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
-  return `You are Capybara AI. Your job is to search for and activate digital personas.
+  return `You are Capybara AI. Your job is to intelligently manage personas and facilitate group conversations.
 
-REQUIRED WORKFLOW:
-1. When user asks to find personas:
-   - Call get_demographic_segments() to see available demographic fields
-   - Call get_demographic_values({segments: [...]}) for fields mentioned by user
-   - Call search_clones({...filters..., count: N}) to find personas
-   - Call create_conversation_session with returned persona IDs
-   - Respond: "I've activated [count] personas: [list their usernames]"
+AVAILABLE TOOLS & WORKFLOWS:
 
-2. Available tools:
-   - get_demographic_segments(): Returns list of demographic field names available in database
-   - get_demographic_values(segments): Given list of field names, returns unique values for each
-   - search_clones(filters): Query personas with demographic filters
-   - create_conversation_session(clone_ids, session_id): Activate personas in session
+1. RECRUITING PERSONAS (Initial or Adding More):
+   - When user asks to find/recruit personas:
+     a. Call get_demographic_segments() to see available fields
+     b. Call get_demographic_values({segments: [...]}) to explore available values
+     c. Call search_clones({...filters..., count: N}) to find matching personas
+     d. Call create_conversation_session({clone_ids, session_id}) to activate them
+     e. Respond: "I've activated [count] personas: [list their usernames]"
+   - When user asks to add/recruit more personas to existing group:
+     a. Call recruit_clones({demographic_filters, count, session_id})
+     b. Respond with who was added and total active
 
-3. Example flow:
-   User: "Find 3 female engineers in their 30s from NYC"
-   → get_demographic_segments() → ["profession", "age", "gender", "location", "spending_power", "interests"]
-   → get_demographic_values({segments: ["profession", "gender", "location"]})
-   → Returns: {profession: ["engineer", "student", "dancer"], gender: ["female", "male"], location: ["NYC", "Boston", ...]}
-   → search_clones({profession: "engineer", gender: "female", age_min: 30, age_max: 39, location: "NYC", count: 3})
-   → create_conversation_session with returned persona IDs
+2. RELEASING/MANAGING PERSONAS:
+   - When user asks to remove/release specific clones:
+     a. Call release_clones({clone_ids, session_id}) with specific persona IDs
+     b. Optionally call list_clones() to confirm new state
+     c. Respond with who was released and who remains
+   - When user asks to release all personas:
+     a. Call release_clones({release_all: true, session_id})
+     b. Respond: "I've released all personas. You're back to just talking with me."
 
-4. Session ID: ${sessionId}
-   - Pass this to create_conversation_session calls
+3. LISTING & INQUIRY:
+   - When user asks "who am I talking to?", "who are the clones?", etc.:
+     a. Call list_clones({session_id})
+     b. Respond with current personas and their key demographics
+
+TOOLS (Use based on user intent):
+- get_demographic_segments(): List available demographic fields
+- get_demographic_values(segments): Get unique values for fields
+- search_clones(filters): Find personas matching criteria
+- create_conversation_session(clone_ids, session_id): Activate initial personas
+- recruit_clones(demographic_filters, count, session_id): Add personas without removing existing
+- release_clones(clone_ids | release_all, session_id): Remove personas from session
+- list_clones(session_id): Show current active personas with details
+
+Session ID: ${sessionId}
+- Always include session_id when calling recruit_clones, release_clones, or list_clones
+
+IMPORTANT TIPS:
+- recruit_clones automatically deduplicates (won't add already-active clones)
+- After any recruit/release operation, consider calling list_clones() to confirm changes
+- When releasing specific clones, you need their IDs - ask user if unclear
+- Be conversational and explain what you're doing: "I'm adding 3 engineers in their 30s..."
 
 ${labeledHistory ? `CONVERSATION HISTORY:\n${labeledHistory}\n` : ''}
 
-After activation, users can chat with the personas directly.`
+Your role: Make it easy for users to experiment with different personas and perspectives.`
 }
 
 /**
@@ -295,6 +315,224 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
   return JSON.stringify(response)
 }
 
+/**
+ * Recruit new clones to session (add without removing existing ones)
+ * Deduplicates new recruits against already-active clones
+ */
+async function recruitClones(input: {
+  demographic_filters?: {
+    profession?: string
+    age_min?: number
+    age_max?: number
+    gender?: string
+    location?: string
+    spending_power?: string
+    interests?: string[]
+  }
+  count?: number
+  session_id: string
+}): Promise<string> {
+  console.log('[TOOL] recruit_clones called with:', JSON.stringify(input, null, 2))
+
+  // Get current active clones from session
+  const { data: session, error: sessionError } = await supabase
+    .from('chat_sessions')
+    .select('active_clones')
+    .eq('id', input.session_id)
+    .single()
+
+  if (sessionError || !session) {
+    return JSON.stringify({ error: 'Session not found' })
+  }
+
+  const currentCloneIds = session.active_clones || []
+  console.log('[TOOL] Current active clones:', currentCloneIds)
+
+  // Search for new clones matching filters
+  const searchInput = {
+    ...input.demographic_filters,
+    count: input.count || 3,
+  }
+  const searchResult = await searchClones(searchInput)
+  const searchOutput = JSON.parse(searchResult)
+
+  if (searchOutput.error) {
+    return JSON.stringify({ error: searchOutput.error })
+  }
+
+  // Exclude already-active clones
+  const newPersonas = searchOutput.personas || []
+  const newCloneIds = newPersonas
+    .filter((p: any) => !currentCloneIds.includes(p.id))
+    .map((p: any) => p.id)
+
+  console.log('[TOOL] Found', newPersonas.length, 'personas, recruiting', newCloneIds.length, 'new ones')
+
+  if (newCloneIds.length === 0) {
+    return JSON.stringify({
+      added_clones: [],
+      total_active: currentCloneIds.length,
+      message: 'No new clones found matching criteria (already active)',
+    })
+  }
+
+  // Merge: current + new (deduplicated)
+  const mergedCloneIds = [...new Set([...currentCloneIds, ...newCloneIds])]
+
+  // Update session via the endpoint
+  const updateResult = await supabase
+    .from('chat_sessions')
+    .update({
+      active_clones: mergedCloneIds,
+      mode: 'conversation',
+    })
+    .eq('id', input.session_id)
+
+  if (updateResult.error) {
+    console.log('[TOOL] recruit_clones: Failed to update session')
+    return JSON.stringify({ error: 'Failed to update session' })
+  }
+
+  // Fetch names for newly recruited clones
+  const { data: recruitedData } = await supabase
+    .from('personas')
+    .select('id, reddit_username')
+    .in('id', newCloneIds)
+
+  const addedClones = (recruitedData || []).map((c: any) => ({
+    id: c.id,
+    name: c.reddit_username,
+  }))
+
+  const response = {
+    added_clones: addedClones,
+    total_active: mergedCloneIds.length,
+  }
+
+  console.log('[TOOL] recruit_clones returning:', response)
+  return JSON.stringify(response)
+}
+
+/**
+ * Release clones from session
+ * Can release specific clones or all clones
+ */
+async function releaseClones(input: {
+  clone_ids?: string[]
+  release_all?: boolean
+  session_id: string
+}): Promise<string> {
+  console.log('[TOOL] release_clones called with:', JSON.stringify(input, null, 2))
+
+  // Get current active clones
+  const { data: session, error: sessionError } = await supabase
+    .from('chat_sessions')
+    .select('active_clones')
+    .eq('id', input.session_id)
+    .single()
+
+  if (sessionError || !session) {
+    return JSON.stringify({ error: 'Session not found' })
+  }
+
+  const currentCloneIds = session.active_clones || []
+
+  // Determine new list
+  const newCloneIds = input.release_all
+    ? []
+    : currentCloneIds.filter((id: string) => !input.clone_ids?.includes(id))
+
+  console.log('[TOOL] Current:', currentCloneIds.length, 'Releasing:', input.release_all ? 'all' : input.clone_ids?.length || 0, 'Remaining:', newCloneIds.length)
+
+  // Get names of released clones for response
+  const idsToRelease = input.release_all ? currentCloneIds : input.clone_ids
+  const { data: releasedData } = await supabase
+    .from('personas')
+    .select('id, reddit_username')
+    .in('id', idsToRelease)
+
+  const releasedClones = (releasedData || []).map((c: any) => ({
+    id: c.id,
+    name: c.reddit_username,
+  }))
+
+  // Update session
+  const updateResult = await supabase
+    .from('chat_sessions')
+    .update({
+      active_clones: newCloneIds,
+      mode: newCloneIds.length > 0 ? 'conversation' : 'god',
+    })
+    .eq('id', input.session_id)
+
+  if (updateResult.error) {
+    console.log('[TOOL] release_clones: Failed to update session')
+    return JSON.stringify({ error: 'Failed to update session' })
+  }
+
+  const response = {
+    released_clones: releasedClones,
+    remaining_clones: newCloneIds.length,
+  }
+
+  console.log('[TOOL] release_clones returning:', response)
+  return JSON.stringify(response)
+}
+
+/**
+ * List currently active clones in session with their demographics
+ */
+async function listClones(input: { session_id: string }): Promise<string> {
+  console.log('[TOOL] list_clones called with session:', input.session_id)
+
+  // Get active clones from session
+  const { data: session, error: sessionError } = await supabase
+    .from('chat_sessions')
+    .select('active_clones')
+    .eq('id', input.session_id)
+    .single()
+
+  if (sessionError || !session) {
+    return JSON.stringify({ error: 'Session not found' })
+  }
+
+  const activeCloneIds = session.active_clones || []
+
+  if (activeCloneIds.length === 0) {
+    console.log('[TOOL] No active clones')
+    return JSON.stringify({
+      active_clones: [],
+      message: 'No clones currently active',
+    })
+  }
+
+  // Fetch clone details
+  const { data: clones, error: clonesError } = await supabase
+    .from('personas')
+    .select('id, reddit_username, age, gender, location, profession, spending_power')
+    .in('id', activeCloneIds)
+
+  if (clonesError || !clones) {
+    console.log('[TOOL] Failed to fetch clone details')
+    return JSON.stringify({ error: 'Failed to fetch clone details' })
+  }
+
+  const response = {
+    active_clones: clones.map((c: any) => ({
+      id: c.id,
+      reddit_username: c.reddit_username,
+      age: c.age,
+      gender: c.gender,
+      location: c.location,
+      profession: c.profession,
+      spending_power: c.spending_power,
+    })),
+  }
+
+  console.log('[TOOL] list_clones returning:', response.active_clones.length, 'clones')
+  return JSON.stringify(response)
+}
+
 // Define tools for LLM binding
 const demographicSegmentsTool = tool(getDemographicSegments, {
   name: 'get_demographic_segments',
@@ -331,6 +569,42 @@ const createConversationSessionTool = tool(createConversationSession, {
   schema: z.object({
     clone_ids: z.array(z.string()).describe('Array of clone IDs to activate'),
     session_id: z.string().describe('The chat session ID to update'),
+  }),
+})
+
+const recruitClonesTool = tool(recruitClones, {
+  name: 'recruit_clones',
+  description: 'Add new clones to session without removing existing ones. Search for personas matching demographics and add them to the conversation. Automatically deduplicates against already-active clones.',
+  schema: z.object({
+    demographic_filters: z.object({
+      profession: z.string().optional().describe('Exact profession value to filter by'),
+      age_min: z.number().optional().describe('Minimum age'),
+      age_max: z.number().optional().describe('Maximum age'),
+      gender: z.string().optional().describe('Exact gender value to filter by'),
+      location: z.string().optional().describe('Exact location value to filter by'),
+      spending_power: z.string().optional().describe('Exact spending power value to filter by'),
+      interests: z.array(z.string()).optional().describe('Array of interest values to filter by'),
+    }).optional().describe('Demographic filters to search by'),
+    count: z.number().optional().describe('How many new personas to recruit, default 3'),
+    session_id: z.string().describe('The chat session ID'),
+  }),
+})
+
+const releaseClonesTool = tool(releaseClones, {
+  name: 'release_clones',
+  description: 'Remove clones from the current session. Can release specific clones by ID or release all clones at once.',
+  schema: z.object({
+    clone_ids: z.array(z.string()).optional().describe('Array of clone IDs to release'),
+    release_all: z.boolean().optional().describe('If true, release all clones (overrides clone_ids)'),
+    session_id: z.string().describe('The chat session ID'),
+  }),
+})
+
+const listClonesTool = tool(listClones, {
+  name: 'list_clones',
+  description: 'List all currently active clones in the session with their demographic details (age, gender, location, profession, spending_power).',
+  schema: z.object({
+    session_id: z.string().describe('The chat session ID'),
   }),
 })
 
@@ -375,7 +649,15 @@ export async function callCapybaraAI(
   const llm = createDeepSeekLLM()
 
   // Bind tools to LLM - LLM will intelligently pick which tools to call and in what order
-  const llmWithTools = llm.bindTools([demographicSegmentsTool, demographicValuesTool, searchClonesTool, createConversationSessionTool])
+  const llmWithTools = llm.bindTools([
+    demographicSegmentsTool,
+    demographicValuesTool,
+    searchClonesTool,
+    createConversationSessionTool,
+    recruitClonesTool,
+    releaseClonesTool,
+    listClonesTool,
+  ])
 
   // Build messages with system prompt (including session ID and conversation history) and message history
   const systemPrompt = getCapybaraSystemPrompt(sessionId, labeledHistory)
@@ -477,6 +759,98 @@ export async function callCapybaraAI(
                 summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s): ${toolOutput.clone_names?.join(', ')}`
               })
               console.log('[ORCHESTRATOR] Session transition set:', toolOutput.clone_names)
+            }
+          } else if (toolCall.name === 'recruit_clones') {
+            // Tool 5: Recruit new clones (add without removing existing)
+            const toolArgs = {
+              ...(toolCall.args as any),
+              session_id: sessionId,
+            }
+            toolResult = await recruitClones(toolArgs)
+            toolOutput = JSON.parse(toolResult)
+
+            if (!toolOutput.error) {
+              const addedCount = toolOutput.added_clones?.length || 0
+              reasoning.push({
+                iteration: iterations,
+                action: `Recruiting new personas`,
+                toolName: toolCall.name,
+                input: toolArgs.demographic_filters,
+                output: { added: addedCount, total: toolOutput.total_active },
+                summary: `Recruited ${addedCount} new persona(s), total active: ${toolOutput.total_active}`
+              })
+              console.log('[ORCHESTRATOR] Recruited clones:', addedCount)
+            } else {
+              reasoning.push({
+                iteration: iterations,
+                action: `Recruiting new personas`,
+                toolName: toolCall.name,
+                summary: `Error: ${toolOutput.error}`
+              })
+            }
+          } else if (toolCall.name === 'release_clones') {
+            // Tool 6: Release clones from session
+            const toolArgs = {
+              ...(toolCall.args as any),
+              session_id: sessionId,
+            }
+            toolResult = await releaseClones(toolArgs)
+            toolOutput = JSON.parse(toolResult)
+
+            if (!toolOutput.error) {
+              const releasedCount = toolOutput.released_clones?.length || 0
+              reasoning.push({
+                iteration: iterations,
+                action: `Releasing personas from session`,
+                toolName: toolCall.name,
+                input: { release_all: toolArgs.release_all, count: releasedCount },
+                output: { released: releasedCount, remaining: toolOutput.remaining_clones },
+                summary: `Released ${releasedCount} persona(s), ${toolOutput.remaining_clones} remaining`
+              })
+              console.log('[ORCHESTRATOR] Released clones:', releasedCount)
+
+              // Update session transition if clones were released
+              if (releasedCount > 0) {
+                sessionTransition = {
+                  clone_ids: [],
+                  clone_names: [],
+                }
+              }
+            } else {
+              reasoning.push({
+                iteration: iterations,
+                action: `Releasing personas`,
+                toolName: toolCall.name,
+                summary: `Error: ${toolOutput.error}`
+              })
+            }
+          } else if (toolCall.name === 'list_clones') {
+            // Tool 7: List active clones
+            const toolArgs = {
+              ...(toolCall.args as any),
+              session_id: sessionId,
+            }
+            toolResult = await listClones(toolArgs)
+            toolOutput = JSON.parse(toolResult)
+
+            if (!toolOutput.error) {
+              const cloneCount = toolOutput.active_clones?.length || 0
+              const cloneNames = toolOutput.active_clones?.map((c: any) => c.reddit_username).join(', ')
+              reasoning.push({
+                iteration: iterations,
+                action: `Listing active personas`,
+                toolName: toolCall.name,
+                output: { count: cloneCount, clones: cloneNames },
+                summary: `${cloneCount > 0 ? `Active clones: ${cloneNames}` : 'No active clones'}`
+              })
+              console.log('[ORCHESTRATOR] Listed clones:', cloneCount)
+            } else {
+              reasoning.push({
+                iteration: iterations,
+                action: `Listing active personas`,
+                toolName: toolCall.name,
+                summary: `Error: ${toolOutput.error}`
+              })
             }
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })

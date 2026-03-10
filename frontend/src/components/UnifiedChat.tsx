@@ -3,6 +3,7 @@ import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { ThinkingSteps } from './ThinkingSteps'
 import { getAuthHeaders } from '../services/auth'
+import { CloneEntry } from '../pages/Chat'
 
 interface ReasoningStep {
   iteration: number
@@ -29,28 +30,23 @@ interface ChatResponse {
   user_message: ChatMessageData
   capybara_reasoning?: ReasoningStep[]
   session_transition?: {
-    clone_ids: number[]
+    clone_ids: (number | string)[]
     clone_names: string[]
   }
 }
 
 interface UnifiedChatProps {
   sessionId: string
-  onActiveClonesChange?: (clones: string[]) => void
+  activeClones: CloneEntry[]
+  onActiveClonesChange?: (clones: CloneEntry[]) => void
 }
 
-export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProps) {
+export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: UnifiedChatProps) {
   const [messages, setMessages] = useState<ChatMessageData[]>([])
-  const [activeClones, setActiveClones] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [searchingPersonas, setSearchingPersonas] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reasoning, setReasoning] = useState<ReasoningStep[]>([])
-
-  // Notify parent when active clones change
-  useEffect(() => {
-    onActiveClonesChange?.(activeClones)
-  }, [activeClones, onActiveClonesChange])
 
   const handleSendMessage = async (content: string, target?: 'capybara' | 'clones', recipient?: string) => {
     setError(null)
@@ -133,9 +129,16 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
 
       // If session_transition is present, update active clones
       if (data.session_transition) {
-        const { clone_names } = data.session_transition
-        console.log('[UNIFIED_CHAT] Updating active clones:', clone_names)
-        setActiveClones(clone_names)
+        const { clone_ids, clone_names } = data.session_transition
+        console.log('[UNIFIED_CHAT] Updating active clones:', { clone_ids, clone_names })
+
+        // Create CloneEntry[] by zipping ids with names
+        const newClones: CloneEntry[] = clone_ids.map((id, idx) => ({
+          id: String(id),
+          name: clone_names[idx] || String(id),
+        }))
+
+        onActiveClonesChange?.(newClones)
       }
     } catch (err: any) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -245,7 +248,7 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
         onSend={handleSendMessage}
         disabled={loading}
         placeholder={activeClones.length > 0 ? "Ask your clones a question..." : "Describe your research goal..."}
-        activeClones={activeClones}
+        activeClones={activeClones.map(c => c.name)}
       />
     </div>
   )

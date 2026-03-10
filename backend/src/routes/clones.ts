@@ -74,6 +74,7 @@ router.get('/list', async (req: AuthRequest, res: Response) => {
 /**
  * PUT /clones/update-session
  * Update active clones in a session
+ * Returns extended response with clone_names
  */
 router.put('/update-session', async (req: AuthRequest, res: Response) => {
   try {
@@ -91,16 +92,36 @@ router.put('/update-session', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Session not found' })
     }
 
+    // Set mode based on whether clones are active
+    const mode = clone_ids && clone_ids.length > 0 ? 'conversation' : 'god'
+
     const { data: updated, error } = await supabase
       .from('chat_sessions')
-      .update({ active_clones: clone_ids })
+      .update({ active_clones: clone_ids, mode })
       .eq('id', session_id)
       .select()
       .single()
 
     if (error) throw error
 
-    res.json(updated)
+    // Fetch clone names for the response
+    let clone_names: string[] = []
+    if (clone_ids && clone_ids.length > 0) {
+      const { data: clones, error: clonesError } = await supabase
+        .from('personas')
+        .select('reddit_username')
+        .in('id', clone_ids)
+
+      if (!clonesError && clones) {
+        clone_names = clones.map((c: any) => c.reddit_username)
+      }
+    }
+
+    // Return extended response with clone_names
+    res.json({
+      ...updated,
+      clone_names,
+    })
   } catch (error) {
     console.error('Update session error:', error)
     res.status(500).json({ error: 'Failed to update session' })

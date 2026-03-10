@@ -1,14 +1,15 @@
 import { anonymizeUsername } from '../utils/anonymize'
+import { CloneEntry } from '../pages/Chat'
 
 interface Participant {
-  id: string // 'you', 'capybara', or clone name
+  id: string // 'you', 'capybara', or clone ID
   type: 'user' | 'capybara' | 'clone'
   displayName?: string // For 'you' and 'capybara', explicit label
 }
 
 interface ParticipantSidebarProps {
   currentUserId: string
-  activeClones: string[] // List of clone names/reddit_usernames
+  activeClones: CloneEntry[] // List of { id, name } for active clones
 }
 
 export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantSidebarProps) {
@@ -25,9 +26,9 @@ export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantS
       displayName: 'Capybara'
     },
     ...activeClones.map(clone => ({
-      id: clone,
+      id: clone.id,
       type: 'clone' as const,
-      displayName: anonymizeUsername(clone)
+      displayName: anonymizeUsername(clone.name)
     }))
   ]
 
