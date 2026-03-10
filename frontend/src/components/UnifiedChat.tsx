@@ -141,7 +141,7 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
       }
     } catch (err: any) {
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Message request cancelled')
+        console.log('[UNIFIED_CHAT] Message request cancelled')
         return
       }
       const errorMsg = err.message || 'An unexpected error occurred'

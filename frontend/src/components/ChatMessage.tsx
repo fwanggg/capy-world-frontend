@@ -1,4 +1,3 @@
-import React from 'react'
 import { anonymizeUsername } from '../utils/anonymize'
 import { ThinkingSteps } from './ThinkingSteps'
 
