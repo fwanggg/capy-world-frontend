@@ -1,8 +1,13 @@
-import { jwtVerify, importJWK } from 'jose';
+import { jwtVerify, importJWK } from 'jose'
+import { log } from '../services/logging'
 
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
 
 if (!SUPABASE_JWT_SECRET) {
+  log.error('jwt.env_missing', 'SUPABASE_JWT_SECRET environment variable is not set', {
+    sourceFile: 'jwt.ts',
+    sourceLine: 6
+  })
   throw new Error('SUPABASE_JWT_SECRET environment variable is not set')
 }
 
@@ -24,15 +29,34 @@ export async function verifyJWT(token: string): Promise<JWTPayload | null> {
     const secret = await importJWK(jwk, jwk.alg)
 
     const verified = await jwtVerify(cleanToken, secret)
+    log.debug('jwt.verification_success', 'JWT token verified successfully', {
+      sourceFile: 'jwt.ts',
+      sourceLine: 29,
+      metadata: { sub: verified.payload.sub }
+    })
     return verified.payload as JWTPayload
   } catch (error) {
-    console.error('[JWT] Verification failed:', error instanceof Error ? error.message : String(error))
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorType = error instanceof Error ? error.name : 'Unknown'
+    log.error('jwt.verification_failed', `JWT verification failed: ${errorMessage}`, {
+      sourceFile: 'jwt.ts',
+      sourceLine: 37,
+      metadata: {
+        errorType,
+        tokenPreview: token.substring(0, 20) + '...'
+      }
+    })
     return null
   }
 }
 
 export function extractUserIdFromJWT(payload: JWTPayload): string {
   if (!payload.sub) {
+    log.error('jwt.missing_sub_claim', 'JWT payload missing required "sub" claim', {
+      sourceFile: 'jwt.ts',
+      sourceLine: 47,
+      metadata: { payloadKeys: Object.keys(payload) }
+    })
     throw new Error('JWT payload missing required "sub" claim')
   }
   return payload.sub
