@@ -3,6 +3,7 @@ import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
 import { BaseMessage, HumanMessage, AIMessage } from '@langchain/core/messages'
 import { generateUUID } from '../utils/uuid'
+import { log } from '../services/logging'
 import {
   callCapybaraAI,
   callMultipleClones,
@@ -24,6 +25,12 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
 
     // Validate that mode is provided
     if (!mode || !['god', 'conversation'].includes(mode)) {
+      log.error('chat.init.invalid_mode', 'Invalid mode provided', {
+        sourceFile: 'chat.ts',
+        sourceLine: 26,
+        userId,
+        metadata: { providedMode: mode }
+      })
       return res.status(400).json({ error: 'Invalid mode. Must be "god" or "conversation"' })
     }
 
@@ -100,10 +107,23 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
       console.log(`[INIT] Created session ${session.id} for user ${userId}`)
     }
 
+    log.info('chat.session_init', `Session initialized with mode: ${mode}`, {
+      sourceFile: 'chat.ts',
+      sourceLine: 103,
+      userId,
+      metadata: { sessionId: session.id, mode }
+    })
+
     res.json(session)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
-    console.error('Chat init error:', errorMsg, error)
+    const errorType = error instanceof Error ? error.name : 'Unknown'
+    log.error('chat.init_failed', errorMsg, {
+      sourceFile: 'chat.ts',
+      sourceLine: 115,
+      userId: req.userId,
+      metadata: { errorType, stack: error instanceof Error ? error.stack : undefined }
+    })
     res.status(500).json({ error: 'Failed to initialize chat', details: errorMsg })
   }
 })
@@ -121,6 +141,12 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
 
     // Validate input
     if (!session_id || !content) {
+      log.error('chat.message.invalid_input', 'Missing required fields', {
+        sourceFile: 'chat.ts',
+        sourceLine: 132,
+        userId,
+        metadata: { hasSessionId: !!session_id, hasContent: !!content }
+      })
       return res.status(400).json({ error: 'Missing session_id or content' })
     }
 
@@ -253,19 +279,28 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     // Route to Capybara only if explicitly requested OR if no clones available
     const routeToCapybara = target === 'capybara' || (!hasActiveClones && !hasExplicitClones)
 
-    console.log('[ROUTE] Decision:',{
-      target,
-      target_clones,
-      session_mode: session.mode,
-      hasActiveClones,
-      hasExplicitClones,
-      routeToCapybara,
+    log.info('chat.route_decision', 'Message routing decision', {
+      sourceFile: 'chat.ts',
+      sourceLine: 263,
+      userId,
+      metadata: {
+        target,
+        sessionMode: session.mode,
+        hasActiveClones,
+        hasExplicitClones,
+        routingTo: routeToCapybara ? 'capybara' : 'clones'
+      }
     })
 
     // If routing to Capybara, send the message
     if (routeToCapybara) {
       // Send to Capybara AI with message history and labeled history
-      console.log('[ROUTE] Routing to Capybara AI')
+      log.info('chat.route_capybara', 'Routing message to Capybara AI', {
+        sourceFile: 'chat.ts',
+        sourceLine: 278,
+        userId,
+        metadata: { sessionId: session_id }
+      })
       const capybaraResult = await callCapybaraAI(session_id, content, messageHistory, labeledHistory)
 
       responses = [
@@ -280,10 +315,25 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       capybaraReasoning = capybaraResult.reasoning
     } else if (session.mode === 'conversation' || hasActiveClones || hasExplicitClones || target === 'clones') {
       // Send to selected clones
-      console.log('[ROUTE] Routing to clones, explicit_clones:', target_clones, 'active:', session.active_clones)
       const clonesInScope = target_clones || session.active_clones
+      log.info('chat.route_clones', 'Routing message to clones', {
+        sourceFile: 'chat.ts',
+        sourceLine: 295,
+        userId,
+        metadata: {
+          sessionId: session_id,
+          cloneCount: clonesInScope?.length || 0,
+          cloneIds: clonesInScope
+        }
+      })
 
       if (!clonesInScope || clonesInScope.length === 0) {
+        log.error('chat.route_clones_failed', 'No active clones in session', {
+          sourceFile: 'chat.ts',
+          sourceLine: 303,
+          userId,
+          metadata: { sessionId: session_id }
+        })
         return res.status(400).json({ error: 'No active clones in session' })
       }
 
@@ -327,17 +377,26 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     res.json(responseBody)
   } catch (error) {
     let errorMessage = 'Unknown error'
+    let errorType = 'Unknown'
     if (error instanceof Error) {
       errorMessage = error.message
-      console.error('[MESSAGE] Error:', errorMessage)
-      console.error('[MESSAGE] Stack:', error.stack)
+      errorType = error.name
     } else if (typeof error === 'object' && error !== null) {
       errorMessage = JSON.stringify(error)
-      console.error('[MESSAGE] Object error:', errorMessage)
     } else {
       errorMessage = String(error)
-      console.error('[MESSAGE] Error:', errorMessage)
     }
+
+    log.error('chat.message_failed', errorMessage, {
+      sourceFile: 'chat.ts',
+      sourceLine: 404,
+      userId: req.userId,
+      metadata: {
+        errorType,
+        errorMessage,
+        stack: error instanceof Error ? error.stack : undefined
+      }
+    })
 
     res.status(500).json({
       error: 'Failed to process message',

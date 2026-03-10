@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { verifyJWT, extractUserIdFromJWT } from '../utils/jwt'
 import { userIdToUUID } from '../utils/uuid'
 import { supabase } from 'shared'
+import { log } from '../services/logging'
 
 export interface AuthRequest extends Request {
   userId?: string
@@ -18,7 +19,11 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       if (userIdHeader) {
         const userHeaderStr = String(userIdHeader)
         const userId = userIdToUUID(userHeaderStr)
-        console.log('[AUTH] DEV MODE: Using x-user-id header:', userHeaderStr, '=>', userId)
+        log.info('auth.dev_mode', 'DEV MODE: Converting x-user-id header to UUID', {
+          sourceFile: 'auth.ts',
+          sourceLine: 22,
+          metadata: { header: userHeaderStr, convertedUserId: userId }
+        })
         req.userId = userId
         req.userEmail = 'dev@example.com'
         return next()
@@ -26,43 +31,35 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     }
 
     const authHeader = req.headers['authorization']
-    console.log('[AUTH] Authorization header present:', !!authHeader)
+    log.info('auth.header_check', 'Authorization header check', {
+      sourceFile: 'auth.ts',
+      sourceLine: 35,
+      metadata: { headerPresent: !!authHeader }
+    })
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('[AUTH] Missing or invalid Authorization header')
+      log.error('auth.header_missing', 'Missing or invalid Authorization header', {
+        sourceFile: 'auth.ts',
+        sourceLine: 41,
+        metadata: { headerPresent: !!authHeader }
+      })
       return res.status(401).json({ error: 'Not authenticated' })
     }
 
     const token = authHeader.slice(7) // Remove 'Bearer ' prefix
-    console.log('[AUTH] Token preview:', token.substring(0, 20) + '...')
-
-    // In dev mode, accept any token and extract user ID from it
-    if (isDev) {
-      try {
-        // Try to parse the JWT without verification in dev mode
-        const parts = token.split('.')
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString())
-          const userId = payload.sub || 'dev-user-' + Date.now()
-          console.log('[AUTH] DEV MODE: Accepting token without verification, userId:', userId)
-          req.userId = userId
-          req.userEmail = payload.email || 'dev@example.com'
-          return next()
-        }
-      } catch (e) {
-        console.log('[AUTH] DEV MODE: Could not parse JWT, treating as dev token')
-        // Fall through to treat as unknown token
-        const userId = 'dev-user-' + Date.now()
-        req.userId = userId
-        req.userEmail = 'dev@example.com'
-        return next()
-      }
-    }
-
-    // Production: verify JWT signature
+    log.info('auth.token_verify', 'Verifying JWT token', {
+      sourceFile: 'auth.ts',
+      sourceLine: 48,
+      metadata: { tokenPreview: token.substring(0, 20) + '...' }
+    })
     const payload = await verifyJWT(token)
 
     if (!payload) {
+      log.error('auth.token_invalid', 'JWT verification returned null', {
+        sourceFile: 'auth.ts',
+        sourceLine: 54,
+        metadata: { tokenPreview: token.substring(0, 20) + '...' }
+      })
       return res.status(401).json({ error: 'Invalid token' })
     }
 
@@ -70,15 +67,30 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     req.userId = userId
     req.userEmail = payload.email
 
+    log.info('auth.success', 'User authenticated successfully', {
+      sourceFile: 'auth.ts',
+      sourceLine: 67,
+      userId: userId,
+      metadata: { email: payload.email }
+    })
+
     next()
   } catch (error) {
-    console.error('[AUTH] Middleware error:', error instanceof Error ? error.message : String(error))
+    log.error('auth.extraction_failed', error instanceof Error ? error.message : String(error), {
+      sourceFile: 'auth.ts',
+      sourceLine: 76,
+      metadata: { errorType: error instanceof Error ? error.name : 'Unknown' }
+    })
     return res.status(401).json({ error: 'Authentication failed' })
   }
 }
 
 export async function requireApproval(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.userId) {
+    log.error('approval.no_user_id', 'User ID not found in request', {
+      sourceFile: 'auth.ts',
+      sourceLine: 87
+    })
     return res.status(401).json({ error: 'Not authenticated' })
   }
 
@@ -86,11 +98,22 @@ export async function requireApproval(req: AuthRequest, res: Response, next: Nex
   const host = req.hostname || req.host || ''
   const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1')
   if (isLocalhost) {
-    console.log('[APPROVAL] Localhost detected, skipping approval check')
+    log.info('approval.localhost_skip', 'Localhost detected, skipping approval check', {
+      sourceFile: 'auth.ts',
+      sourceLine: 97,
+      userId: req.userId,
+      metadata: { host }
+    })
     return next()
   }
 
   try {
+    log.info('approval.check_start', 'Starting approval check', {
+      sourceFile: 'auth.ts',
+      sourceLine: 106,
+      userId: req.userId
+    })
+
     const { data: user, error } = await supabase
       .from('waitlist')
       .select('approval_status')
@@ -98,18 +121,40 @@ export async function requireApproval(req: AuthRequest, res: Response, next: Nex
       .single()
 
     if (error || !user) {
-      console.log('[APPROVAL] User not found in waitlist:', req.userId)
+      log.warn('approval.user_not_found', 'User not found in waitlist table', {
+        sourceFile: 'auth.ts',
+        sourceLine: 115,
+        userId: req.userId,
+        metadata: { error: error?.message }
+      })
       // User will be created on first signin, allow to proceed
       return next()
     }
 
     if (user.approval_status !== 'approved') {
+      log.error('approval.not_approved', 'User approval status is not approved', {
+        sourceFile: 'auth.ts',
+        sourceLine: 125,
+        userId: req.userId,
+        metadata: { approvalStatus: user.approval_status }
+      })
       return res.status(403).json({ error: 'Pending approval' })
     }
 
+    log.info('approval.success', 'User approval check passed', {
+      sourceFile: 'auth.ts',
+      sourceLine: 133,
+      userId: req.userId
+    })
+
     next()
   } catch (error) {
-    console.error('[APPROVAL] Check failed:', error instanceof Error ? error.message : String(error))
+    log.error('approval.check_failed', error instanceof Error ? error.message : String(error), {
+      sourceFile: 'auth.ts',
+      sourceLine: 141,
+      userId: req.userId,
+      metadata: { errorType: error instanceof Error ? error.name : 'Unknown' }
+    })
     return res.status(500).json({ error: 'Approval check failed' })
   }
 }

@@ -3,6 +3,7 @@ import { createDeepSeekLLM } from './llm'
 import { supabase } from 'shared'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
+import { log } from './logging'
 
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
   return `You are Capybara AI. Your job is to intelligently manage personas and facilitate group conversations.
@@ -635,6 +636,16 @@ export async function callCapybaraAI(
   messageHistory?: BaseMessage[],
   labeledHistory?: string
 ): Promise<CallCapybaraAIResponse> {
+  log.info('orchestrator.capybara_start', 'Starting Capybara AI agentic loop', {
+    sourceFile: 'langgraph-orchestrator.ts',
+    sourceLine: 359,
+    metadata: {
+      sessionId,
+      hasHistory: !!messageHistory?.length,
+      messagePreview: userMessage.substring(0, 100)
+    }
+  })
+
   const llm = createDeepSeekLLM()
 
   // Bind tools to LLM - LLM will intelligently pick which tools to call and in what order
@@ -851,13 +862,23 @@ export async function callCapybaraAI(
             })
           }
         } catch (err) {
-          console.log('[ORCHESTRATOR] Tool execution error:', err)
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          log.error('orchestrator.tool_execution_failed', errorMsg, {
+            sourceFile: 'langgraph-orchestrator.ts',
+            sourceLine: 495,
+            metadata: {
+              sessionId,
+              toolName: toolCall.name,
+              iteration: iterations,
+              errorType: err instanceof Error ? err.name : 'Unknown'
+            }
+          })
           toolResult = JSON.stringify({ error: `Tool execution failed: ${err}` })
           reasoning.push({
             iteration: iterations,
             action: `Tool execution`,
             toolName: toolCall.name,
-            summary: `Error executing tool: ${err instanceof Error ? err.message : String(err)}`
+            summary: `Error executing tool: ${errorMsg}`
           })
         }
 
@@ -917,16 +938,30 @@ export async function callClone(
   const error = dbResult.error
 
   if (error || !clone) {
-    console.error(`[CLONE] Failed to fetch persona ${cloneId} from personas table:`, error)
+    log.error('orchestrator.clone_fetch_failed', `Failed to fetch persona from database`, {
+      sourceFile: 'langgraph-orchestrator.ts',
+      sourceLine: 566,
+      metadata: {
+        cloneId,
+        errorMessage: error?.message
+      }
+    })
     throw new Error(`Persona ${cloneId} not found in database`)
   }
 
-  // Log the FULL actual prompt being used (to prove it came from database)
+  // Log proof of database fetch without dumping the full prompt
+  log.info('orchestrator.clone_fetched', `Persona fetched from database`, {
+    sourceFile: 'langgraph-orchestrator.ts',
+    sourceLine: 576,
+    metadata: {
+      cloneId,
+      username: clone.reddit_username,
+      promptLength: clone.prompt?.length || 0
+    }
+  })
   console.log(`[CLONE] ✓✓✓ FETCHED PERSONA ${cloneId} FROM personas TABLE ✓✓✓`)
   console.log(`[CLONE] ✓ Persona username: ${clone.reddit_username}`)
-  console.log(`[CLONE] ===== FULL PROMPT FROM DATABASE =====`)
-  console.log(clone.prompt)
-  console.log(`[CLONE] ===== END PROMPT =====`)
+  console.log(`[CLONE] ✓ System prompt for persona ${clone.reddit_username} (${clone.prompt.length} chars)`)
   console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding with REAL DATABASE PROMPT...`)
 
   const llm = createDeepSeekLLM()
@@ -962,16 +997,39 @@ export async function callMultipleClones(
   userMessage: string,
   checkpointer: any
 ) {
-  console.log('[CLONES] callMultipleClones called with IDs:', cloneIds)
+  log.info('orchestrator.clones_start', `Executing ${cloneIds.length} clones in parallel`, {
+    sourceFile: 'langgraph-orchestrator.ts',
+    sourceLine: 622,
+    metadata: {
+      cloneIds,
+      cloneCount: cloneIds.length,
+      messagePreview: userMessage.substring(0, 100)
+    }
+  })
 
   const promises = cloneIds.map((cloneId) =>
     callClone(cloneId, threadId, userMessage, checkpointer)
       .then((content) => {
-        console.log(`[CLONES] ${cloneId} completed with ${content.length} chars`)
+        log.info('orchestrator.clone_complete', `Clone completed successfully`, {
+          sourceFile: 'langgraph-orchestrator.ts',
+          sourceLine: 637,
+          metadata: {
+            cloneId,
+            responseLength: content.length
+          }
+        })
         return { clone_id: cloneId, content }
       })
       .catch((error) => {
-        console.error(`[CLONES] ${cloneId} error:`, error instanceof Error ? error.message : String(error))
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        log.error('orchestrator.clone_failed', errorMsg, {
+          sourceFile: 'langgraph-orchestrator.ts',
+          sourceLine: 647,
+          metadata: {
+            cloneId,
+            errorType: error instanceof Error ? error.name : 'Unknown'
+          }
+        })
         return { clone_id: cloneId, content: '[Failed to respond]' }
       })
   )
