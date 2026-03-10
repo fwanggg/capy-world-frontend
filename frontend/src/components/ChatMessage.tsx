@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
 import { anonymizeUsername } from '../utils/anonymize'
+import { ThinkingSteps } from './ThinkingSteps'
 
 interface ReasoningStep {
   iteration: number
@@ -20,7 +20,6 @@ interface ChatMessageProps {
 export function ChatMessage({ role, sender_id, content, reasoning }: ChatMessageProps) {
   const isUser = role === 'user'
   const isCapybara = role === 'capybara'
-  const [showReasoning, setShowReasoning] = useState(false)
 
   const getDisplayName = () => {
     if (role === 'user') return 'You'
@@ -67,115 +66,14 @@ export function ChatMessage({ role, sender_id, content, reasoning }: ChatMessage
           {content}
         </div>
 
-        {/* Show reasoning chain for Capybara messages */}
-        {isCapybara && reasoning && reasoning.length > 0 && (
-          <div style={{
-            marginTop: 'var(--space-sm)',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--color-gray-600)',
-          }}>
-            <button
-              onClick={() => setShowReasoning(!showReasoning)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--color-teal)',
-                cursor: 'pointer',
-                padding: '0',
-                fontSize: 'var(--text-sm)',
-                fontWeight: '500',
-                textDecoration: 'underline',
-                marginBottom: 'var(--space-xs)',
-              }}
-            >
-              {showReasoning ? '▼ Hide' : '▶ Show'} Capybara's Thinking ({reasoning.length} steps)
-            </button>
-
-            {showReasoning && (
-              <div style={{
-                marginTop: 'var(--space-sm)',
-                padding: 'var(--space-md)',
-                backgroundColor: 'rgba(13, 148, 136, 0.05)',
-                borderRadius: '0.375rem',
-                border: '1px solid rgba(13, 148, 136, 0.2)',
-              }}>
-                {reasoning.map((step, idx) => (
-                  <div key={idx} style={{
-                    marginBottom: 'var(--space-md)',
-                    paddingBottom: 'var(--space-md)',
-                    borderBottom: idx < reasoning.length - 1 ? '1px solid rgba(13, 148, 136, 0.1)' : 'none',
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 'var(--space-xs)',
-                      marginBottom: 'var(--space-xs)',
-                    }}>
-                      <span style={{
-                        display: 'inline-block',
-                        width: '1.5rem',
-                        height: '1.5rem',
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--color-teal)',
-                        color: 'white',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                        textAlign: 'center',
-                        lineHeight: '1.5rem',
-                        flexShrink: 0,
-                      }}>
-                        {step.iteration}
-                      </span>
-                      <span style={{
-                        fontWeight: '600',
-                        color: 'var(--color-navy)',
-                      }}>
-                        {step.action}
-                      </span>
-                    </div>
-
-                    <div style={{
-                      marginLeft: '2rem',
-                      marginBottom: 'var(--space-xs)',
-                      color: 'var(--color-gray-700)',
-                    }}>
-                      <strong>Tool:</strong> <code style={{ background: 'rgba(0, 0, 0, 0.05)', padding: '0.125rem 0.375rem', borderRadius: '0.25rem' }}>{step.toolName}</code>
-                    </div>
-
-                    <div style={{
-                      marginLeft: '2rem',
-                      marginBottom: 'var(--space-xs)',
-                      color: 'var(--color-gray-700)',
-                    }}>
-                      <strong>Result:</strong> {step.summary}
-                    </div>
-
-                    {step.input && (
-                      <details style={{
-                        marginLeft: '2rem',
-                        fontSize: 'var(--text-xs)',
-                        color: 'var(--color-gray-600)',
-                      }}>
-                        <summary style={{ cursor: 'pointer', marginBottom: '0.25rem' }}>
-                          Show input
-                        </summary>
-                        <pre style={{
-                          background: 'rgba(0, 0, 0, 0.03)',
-                          padding: 'var(--space-xs)',
-                          borderRadius: '0.25rem',
-                          overflow: 'auto',
-                          maxHeight: '150px',
-                          fontSize: '0.7rem',
-                          lineHeight: '1.3',
-                        }}>
-                          {JSON.stringify(step.input, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Thinking display for Capybara messages */}
+        {role === 'capybara' && reasoning && reasoning.length > 0 && (
+          <div style={{ marginTop: 'var(--space-lg)' }}>
+            <ThinkingSteps
+              steps={reasoning}
+              isLoading={false}
+              defaultCollapsed={true}
+            />
           </div>
         )}
       </div>

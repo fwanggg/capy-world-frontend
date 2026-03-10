@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
+import { ThinkingSteps } from './ThinkingSteps'
 import { getAuthHeaders } from '../services/auth'
 
 interface ReasoningStep {
@@ -43,6 +44,7 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
   const [loading, setLoading] = useState(false)
   const [searchingPersonas, setSearchingPersonas] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [reasoning, setReasoning] = useState<ReasoningStep[]>([])
 
   // Notify parent when active clones change
   useEffect(() => {
@@ -124,6 +126,11 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
           reasoning: response.role === 'capybara' ? data.capybara_reasoning : undefined
         }))
         setMessages((prev) => [...prev, ...responsesWithReasoning])
+
+        // Extract and save reasoning for display
+        if (data.capybara_reasoning) {
+          setReasoning(data.capybara_reasoning)
+        }
       }
 
       // If session_transition is present, update active clones
@@ -134,7 +141,7 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
       }
     } catch (err: any) {
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Message request cancelled')
+        console.log('[UNIFIED_CHAT] Message request cancelled')
         return
       }
       const errorMsg = err.message || 'An unexpected error occurred'
@@ -224,6 +231,15 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
           </div>
         )}
       </div>
+
+      {/* Thinking indicator while searching */}
+      {searchingPersonas && reasoning.length > 0 && (
+        <ThinkingSteps
+          steps={reasoning}
+          isLoading={true}
+          defaultCollapsed={false}
+        />
+      )}
 
       {/* Chat Input */}
       <ChatInput
