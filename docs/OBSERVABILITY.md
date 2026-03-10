@@ -4,6 +4,8 @@
 
 The Capybara AI project now includes a comprehensive logging system for observability across both development and production environments. All logs are written to the `app_log` table in Supabase with industry-standard schema design.
 
+**Note on User Management:** All users are managed by Supabase Auth (`auth.users` table). The `user_id` field in logs stores UUIDs from this table. There is no separate `app_users` table — all authentication is delegated to Supabase.
+
 ## Schema
 
 The `app_log` table captures comprehensive logging data:
@@ -16,7 +18,7 @@ The `app_log` table captures comprehensive logging data:
 | `environment` | TEXT | Environment: `dev` or `prod` (auto-detected from NODE_ENV or DEV flag) |
 | `event` | TEXT | Event identifier (e.g., `auth.success`, `jwt.verification_failed`) |
 | `message` | TEXT | Human-readable message describing what happened |
-| `user_id` | UUID | Optional: User UUID if the log is related to a specific user |
+| `user_id` | UUID | Optional: User UUID from Supabase `auth.users` table if log is related to a specific user |
 | `request_id` | TEXT | Optional: Correlation ID for tracing requests across services |
 | `source_file` | TEXT | File that generated the log (e.g., `auth.ts`) |
 | `source_line` | INT | Line number where the log was emitted |

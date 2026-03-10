@@ -1,4 +1,6 @@
 -- Create app_log table for observability
+-- Note: user_id is nullable and stores UUIDs from Supabase auth.users table (managed by Supabase)
+-- We don't use foreign key constraint since auth.users is in a separate schema
 CREATE TABLE app_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   timestamp TIMESTAMP WITH TIME ZONE DEFAULT now(),
@@ -6,7 +8,7 @@ CREATE TABLE app_log (
   environment TEXT NOT NULL,
   event TEXT NOT NULL,
   message TEXT NOT NULL,
-  user_id UUID REFERENCES app_users(id) ON DELETE SET NULL,
+  user_id UUID,  -- References auth.users(id), but no constraint (managed by Supabase)
   request_id TEXT,
   source_file TEXT,
   source_line INT,
