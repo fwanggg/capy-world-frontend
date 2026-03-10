@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 
 interface ChatInputProps {
-  onSend: (message: string, targetClones?: string[], target?: 'capybara' | 'clones') => void
+  onSend: (message: string, target?: 'capybara' | 'clones', recipient?: string) => void
   disabled?: boolean
   placeholder?: string
   activeClones?: string[]
@@ -21,6 +21,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
 
   const mentionOptions: MentionOption[] = [
     { name: 'capybara', label: 'Capybara AI (Orchestrator)' },
+    ...(activeClones.length > 0 ? [{ name: 'all_participants', label: 'All Participants' }] : []),
     ...activeClones.map(clone => ({ name: clone, label: `@${clone}` }))
   ]
 
@@ -68,17 +69,33 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
     }
   }
 
+  const extractRecipient = (input: string): { message: string; recipient?: string } => {
+    // Match @mention at start of message
+    const match = input.match(/^@(\S+)\s+(.*)/)
+    if (match) {
+      const recipient = match[1]
+      const message = match[2]
+      return { message, recipient }
+    }
+    return { message: input }
+  }
+
   const handleSend = () => {
     if (input.trim()) {
-      // Check if message starts with @capybara
-      const capybaraMatch = input.match(/^@capybara\s+(.*)/)
+      const { message, recipient } = extractRecipient(input.trim())
 
-      if (capybaraMatch) {
+      if (recipient === 'capybara') {
         // Route to Capybara AI
-        onSend(capybaraMatch[1], undefined, 'capybara')
+        onSend(message, 'capybara', 'capybara')
+      } else if (recipient === 'all_participants') {
+        // Route to all clones
+        onSend(message, 'clones', 'all_participants')
+      } else if (recipient) {
+        // Route to specific clone by name
+        onSend(message, 'clones', recipient)
       } else {
-        // Route to clones (don't specify target, let backend route based on active_clones)
-        onSend(input)
+        // Route to default (clones if active, else Capybara)
+        onSend(message)
       }
 
       setInput('')

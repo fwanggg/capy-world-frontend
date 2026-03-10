@@ -21,6 +21,7 @@ interface ChatMessageData {
   role: 'user' | 'capybara' | 'clone'
   sender_id: string
   reasoning?: ReasoningStep[]
+  recipient?: string
 }
 
 interface ChatResponse {
@@ -51,11 +52,7 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
     onActiveClonesChange?.(activeClones)
   }, [activeClones, onActiveClonesChange])
 
-  const handleSendMessage = async (
-    content: string,
-    _targetClones?: string[],
-    target?: 'capybara' | 'clones'
-  ) => {
+  const handleSendMessage = async (content: string, target?: 'capybara' | 'clones', recipient?: string) => {
     setError(null)
     setLoading(true)
     setSearchingPersonas(target === 'capybara')
@@ -74,7 +71,8 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
         sender: 'user',
         timestamp: Date.now(),
         role: 'user',
-        sender_id: 'user'
+        sender_id: 'user',
+        recipient: recipient
       }
       setMessages((prev) => [...prev, userMsg])
 
@@ -199,6 +197,7 @@ export function UnifiedChat({ sessionId, onActiveClonesChange }: UnifiedChatProp
             sender_id={msg.sender_id}
             content={msg.content}
             reasoning={msg.reasoning}
+            recipient={msg.recipient}
           />
         ))}
 

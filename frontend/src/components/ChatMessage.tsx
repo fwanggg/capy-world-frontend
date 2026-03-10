@@ -15,9 +15,10 @@ interface ChatMessageProps {
   sender_id: string
   content: string
   reasoning?: ReasoningStep[]
+  recipient?: string
 }
 
-export function ChatMessage({ role, sender_id, content, reasoning }: ChatMessageProps) {
+export function ChatMessage({ role, sender_id, content, reasoning, recipient }: ChatMessageProps) {
   const isUser = role === 'user'
   const isCapybara = role === 'capybara'
 
@@ -63,6 +64,15 @@ export function ChatMessage({ role, sender_id, content, reasoning }: ChatMessage
           borderLeft: isCapybara ? '4px solid var(--color-teal)' : undefined,
           boxShadow: isUser ? 'var(--shadow-sm)' : isCapybara ? '0 0 0 3px rgba(13, 148, 136, 0.1)' : 'none',
         }}>
+          {recipient && recipient.trim() && (
+            <span style={{
+              fontWeight: 'bold',
+              color: 'var(--color-teal)',
+              marginRight: '0.5rem',
+            }}>
+              @{recipient}
+            </span>
+          )}
           {content}
         </div>
 
