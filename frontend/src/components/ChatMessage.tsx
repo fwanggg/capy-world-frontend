@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { anonymizeUsername } from '../utils/anonymize'
 
 interface ReasoningStep {
   iteration: number
@@ -21,6 +22,13 @@ export function ChatMessage({ role, sender_id, content, reasoning }: ChatMessage
   const isCapybara = role === 'capybara'
   const [showReasoning, setShowReasoning] = useState(false)
 
+  const getDisplayName = () => {
+    if (role === 'user') return 'You'
+    if (role === 'capybara') return 'Capybara AI'
+    if (role === 'clone') return anonymizeUsername(sender_id)
+    return sender_id
+  }
+
   return (
     <div style={{
       display: 'flex',
@@ -42,9 +50,7 @@ export function ChatMessage({ role, sender_id, content, reasoning }: ChatMessage
           textTransform: 'uppercase',
           letterSpacing: '0.5px',
         }}>
-          {role === 'user' && 'You'}
-          {role === 'capybara' && 'Capybara AI'}
-          {role === 'clone' && sender_id}
+          {getDisplayName()}
         </div>
         <div style={{
           padding: 'var(--space-lg)',
