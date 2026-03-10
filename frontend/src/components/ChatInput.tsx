@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 
 interface ChatInputProps {
-  onSend: (message: string, targetClones?: string[], target?: 'capybara' | 'clones', recipient?: string) => void
+  onSend: (message: string, target?: 'capybara' | 'clones') => void
   disabled?: boolean
   placeholder?: string
   activeClones?: string[]
@@ -86,13 +86,13 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
 
       if (recipient === 'capybara') {
         // Route to Capybara AI
-        onSend(message, undefined, 'capybara', 'capybara')
+        onSend(message, 'capybara')
       } else if (recipient === 'all_participants') {
         // Route to all clones
-        onSend(message, undefined, 'clones', 'all_participants')
+        onSend(message, 'clones')
       } else if (recipient) {
         // Route to specific clone by name
-        onSend(message, undefined, 'clones', recipient)
+        onSend(message, 'clones')
       } else {
         // Route to default (clones if active, else Capybara)
         onSend(message)

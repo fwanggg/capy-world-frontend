@@ -43,7 +43,7 @@ export function ConversationMode({ sessionId, activeClones: initialClones }: Con
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSendMessage = async (content: string, targetClones?: string[], target?: 'capybara' | 'clones', recipient?: string) => {
+  const handleSendMessage = async (content: string, target?: 'capybara' | 'clones') => {
     setError(null)
     setLoading(true)
 
@@ -80,8 +80,6 @@ export function ConversationMode({ sessionId, activeClones: initialClones }: Con
 
       if (target === 'capybara') {
         requestBody.target = 'capybara'
-      } else if (targetClones) {
-        requestBody.target_clones = targetClones
       }
 
       const response = await fetch('/chat/message', {
