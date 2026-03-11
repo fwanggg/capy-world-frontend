@@ -283,15 +283,75 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
       }
     })
 
+    // Detect streaming request: body.stream === true
+    const wantsStream = !!req.body.stream
+
     // If routing to Capybara, send the message
     if (routeToCapybara) {
-      // Send to Capybara AI with message history and labeled history
       log.info('chat.route_capybara', 'Routing message to Capybara AI', {
         sourceFile: 'chat.ts',
         sourceLine: 278,
         userId,
-        metadata: { sessionId: session_id }
+        metadata: { sessionId: session_id, streaming: wantsStream }
       })
+
+      if (wantsStream) {
+        // SSE streaming path: send reasoning steps as they happen
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        res.flushHeaders()
+
+        const writeSSE = (obj: any) => {
+          res.write(`data: ${JSON.stringify(obj)}\n\n`)
+        }
+
+        try {
+          const capybaraResult = await callCapybaraAI(
+            session_id, content, messageHistory, labeledHistory,
+            {
+              onReasoningStep(step) {
+                writeSSE({ type: 'reasoning', step })
+              }
+            }
+          )
+
+          sessionTransition = capybaraResult.session_transition
+          capybaraReasoning = capybaraResult.reasoning
+
+          responses = [{
+            role: 'capybara',
+            sender_id: 'capybara-ai',
+            content: capybaraResult.response,
+          }]
+
+          // Save AI responses
+          if (!isDev) {
+            for (const response of responses) {
+              await supabase.from('chat_messages').insert({
+                session_id, role: response.role, sender_id: response.sender_id, content: response.content,
+              })
+            }
+          }
+
+          const donePayload: any = {
+            type: 'done',
+            user_message: userMessage,
+            ai_responses: responses,
+            capybara_reasoning: capybaraReasoning,
+          }
+          if (sessionTransition) donePayload.session_transition = sessionTransition
+          writeSSE(donePayload)
+        } catch (streamErr) {
+          const msg = streamErr instanceof Error ? streamErr.message : String(streamErr)
+          writeSSE({ type: 'error', error: msg })
+        }
+
+        res.end()
+        return
+      }
+
+      // Non-streaming path (unchanged)
       const capybaraResult = await callCapybaraAI(session_id, content, messageHistory, labeledHistory)
 
       responses = [

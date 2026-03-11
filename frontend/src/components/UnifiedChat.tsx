@@ -1,39 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
-import { ThinkingSteps } from './ThinkingSteps'
+import { RespondingBubble } from './RespondingBubble'
 import { getAuthHeaders } from '../services/auth'
+import { anonymizeUsername } from '../utils/anonymize'
 import { CloneEntry } from '../pages/Chat'
-
-interface ReasoningStep {
-  iteration: number
-  action: string
-  toolName: string
-  input?: any
-  output?: any
-  summary: string
-}
-
-interface ChatMessageData {
-  id: string
-  content: string
-  sender: 'user' | 'ai'
-  timestamp: number
-  role: 'user' | 'capybara' | 'clone'
-  sender_id: string
-  reasoning?: ReasoningStep[]
-  recipient?: string
-}
-
-interface ChatResponse {
-  ai_responses: ChatMessageData[]
-  user_message: ChatMessageData
-  capybara_reasoning?: ReasoningStep[]
-  session_transition?: {
-    clone_ids: (number | string)[]
-    clone_names: string[]
-  }
-}
+import type { ReasoningStep, ChatMessageData, ChatResponse, RespondingState } from '../types/chat'
 
 interface UnifiedChatProps {
   sessionId: string
@@ -44,31 +16,109 @@ interface UnifiedChatProps {
 export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: UnifiedChatProps) {
   const [messages, setMessages] = useState<ChatMessageData[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchingPersonas, setSearchingPersonas] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [reasoning, setReasoning] = useState<ReasoningStep[]>([])
+  const [responding, setResponding] = useState<RespondingState>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages.length, loading, responding])
+
+  const handleDonePayload = useCallback((data: ChatResponse) => {
+    if (data.ai_responses) {
+      const responsesWithReasoning = data.ai_responses.map((r) => ({
+        ...r,
+        reasoning: r.role === 'capybara' ? data.capybara_reasoning : undefined,
+      }))
+      setMessages((prev) => [...prev, ...responsesWithReasoning])
+    }
+    if (data.session_transition) {
+      const { clone_ids, clone_names } = data.session_transition
+      const newClones: CloneEntry[] = clone_ids.map((id, idx) => ({
+        id: String(id),
+        name: clone_names[idx] || String(id),
+      }))
+      onActiveClonesChange?.(newClones)
+    }
+  }, [onActiveClonesChange])
+
+  const sendStreamingCapybara = useCallback(async (
+    requestBody: any,
+    headers: Record<string, string>,
+    signal: AbortSignal,
+  ) => {
+    setResponding({ type: 'capybara', reasoning: [] })
+
+    const response = await fetch('/chat/message', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...requestBody, stream: true }),
+      signal,
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Request failed' }))
+      throw new Error(errorData.error || `HTTP ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data: ')) continue
+        const jsonStr = trimmed.slice(6)
+        try {
+          const event = JSON.parse(jsonStr)
+          if (event.type === 'reasoning') {
+            setResponding((prev) => {
+              if (!prev || prev.type !== 'capybara') return prev
+              return { ...prev, reasoning: [...prev.reasoning, event.step] }
+            })
+          } else if (event.type === 'done') {
+            handleDonePayload(event as ChatResponse)
+          } else if (event.type === 'error') {
+            throw new Error(event.error)
+          }
+        } catch (parseErr: any) {
+          if (parseErr.message && !parseErr.message.startsWith('Unexpected')) throw parseErr
+        }
+      }
+    }
+  }, [handleDonePayload])
 
   const handleSendMessage = async (content: string, target?: 'capybara' | 'clones', recipient?: string) => {
     setError(null)
     setLoading(true)
-    setSearchingPersonas(target === 'capybara')
 
     const controller = new AbortController()
 
     try {
-      if (!content.trim()) {
-        throw new Error('Message cannot be empty')
-      }
+      if (!content.trim()) throw new Error('Message cannot be empty')
 
-      // Add user message immediately
       const userMsg: ChatMessageData = {
         id: `msg_${Date.now()}`,
-        content: content,
+        content,
         sender: 'user',
         timestamp: Date.now(),
         role: 'user',
         sender_id: 'user',
-        recipient: recipient
+        recipient,
       }
       setMessages((prev) => [...prev, userMsg])
 
@@ -85,110 +135,84 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: U
       if (target === 'capybara') {
         requestBody.target = 'capybara'
       } else if (target === 'clones') {
-        // Routing to clones - set target_clones with recipient(s)
         if (recipient === 'all_participants') {
-          // Route to all active clones
           requestBody.target = 'clones'
         } else if (recipient) {
-          // Route to specific clone by name - convert name to ID
           const cloneRecord = activeClones.find(c => c.name === recipient)
           if (cloneRecord) {
             requestBody.target_clones = [cloneRecord.id]
           } else {
-            // Fallback: use recipient as-is (might be an ID or name)
             requestBody.target_clones = [recipient]
           }
         } else {
-          // No specific recipient, route to all active clones
           requestBody.target = 'clones'
         }
       }
 
-      console.log('[UNIFIED_CHAT] Sending message:', {
-        content,
-        target,
-        recipient,
-        activeClones: activeClones.map(c => ({ id: c.id, name: c.name })),
-        requestBody: JSON.stringify(requestBody)
-      })
+      // Determine if this routes to Capybara (stream) or clones (no stream)
+      const routeToCapybara = target === 'capybara' || (activeClones.length === 0 && !requestBody.target_clones)
 
-      const response = await fetch('/chat/message', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      })
+      if (routeToCapybara) {
+        await sendStreamingCapybara(requestBody, headers, controller.signal)
+      } else {
+        // Clone path: show per-clone responding bubbles
+        const cloneNames = requestBody.target_clones
+          ? requestBody.target_clones.map((id: string) => {
+              const clone = activeClones.find(c => c.id === id || c.name === id)
+              return clone ? anonymizeUsername(clone.name) : anonymizeUsername(id)
+            })
+          : activeClones.map(c => anonymizeUsername(c.name))
+        setResponding({ type: 'clones', names: cloneNames })
 
-      console.log('[UNIFIED_CHAT] Response status:', response.status)
+        const response = await fetch('/chat/message', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Request failed' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
-
-      const data: ChatResponse = await response.json()
-
-      console.log('[UNIFIED_CHAT] Response data:', {
-        userMessage: data.user_message,
-        aiResponses: data.ai_responses?.map((r: any) => ({ role: r.role, sender_id: r.sender_id })),
-        sessionTransition: data.session_transition
-      })
-
-      // Add AI responses with reasoning (if from Capybara)
-      if (data.ai_responses) {
-        const responsesWithReasoning = data.ai_responses.map((response) => ({
-          ...response,
-          reasoning: response.role === 'capybara' ? data.capybara_reasoning : undefined
-        }))
-        setMessages((prev) => [...prev, ...responsesWithReasoning])
-
-        // Extract and save reasoning for display
-        if (data.capybara_reasoning) {
-          setReasoning(data.capybara_reasoning)
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Request failed' }))
+          throw new Error(errorData.error || `HTTP ${response.status}`)
         }
-      }
 
-      // If session_transition is present, update active clones
-      if (data.session_transition) {
-        const { clone_ids, clone_names } = data.session_transition
-        console.log('[UNIFIED_CHAT] Updating active clones:', { clone_ids, clone_names })
-
-        // Create CloneEntry[] by zipping ids with names
-        const newClones: CloneEntry[] = clone_ids.map((id, idx) => ({
-          id: String(id),
-          name: clone_names[idx] || String(id),
-        }))
-
-        onActiveClonesChange?.(newClones)
+        const data: ChatResponse = await response.json()
+        handleDonePayload(data)
       }
     } catch (err: any) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log('[UNIFIED_CHAT] Message request cancelled')
-        return
-      }
-      const errorMsg = err.message || 'An unexpected error occurred'
-      setError(errorMsg)
+      if (err instanceof Error && err.name === 'AbortError') return
+      setError(err.message || 'An unexpected error occurred')
       console.error('[UNIFIED_CHAT] Error:', err)
     } finally {
       setLoading(false)
-      setSearchingPersonas(false)
+      setResponding(null)
     }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--color-white)' }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      width: '100%',
+      minWidth: 0,
+      backgroundColor: 'var(--color-white)',
+    }}>
       {/* Messages Area */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
+        overflowX: 'hidden',
         padding: 'var(--space-2xl)',
         display: 'flex',
         flexDirection: 'column',
         gap: 'var(--space-lg)',
+        minHeight: 0,
       }}>
-        {/* Initial state prompt - shown when no clones active */}
+        {/* Initial state prompt */}
         {messages.length === 0 && activeClones.length === 0 && !error && (
           <div style={{
+            width: '100%',
             padding: 'var(--space-2xl)',
             backgroundColor: 'var(--color-gray-50)',
             borderRadius: '0.5rem',
@@ -225,20 +249,22 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: U
           />
         ))}
 
-        {/* Searching personas state */}
-        {searchingPersonas && (
-          <div style={{
-            padding: 'var(--space-lg)',
-            backgroundColor: 'var(--color-gray-50)',
-            borderRadius: '0.5rem',
-            borderLeft: '4px solid var(--color-teal)',
-            color: 'var(--color-gray-600)',
-          }}>
-            <p style={{ margin: 0, fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
-              Searching for relevant personas...
-            </p>
-          </div>
+        {/* Responding bubbles */}
+        {responding?.type === 'capybara' && (
+          <RespondingBubble
+            entityType="capybara"
+            displayName="Capybara AI"
+            reasoning={responding.reasoning}
+            isStreaming={true}
+          />
         )}
+        {responding?.type === 'clones' && responding.names.map((name) => (
+          <RespondingBubble
+            key={name}
+            entityType="clone"
+            displayName={name}
+          />
+        ))}
 
         {/* Error state */}
         {error && (
@@ -253,16 +279,8 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: U
             <strong>Error:</strong> {error}
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
-
-      {/* Thinking indicator while searching */}
-      {searchingPersonas && reasoning.length > 0 && (
-        <ThinkingSteps
-          steps={reasoning}
-          isLoading={true}
-          defaultCollapsed={false}
-        />
-      )}
 
       {/* Chat Input */}
       <ChatInput

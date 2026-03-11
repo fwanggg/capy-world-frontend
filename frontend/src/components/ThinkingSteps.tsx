@@ -1,13 +1,5 @@
 import { useState } from 'react'
-
-interface ReasoningStep {
-  iteration: number
-  action: string
-  toolName?: string
-  summary: string
-  input?: any
-  output?: any
-}
+import type { ReasoningStep } from '../types/chat'
 
 interface ThinkingStepsProps {
   steps: ReasoningStep[]

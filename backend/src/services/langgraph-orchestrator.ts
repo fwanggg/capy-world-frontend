@@ -109,7 +109,13 @@ async function getDemographicValues(input: {
     const { data: interestsData, error: interestsError } = await supabase
       .from('personas')
       .select('interests')
-      .neq('interests', null)
+      .not('interests', 'is', null)
+
+    if (interestsError) {
+      console.log('[TOOL] interests query error:', interestsError)
+    }
+    const count = interestsData?.length ?? 0
+    console.log('[TOOL] interests rows from DB:', count, count ? 'sample:' : '', count ? interestsData?.[0] : '')
 
     if (!interestsError && interestsData) {
       const allInterests = new Set<string>()
@@ -139,10 +145,61 @@ async function getDemographicValues(input: {
       result.interests = Array.from(allInterests)
       console.log('[TOOL] interests values:', result.interests)
     }
+    // Always set so reasoning summary shows "interests (N values)" when segment was requested
+    if (!('interests' in result)) {
+      result.interests = []
+    }
   }
 
   console.log('[TOOL] Returning demographic values:', JSON.stringify(result))
   return JSON.stringify(result)
+}
+
+/**
+ * Compute a single sort confidence for a row when filters are applied.
+ * Uses llm_explanation for demographics (age, gender, location, profession, spending_power)
+ * and interests[].confidence for interest filters. Returns the minimum confidence across
+ * applied filters so we rank by "weakest link" (rows confident on all criteria rank higher).
+ */
+function getSortConfidence(
+  row: any,
+  input: {
+    profession?: string
+    age_min?: number
+    age_max?: number
+    gender?: string
+    location?: string
+    spending_power?: string
+  },
+  interestNames: string[] | null
+): number | null {
+  const confidences: number[] = []
+
+  const llm = row.llm_explanation
+  if (Array.isArray(llm)) {
+    const byDemographic: Record<string, number> = {}
+    for (const item of llm) {
+      const d = item?.demographic
+      const c = item?.confidence
+      if (d != null && typeof c === 'number' && !Number.isNaN(c)) byDemographic[d] = c
+    }
+    if (input.profession && byDemographic.profession != null) confidences.push(byDemographic.profession)
+    if (input.gender && byDemographic.gender != null) confidences.push(byDemographic.gender)
+    if (input.location && byDemographic.location != null) confidences.push(byDemographic.location)
+    if (input.spending_power && byDemographic.spending_power != null) confidences.push(byDemographic.spending_power)
+    if ((input.age_min != null || input.age_max != null) && byDemographic.age != null) confidences.push(byDemographic.age)
+  }
+
+  if (interestNames?.length && Array.isArray(row.interests)) {
+    for (const name of interestNames) {
+      const interest = row.interests.find((i: any) => (i?.name || i) === name)
+      const c = interest?.confidence
+      if (typeof c === 'number' && !Number.isNaN(c)) confidences.push(c)
+    }
+  }
+
+  if (confidences.length === 0) return null
+  return Math.min(...confidences)
 }
 
 /**
@@ -162,89 +219,71 @@ async function searchClones(input: {
 }): Promise<string> {
   console.log('[TOOL] search_clones called with filters:', JSON.stringify(input, null, 2))
 
-  // STEP 1: Build query with filters
-  let query = supabase.from('personas').select('id, reddit_username, age, gender, location, profession, spending_power, interests')
+  const requestedCount = input.count || 5
+  const interestNames =
+    input.interests && Array.isArray(input.interests) && input.interests.length > 0 ? input.interests : null
 
-  // Apply demographic filters - NO LLM CALLS, just query building
-  if (input.profession) {
-    query = query.eq('profession', input.profession)
-  }
-  if (input.gender) {
-    query = query.eq('gender', input.gender)
-  }
-  if (input.location) {
-    query = query.eq('location', input.location)
-  }
-  if (input.spending_power) {
-    query = query.eq('spending_power', input.spending_power)
-  }
-  if (input.age_min !== null && input.age_min !== undefined) {
-    query = query.gte('age', input.age_min)
-  }
-  if (input.age_max !== null && input.age_max !== undefined) {
-    query = query.lte('age', input.age_max)
-  }
+  const hasFilters =
+    !!(
+      input.profession ||
+      input.gender ||
+      input.location ||
+      input.spending_power ||
+      input.age_min != null ||
+      input.age_max != null ||
+      (interestNames && interestNames.length > 0)
+    )
 
-  query = query.limit(input.count || 5)
+  // Select confidence sources when we have filters so we can order by confidence
+  const selectFields = hasFilters
+    ? 'id, reddit_username, age, gender, location, profession, spending_power, interests, llm_explanation'
+    : 'id, reddit_username, age, gender, location, profession, spending_power'
 
-  // Log the SQL query for debugging
-  const sqlQueryLog = `
-[SEARCH_SQL] Query:
-  SELECT id, reddit_username, age, gender, location, profession, spending_power, interests
-  FROM personas
-  WHERE 1=1
-  ${input.profession ? `AND profession = '${input.profession}'` : ''}
-  ${input.gender ? `AND gender = '${input.gender}'` : ''}
-  ${input.location ? `AND location = '${input.location}'` : ''}
-  ${input.spending_power ? `AND spending_power = '${input.spending_power}'` : ''}
-  ${input.age_min !== null && input.age_min !== undefined ? `AND age >= ${input.age_min}` : ''}
-  ${input.age_max !== null && input.age_max !== undefined ? `AND age <= ${input.age_max}` : ''}
-  LIMIT ${input.count || 5};
-  `
-  console.log(sqlQueryLog)
+  // Single deterministic query: demographics + jsonb interests filter + LIMIT (fetch more when we'll sort by confidence)
+  let query = supabase.from('personas').select(selectFields)
+  if (input.profession) query = query.eq('profession', input.profession)
+  if (input.gender) query = query.eq('gender', input.gender)
+  if (input.location) query = query.like('location', input.location)
+  if (input.spending_power) query = query.eq('spending_power', input.spending_power)
+  if (input.age_min != null) query = query.gte('age', input.age_min)
+  if (input.age_max != null) query = query.lte('age', input.age_max)
+  if (interestNames && interestNames.length > 0) {
+    const orClause = interestNames
+      .map((n) => `interests.cs.${JSON.stringify([{ name: n }])}`)
+      .join(',')
+    query = query.or(orClause)
+  }
+  // When ordering by confidence we need enough rows to pick top N; otherwise just requestedCount
+  const fetchLimit = hasFilters ? Math.min(100, Math.max(requestedCount * 3, 20)) : requestedCount
+  query = query.limit(fetchLimit)
 
-  let { data, error } = await query
+  const { data: rawData, error } = await query
 
   if (error) {
     console.log('[TOOL] search_clones error:', error)
     return JSON.stringify({ error: 'Failed to search personas' })
   }
 
-  console.log(`[TOOL] Database returned ${data?.length || 0} rows`)
+  let data = rawData || []
 
-  // Client-side interests filtering (array/JSON field)
-  if (data && input.interests && Array.isArray(input.interests) && input.interests.length > 0) {
-    console.log('[TOOL] Client-side interest filtering:', input.interests)
-    data = data.filter((persona: any) => {
-      const personaInterests = persona.interests
-      if (!personaInterests) return false
-
-      let hasMatchingInterest = false
-
-      if (Array.isArray(personaInterests)) {
-        hasMatchingInterest = personaInterests.some((pi: any) => {
-          const piStr = typeof pi === 'string' ? pi : pi?.name || ''
-          return input.interests!.some((requested: string) =>
-            piStr.toLowerCase().includes(requested.toLowerCase()) ||
-            requested.toLowerCase().includes(piStr.toLowerCase())
-          )
-        })
-      } else if (typeof personaInterests === 'object') {
-        hasMatchingInterest = Object.keys(personaInterests).some((key) =>
-          input.interests!.some((requested: string) =>
-            key.toLowerCase().includes(requested.toLowerCase()) ||
-            requested.toLowerCase().includes(key.toLowerCase())
-          )
-        )
-      }
-
-      return hasMatchingInterest
+  // When filters were applied, order by confidence for the matched field(s), then take requestedCount
+  if (hasFilters && data.length > 0) {
+    data = [...data].sort((a: any, b: any) => {
+      const confA = getSortConfidence(a, input, interestNames)
+      const confB = getSortConfidence(b, input, interestNames)
+      // Descending: higher confidence first; nulls last
+      if (confA == null && confB == null) return 0
+      if (confA == null) return 1
+      if (confB == null) return -1
+      return confB - confA
     })
-    console.log(`[TOOL] After filtering: ${data.length} rows`)
+    data = data.slice(0, requestedCount)
   }
 
+  console.log(`[TOOL] Database returned ${rawData?.length || 0} rows${hasFilters ? ', ordered by confidence' : ''}`)
+
   const result = {
-    personas: data?.map((d: any) => ({
+    personas: (data || []).map((d: any) => ({
       id: d.id,
       reddit_username: d.reddit_username,
       age: d.age,
@@ -252,7 +291,7 @@ async function searchClones(input: {
       location: d.location,
       profession: d.profession,
       spending_power: d.spending_power,
-    })) || [],
+    })),
   }
 
   console.log('[TOOL] Found:', result.personas.length, 'personas')
@@ -634,7 +673,8 @@ export async function callCapybaraAI(
   sessionId: string,
   userMessage: string,
   messageHistory?: BaseMessage[],
-  labeledHistory?: string
+  labeledHistory?: string,
+  options?: { onReasoningStep?: (step: ReasoningStep) => void }
 ): Promise<CallCapybaraAIResponse> {
   log.info('orchestrator.capybara_start', 'Starting Capybara AI agentic loop', {
     sourceFile: 'langgraph-orchestrator.ts',
@@ -672,6 +712,10 @@ export async function callCapybaraAI(
   let finalResponse: string | null = null
   let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
   const reasoning: ReasoningStep[] = []
+  const pushReasoning = (step: ReasoningStep) => {
+    reasoning.push(step)
+    options?.onReasoningStep?.(step)
+  }
 
   while (iterations < maxIterations) {
     iterations++
@@ -698,7 +742,7 @@ export async function callCapybaraAI(
             // Tool 1: Get list of available demographic segments
             toolResult = await getDemographicSegments()
             toolOutput = JSON.parse(toolResult)
-            reasoning.push({
+            pushReasoning({
               iteration: iterations,
               action: `Exploring available demographic fields`,
               toolName: toolCall.name,
@@ -711,7 +755,7 @@ export async function callCapybaraAI(
             toolResult = await getDemographicValues(args)
             toolOutput = JSON.parse(toolResult)
             const segmentsList = Object.keys(toolOutput).map(seg => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`).join(', ')
-            reasoning.push({
+            pushReasoning({
               iteration: iterations,
               action: `Fetching available values for: ${args.segments.join(', ')}`,
               toolName: toolCall.name,
@@ -728,7 +772,7 @@ export async function callCapybaraAI(
               .filter(([k, v]) => v !== undefined && k !== 'count')
               .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
               .join(', ') || 'no filters'
-            reasoning.push({
+            pushReasoning({
               iteration: iterations,
               action: `Searching with filters: ${filterDesc}`,
               toolName: toolCall.name,
@@ -750,7 +794,7 @@ export async function callCapybaraAI(
                 clone_ids: toolOutput.clone_ids,
                 clone_names: toolOutput.clone_names,
               }
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Activating personas in session`,
                 toolName: toolCall.name,
@@ -771,7 +815,7 @@ export async function callCapybaraAI(
 
             if (!toolOutput.error) {
               const addedCount = toolOutput.added_clones?.length || 0
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Recruiting new personas`,
                 toolName: toolCall.name,
@@ -781,7 +825,7 @@ export async function callCapybaraAI(
               })
               console.log('[ORCHESTRATOR] Recruited clones:', addedCount)
             } else {
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Recruiting new personas`,
                 toolName: toolCall.name,
@@ -799,7 +843,7 @@ export async function callCapybaraAI(
 
             if (!toolOutput.error) {
               const releasedCount = toolOutput.released_clones?.length || 0
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Releasing personas from session`,
                 toolName: toolCall.name,
@@ -817,7 +861,7 @@ export async function callCapybaraAI(
                 }
               }
             } else {
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Releasing personas`,
                 toolName: toolCall.name,
@@ -836,7 +880,7 @@ export async function callCapybaraAI(
             if (!toolOutput.error) {
               const cloneCount = toolOutput.active_clones?.length || 0
               const cloneNames = toolOutput.active_clones?.map((c: any) => c.reddit_username).join(', ')
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Listing active personas`,
                 toolName: toolCall.name,
@@ -845,7 +889,7 @@ export async function callCapybaraAI(
               })
               console.log('[ORCHESTRATOR] Listed clones:', cloneCount)
             } else {
-              reasoning.push({
+              pushReasoning({
                 iteration: iterations,
                 action: `Listing active personas`,
                 toolName: toolCall.name,
@@ -854,7 +898,7 @@ export async function callCapybaraAI(
             }
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
-            reasoning.push({
+            pushReasoning({
               iteration: iterations,
               action: `Unknown tool called`,
               toolName: toolCall.name,
@@ -874,7 +918,7 @@ export async function callCapybaraAI(
             }
           })
           toolResult = JSON.stringify({ error: `Tool execution failed: ${err}` })
-          reasoning.push({
+          pushReasoning({
             iteration: iterations,
             action: `Tool execution`,
             toolName: toolCall.name,

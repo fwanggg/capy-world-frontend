@@ -1,14 +1,6 @@
 import { anonymizeUsername } from '../utils/anonymize'
 import { ThinkingSteps } from './ThinkingSteps'
-
-interface ReasoningStep {
-  iteration: number
-  action: string
-  toolName: string
-  input?: any
-  output?: any
-  summary: string
-}
+import type { ReasoningStep } from '../types/chat'
 
 interface ChatMessageProps {
   role: 'user' | 'capybara' | 'clone'
@@ -67,8 +59,9 @@ export function ChatMessage({ role, sender_id, content, reasoning, recipient }: 
           {recipient && recipient.trim() && (
             <span style={{
               fontWeight: 'bold',
-              color: 'var(--color-teal)',
+              color: isUser ? 'var(--color-white)' : 'var(--color-teal)',
               marginRight: '0.5rem',
+              background: 'transparent',
             }}>
               @{recipient}
             </span>
