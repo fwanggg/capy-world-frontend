@@ -36,7 +36,7 @@ export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantS
     <div style={{
       width: '200px',
       backgroundColor: 'var(--color-gray-50)',
-      borderRight: '1px solid var(--color-gray-200)',
+      borderLeft: '1px solid var(--color-gray-200)',
       display: 'flex',
       flexDirection: 'column',
       flexShrink: 0,

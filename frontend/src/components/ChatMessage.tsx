@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { anonymizeUsername } from '../utils/anonymize'
 import { ThinkingSteps } from './ThinkingSteps'
 import type { ReasoningStep } from '../types/chat'
@@ -66,7 +68,11 @@ export function ChatMessage({ role, sender_id, content, reasoning, recipient }: 
               @{recipient}
             </span>
           )}
-          {content}
+          <div className={`markdown-content ${isUser ? 'markdown-content--user' : ''}`}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {content}
+            </ReactMarkdown>
+          </div>
         </div>
 
         {/* Thinking display for Capybara messages */}

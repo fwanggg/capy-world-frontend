@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import chatRoutes from './routes/chat'
 import cloneRoutes from './routes/clones'
+import studyroomRoutes from './routes/studyrooms'
 import { requireAuth, requireApproval, AuthRequest } from './middleware/auth'
 import { supabase } from 'shared'
 
@@ -24,6 +25,9 @@ app.use('/chat', requireAuth, requireApproval, chatRoutes)
 
 // Protected clone routes
 app.use('/clones', requireAuth, cloneRoutes)
+
+// Protected studyroom routes
+app.use('/studyrooms', requireAuth, requireApproval, studyroomRoutes)
 
 // User profile endpoint
 app.get('/user/profile', requireAuth, async (req: AuthRequest, res) => {

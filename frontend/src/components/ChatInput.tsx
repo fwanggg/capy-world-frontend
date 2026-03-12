@@ -139,6 +139,8 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
       backgroundColor: 'var(--color-white)',
       flexShrink: 0,
       position: 'relative',
+      width: '100%',
+      minWidth: 0,
     }}>
       {/* Mention autocomplete dropdown */}
       {showMentions && filteredMentions.length > 0 && (

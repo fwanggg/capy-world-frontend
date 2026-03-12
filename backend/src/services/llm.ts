@@ -1,4 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai'
+import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers'
 
 export function createDeepSeekLLM() {
   // DeepSeek API is OpenAI-compatible
@@ -22,4 +23,24 @@ export function createCloneLLM() {
     },
     temperature: 0.8,
   })
+}
+
+let embeddingPipeline: FeatureExtractionPipeline | null = null
+
+async function getEmbeddingPipeline(): Promise<FeatureExtractionPipeline> {
+  if (!embeddingPipeline) {
+    embeddingPipeline = await pipeline('feature-extraction', 'Xenova/gte-small') as FeatureExtractionPipeline
+  }
+  return embeddingPipeline
+}
+
+export async function embedTexts(texts: string[]): Promise<number[][]> {
+  const pipe = await getEmbeddingPipeline()
+  const results = await pipe(texts, { pooling: 'mean', normalize: true })
+  return results.tolist()
+}
+
+export async function embedQuery(text: string): Promise<number[]> {
+  const vectors = await embedTexts([text])
+  return vectors[0]
 }

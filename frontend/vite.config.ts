@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  envDir: '..',
   server: {
     port: 3000,
     proxy: {
@@ -31,6 +32,10 @@ export default defineConfig({
         },
       },
       '/clones': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/studyrooms': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { ChatMessage } from '../ChatMessage'
 
 describe('ChatMessage recipient display', () => {
-  it('displays recipient in bold teal before message content', () => {
+  it('displays recipient in bold white (user bubble) before message content', () => {
     const { container } = render(
       <ChatMessage
         role="user"
@@ -26,10 +26,10 @@ describe('ChatMessage recipient display', () => {
 
     expect(recipientSpan).toBeTruthy()
     expect(recipientSpan?.textContent).toBe('@capybara')
-    // Check that it has bold fontWeight and teal color in its style
+    // User bubble: recipient is white bold, no separate background
     const style = (recipientSpan as HTMLElement)?.style
     expect(style?.fontWeight).toBe('bold')
-    expect(style?.color).toBe('var(--color-teal)')
+    expect(style?.color).toBe('var(--color-white)')
     expect(screen.getByText('grab me personas')).toBeInTheDocument()
   })
 

@@ -1,5 +1,5 @@
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage } from '@langchain/core/messages'
-import { createDeepSeekLLM } from './llm'
+import { createDeepSeekLLM, embedQuery } from './llm'
 import { supabase } from 'shared'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
@@ -84,7 +84,7 @@ Your role: Make it easy for users to experiment with different personas and pers
 async function getDemographicSegments(): Promise<string> {
   console.log('[TOOL] get_demographic_segments called')
 
-  const segments = ['age', 'gender', 'location', 'profession', 'spending_power', 'interests']
+  const segments = ['age', 'gender', 'location', 'profession', 'spending_power']
 
   console.log('[TOOL] Available segments:', segments)
   return JSON.stringify({
@@ -123,62 +123,14 @@ async function getDemographicValues(input: {
     }
   }
 
-  // Handle interests (array/JSON field)
-  if (input.segments.includes('interests')) {
-    const { data: interestsData, error: interestsError } = await supabase
-      .from('personas')
-      .select('interests')
-      .not('interests', 'is', null)
-
-    if (interestsError) {
-      console.log('[TOOL] interests query error:', interestsError)
-    }
-    const count = interestsData?.length ?? 0
-    console.log('[TOOL] interests rows from DB:', count, count ? 'sample:' : '', count ? interestsData?.[0] : '')
-
-    if (!interestsError && interestsData) {
-      const allInterests = new Set<string>()
-
-      for (const record of interestsData) {
-        const interests = record.interests
-
-        if (Array.isArray(interests)) {
-          interests.forEach((interest: any) => {
-            if (typeof interest === 'string') {
-              allInterests.add(interest)
-            } else if (typeof interest === 'object' && interest?.name) {
-              allInterests.add(interest.name)
-            }
-          })
-        } else if (typeof interests === 'object' && interests !== null) {
-          Object.keys(interests).forEach((key) => {
-            allInterests.add(key)
-          })
-        } else if (typeof interests === 'string') {
-          interests.split(',').forEach((interest) => {
-            allInterests.add(interest.trim())
-          })
-        }
-      }
-
-      result.interests = Array.from(allInterests)
-      console.log('[TOOL] interests values:', result.interests)
-    }
-    // Always set so reasoning summary shows "interests (N values)" when segment was requested
-    if (!('interests' in result)) {
-      result.interests = []
-    }
-  }
-
   console.log('[TOOL] Returning demographic values:', JSON.stringify(result))
   return JSON.stringify(result)
 }
 
 /**
- * Compute a single sort confidence for a row when filters are applied.
- * Uses llm_explanation for demographics (age, gender, location, profession, spending_power)
- * and interests[].confidence for interest filters. Returns the minimum confidence across
- * applied filters so we rank by "weakest link" (rows confident on all criteria rank higher).
+ * Compute a single sort confidence for a row when demographic filters are applied.
+ * Uses llm_explanation for demographics (age, gender, location, profession, spending_power).
+ * Returns the minimum confidence across applied filters so we rank by "weakest link".
  */
 function getSortConfidence(
   row: any,
@@ -190,7 +142,6 @@ function getSortConfidence(
     location?: string
     spending_power?: string
   },
-  interestNames: string[] | null
 ): number | null {
   const confidences: number[] = []
 
@@ -209,71 +160,96 @@ function getSortConfidence(
     if ((input.age_min != null || input.age_max != null) && byDemographic.age != null) confidences.push(byDemographic.age)
   }
 
-  if (interestNames?.length && Array.isArray(row.interests)) {
-    for (const name of interestNames) {
-      const interest = row.interests.find((i: any) => (i?.name || i) === name)
-      const c = interest?.confidence
-      if (typeof c === 'number' && !Number.isNaN(c)) confidences.push(c)
-    }
-  }
-
   if (confidences.length === 0) return null
   return Math.min(...confidences)
 }
 
 /**
- * Tool 3: Search personas with demographic filters
- * Simple database query - NO LLM calls
- * LLM does the translation in the agentic loop
+ * Tool 3: Search personas with demographic filters and/or semantic query.
+ * When `query` is provided, embeds it and searches persona_embeddings via pgvector.
+ * Demographic filters are applied on top of (or instead of) vector results.
  */
 async function searchClones(input: {
   count?: number
+  query?: string
   profession?: string
   age_min?: number
   age_max?: number
   gender?: string
   location?: string
   spending_power?: string
-  interests?: string[]
 }): Promise<string> {
   console.log('[TOOL] search_clones called with filters:', JSON.stringify(input, null, 2))
 
   const requestedCount = input.count || 5
-  const interestNames =
-    input.interests && Array.isArray(input.interests) && input.interests.length > 0 ? input.interests : null
 
-  const hasFilters =
-    !!(
-      input.profession ||
-      input.gender ||
-      input.location ||
-      input.spending_power ||
-      input.age_min != null ||
-      input.age_max != null ||
-      (interestNames && interestNames.length > 0)
-    )
+  // Step 1: If a semantic query is provided, do vector search to get candidate persona IDs
+  let vectorPersonaIds: number[] | null = null
+  let vectorSimilarities: Map<number, number> | null = null
 
-  // Select confidence sources when we have filters so we can order by confidence
-  const selectFields = hasFilters
-    ? 'id, reddit_username, age, gender, location, profession, spending_power, interests, llm_explanation'
+  if (input.query) {
+    console.log(`[TOOL] Embedding query: "${input.query}"`)
+    const queryEmbedding = await embedQuery(input.query)
+
+    const { data: matchData, error: matchError } = await supabase.rpc('match_persona_embeddings', {
+      query_embedding: queryEmbedding,
+      match_count: requestedCount * 4,
+    })
+
+    if (matchError) {
+      console.log('[TOOL] Vector search error:', matchError)
+      return JSON.stringify({ error: 'Vector search failed' })
+    }
+
+    // Deduplicate by persona_id, keeping highest similarity per persona
+    const bestByPersona = new Map<number, { similarity: number; chunk_text: string }>()
+    for (const row of matchData || []) {
+      const existing = bestByPersona.get(row.persona_id)
+      if (!existing || row.similarity > existing.similarity) {
+        bestByPersona.set(row.persona_id, { similarity: row.similarity, chunk_text: row.chunk_text })
+      }
+    }
+
+    vectorPersonaIds = [...bestByPersona.keys()]
+    vectorSimilarities = new Map([...bestByPersona.entries()].map(([id, v]) => [id, v.similarity]))
+    console.log(`[TOOL] Vector search found ${vectorPersonaIds.length} unique personas`)
+
+    if (vectorPersonaIds.length === 0) {
+      return JSON.stringify({ personas: [], query: input.query, message: 'No personas matched the query' })
+    }
+  }
+
+  // Step 2: Build demographic query
+  const hasDemographicFilters = !!(
+    input.profession ||
+    input.gender ||
+    input.location ||
+    input.spending_power ||
+    input.age_min != null ||
+    input.age_max != null
+  )
+
+  const selectFields = hasDemographicFilters
+    ? 'id, reddit_username, age, gender, location, profession, spending_power, llm_explanation'
     : 'id, reddit_username, age, gender, location, profession, spending_power'
 
-  // Single deterministic query: demographics + jsonb interests filter + LIMIT (fetch more when we'll sort by confidence)
   let query = supabase.from('personas').select(selectFields)
+
+  // Narrow to vector search results when a query was provided
+  if (vectorPersonaIds) {
+    query = query.in('id', vectorPersonaIds)
+  }
+
   if (input.profession) query = query.eq('profession', input.profession)
   if (input.gender) query = query.eq('gender', input.gender)
   if (input.location) query = query.like('location', input.location)
   if (input.spending_power) query = query.eq('spending_power', input.spending_power)
   if (input.age_min != null) query = query.gte('age', input.age_min)
   if (input.age_max != null) query = query.lte('age', input.age_max)
-  if (interestNames && interestNames.length > 0) {
-    const orClause = interestNames
-      .map((n) => `interests.cs.${JSON.stringify([{ name: n }])}`)
-      .join(',')
-    query = query.or(orClause)
-  }
-  // When ordering by confidence we need enough rows to pick top N; otherwise just requestedCount
-  const fetchLimit = hasFilters ? Math.min(100, Math.max(requestedCount * 3, 20)) : requestedCount
+
+  const fetchLimit = hasDemographicFilters
+    ? Math.min(100, Math.max(requestedCount * 3, 20))
+    : requestedCount
   query = query.limit(fetchLimit)
 
   const { data: rawData, error } = await query
@@ -285,21 +261,29 @@ async function searchClones(input: {
 
   let data = rawData || []
 
-  // When filters were applied, order by confidence for the matched field(s), then take requestedCount
-  if (hasFilters && data.length > 0) {
+  // Step 3: Sort results
+  if (vectorSimilarities && data.length > 0) {
+    // When vector search was used, sort by similarity score
     data = [...data].sort((a: any, b: any) => {
-      const confA = getSortConfidence(a, input, interestNames)
-      const confB = getSortConfidence(b, input, interestNames)
-      // Descending: higher confidence first; nulls last
+      const simA = vectorSimilarities!.get(a.id) ?? 0
+      const simB = vectorSimilarities!.get(b.id) ?? 0
+      return simB - simA
+    })
+  } else if (hasDemographicFilters && data.length > 0) {
+    // Pure demographic search: sort by confidence
+    data = [...data].sort((a: any, b: any) => {
+      const confA = getSortConfidence(a, input)
+      const confB = getSortConfidence(b, input)
       if (confA == null && confB == null) return 0
       if (confA == null) return 1
       if (confB == null) return -1
       return confB - confA
     })
-    data = data.slice(0, requestedCount)
   }
 
-  console.log(`[TOOL] Database returned ${rawData?.length || 0} rows${hasFilters ? ', ordered by confidence' : ''}`)
+  data = data.slice(0, requestedCount)
+
+  console.log(`[TOOL] Database returned ${rawData?.length || 0} rows, returning top ${data.length}`)
 
   const result = {
     personas: (data || []).map((d: any) => ({
@@ -310,6 +294,7 @@ async function searchClones(input: {
       location: d.location,
       profession: d.profession,
       spending_power: d.spending_power,
+      ...(vectorSimilarities?.has(d.id) ? { similarity: vectorSimilarities.get(d.id) } : {}),
     })),
   }
 
@@ -379,13 +364,13 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
  */
 async function recruitClones(input: {
   demographic_filters?: {
+    query?: string
     profession?: string
     age_min?: number
     age_max?: number
     gender?: string
     location?: string
     spending_power?: string
-    interests?: string[]
   }
   count?: number
   session_id: string
@@ -681,16 +666,16 @@ const demographicValuesTool = tool(getDemographicValues, {
 
 const searchClonesTool = tool(searchClones, {
   name: 'search_clones',
-  description: 'Search personas database with specific demographic filters. Pass exact filter values (not natural language). Use get_demographic_values to find available values first.',
+  description: 'Search personas database with demographic filters and/or semantic query. Use `query` for topic/interest-based search (e.g. "watching TV series", "into cryptocurrency"). Use demographic fields for structured filters. Both can be combined.',
   schema: z.object({
     count: z.number().optional().describe('How many personas to return, default 5'),
+    query: z.string().optional().describe('Natural language topic/interest query for semantic search (e.g. "interested in cooking", "talks about gaming")'),
     profession: z.string().optional().describe('Exact profession value to filter by'),
     age_min: z.number().optional().describe('Minimum age'),
     age_max: z.number().optional().describe('Maximum age'),
     gender: z.string().optional().describe('Exact gender value to filter by'),
     location: z.string().optional().describe('Exact location value to filter by'),
     spending_power: z.string().optional().describe('Exact spending power value to filter by'),
-    interests: z.array(z.string()).optional().describe('Array of interest values to filter by'),
   }),
 })
 
@@ -705,17 +690,17 @@ const createConversationSessionTool = tool(createConversationSession, {
 
 const recruitClonesTool = tool(recruitClones, {
   name: 'recruit_clones',
-  description: 'Add new clones to session without removing existing ones. Search for personas matching demographics and add them to the conversation. Automatically deduplicates against already-active clones.',
+  description: 'Add new clones to session without removing existing ones. Search for personas matching demographics/topics and add them to the conversation. Automatically deduplicates against already-active clones.',
   schema: z.object({
     demographic_filters: z.object({
+      query: z.string().optional().describe('Natural language topic/interest query for semantic search'),
       profession: z.string().optional().describe('Exact profession value to filter by'),
       age_min: z.number().optional().describe('Minimum age'),
       age_max: z.number().optional().describe('Maximum age'),
       gender: z.string().optional().describe('Exact gender value to filter by'),
       location: z.string().optional().describe('Exact location value to filter by'),
       spending_power: z.string().optional().describe('Exact spending power value to filter by'),
-      interests: z.array(z.string()).optional().describe('Array of interest values to filter by'),
-    }).optional().describe('Demographic filters to search by'),
+    }).optional().describe('Demographic and/or semantic filters to search by'),
     count: z.number().optional().describe('How many new personas to recruit, default 3'),
     session_id: z.string().describe('The chat session ID'),
   }),

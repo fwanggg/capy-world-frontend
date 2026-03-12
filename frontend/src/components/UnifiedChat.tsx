@@ -11,14 +11,32 @@ interface UnifiedChatProps {
   sessionId: string
   activeClones: CloneEntry[]
   onActiveClonesChange?: (clones: CloneEntry[]) => void
+  initialMessages?: any[]
 }
 
-export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange }: UnifiedChatProps) {
+export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, initialMessages }: UnifiedChatProps) {
   const [messages, setMessages] = useState<ChatMessageData[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [responding, setResponding] = useState<RespondingState>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Hydrate from persisted history when switching studyrooms
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0) {
+      const hydrated: ChatMessageData[] = initialMessages.map((msg: any, i: number) => ({
+        id: msg.id || `hist_${i}`,
+        content: msg.content,
+        sender: msg.role === 'user' ? 'user' : 'ai',
+        timestamp: new Date(msg.created_at).getTime(),
+        role: msg.role,
+        sender_id: msg.sender_id || msg.role,
+      }))
+      setMessages(hydrated)
+    } else {
+      setMessages([])
+    }
+  }, [initialMessages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

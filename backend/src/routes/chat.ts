@@ -17,9 +17,7 @@ const router = Router()
  */
 router.post('/init', async (req: AuthRequest, res: Response) => {
   try {
-    const { mode } = req.body // 'god' or 'conversation'
-    // User ID comes from JWT (set by requireAuth middleware)
-    // Use Supabase user ID directly - no conversion needed
+    const { mode, studyroom_id } = req.body
     const userId = req.userId!
     const isDev = process.env.DEV === 'true'
 
@@ -37,7 +35,6 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
     // In dev mode, auto-create user if not exists
     if (isDev) {
       console.log('[INIT] DEV MODE: Auto-creating user if needed:', userId)
-      // Try to insert, ignore if already exists
       const { error: insertError } = await supabase
         .from('waitlist')
         .insert({
@@ -68,8 +65,37 @@ router.post('/init', async (req: AuthRequest, res: Response) => {
       console.log('[INIT] DEV MODE: Skipping waitlist check, creating session:', userId)
     }
 
-    // Create session
-    // Always save to database so it can be fetched in subsequent /chat/message calls
+    // If studyroom_id provided, reuse its existing session instead of creating new
+    if (studyroom_id) {
+      const { data: studyroom, error: srError } = await supabase
+        .from('studyrooms')
+        .select('session_id')
+        .eq('id', studyroom_id)
+        .eq('user_id', userId)
+        .single()
+
+      if (!srError && studyroom?.session_id) {
+        const { data: existingSession, error: sessError } = await supabase
+          .from('chat_sessions')
+          .select('*')
+          .eq('id', studyroom.session_id)
+          .single()
+
+        if (!sessError && existingSession) {
+          console.log(`[INIT] Reusing existing session ${existingSession.id} for studyroom ${studyroom_id}`)
+          log.info('chat.session_reuse', `Reusing session for studyroom`, {
+            sourceFile: 'chat.ts',
+            sourceLine: 80,
+            userId,
+            metadata: { sessionId: existingSession.id, studyroomId: studyroom_id }
+          })
+          return res.json(existingSession)
+        }
+      }
+      console.warn(`[INIT] Studyroom ${studyroom_id} has no valid session, creating new one`)
+    }
+
+    // Create new session
     let session
     let error
 
@@ -388,8 +414,8 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ error: 'No active clones in session' })
       }
 
-      // Call all clones in parallel (each uses own thread for isolated state)
-      const cloneResponses = await callMultipleClones(clonesInScope, threadId, content, null)
+      // Call all clones in parallel, passing session_id for per-persona history loading
+      const cloneResponses = await callMultipleClones(clonesInScope, session_id, content, null)
 
       responses = cloneResponses.map((response) => ({
         role: 'clone',
