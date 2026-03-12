@@ -255,7 +255,8 @@ Frontend receives response + optional session_transition
 - `profession` — Job/role (e.g., "engineer", "student", "dancer")
 - `spending_power` — "high", "mid", "low", or null
 - `interests` — Array of interests (e.g., ["technology", "startups"])
-- `prompt` — System prompt with persona description and Reddit history
+- `interaction_history` — JSONB of the persona's Reddit interaction data (posts, comments, references, total_conversations). Used by `buildPersonaPrompt()` to dynamically construct the full system prompt.
+- `prompt` — Legacy full system prompt (retained for reference; no longer read by `callClone()`)
 - `created_at`, `updated_at` — Timestamps
 
 **chat_sessions** — Session state for each conversation
@@ -549,8 +550,9 @@ Session ID: generateUUID() → random UUID v4
 5. Return plain data — let LLM interpret results
 
 **Adjusting persona behavior:**
-- Edit `prompt` field in `personas` table (real-time effect)
-- Call `callClone()` which fetches from database (no caching)
+- Edit `interaction_history` (jsonb) in `personas` table to change persona data
+- Edit `buildPersonaPrompt()` in `langgraph-orchestrator.ts` to change prompt template/instructions
+- `callClone()` fetches `interaction_history` from database and constructs prompt dynamically via `buildPersonaPrompt()` (no caching)
 - Changes take effect immediately on next message
 
 **Testing the tool orchestration:**

@@ -1,4 +1,4 @@
-import { HumanMessage, SystemMessage, ToolMessage, BaseMessage } from '@langchain/core/messages'
+import { HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage } from '@langchain/core/messages'
 import { createDeepSeekLLM } from './llm'
 import { supabase } from 'shared'
 import { tool } from '@langchain/core/tools'
@@ -35,6 +35,15 @@ AVAILABLE TOOLS & WORKFLOWS:
      a. Call list_clones({session_id})
      b. Respond with current personas and their key demographics
 
+4. ASKING PERSONAS QUESTIONS (On behalf of the customer):
+   - When you need to gather opinions, test ideas, or survey personas:
+     a. Call list_clones({session_id}) to get active persona IDs (if needed)
+     b. Call send_message({prompt: "...", clone_ids: [...]}) with a clear question
+     c. Present the responses in a structured format (table or list)
+   - Use this for: pitch testing, opinion gathering, quick surveys, preference checks
+   - You decide the right question to ask based on what the customer needs
+   - You can call send_message multiple times with different questions
+
 TOOLS (Use based on user intent):
 - get_demographic_segments(): List available demographic fields
 - get_demographic_values(segments): Get unique values for fields
@@ -43,9 +52,19 @@ TOOLS (Use based on user intent):
 - recruit_clones(demographic_filters, count, session_id): Add personas without removing existing
 - release_clones(clone_ids | release_all, session_id): Remove personas from session
 - list_clones(session_id): Show current active personas with details
+- send_message(prompt, clone_ids): Send a prompt to specific personas and collect responses
 
 Session ID: ${sessionId}
 - Always include session_id when calling recruit_clones, release_clones, or list_clones
+
+FORMATTING:
+- Always respond using **Markdown** for rich formatting.
+- Use **tables** when comparing personas, presenting demographics, or summarizing structured data.
+- Use **bullet lists** and **numbered lists** for steps, options, or enumerations.
+- Use **bold** and *italic* for emphasis.
+- Use headings (##, ###) sparingly for long responses with distinct sections.
+- Use \`inline code\` for IDs, field names, or technical values.
+- Keep responses conversational but well-structured — markdown should enhance readability, not clutter it.
 
 IMPORTANT TIPS:
 - recruit_clones automatically deduplicates (won't add already-active clones)
@@ -572,6 +591,79 @@ async function listClones(input: { session_id: string }): Promise<string> {
   return JSON.stringify(response)
 }
 
+/**
+ * Send a message/prompt to specific personas and collect their responses.
+ * Used when Capybara wants to ask questions to personas on the customer's behalf.
+ * Reuses callClone for each persona, runs them in parallel.
+ */
+async function sendMessage(input: {
+  prompt: string
+  clone_ids: string[]
+  session_id?: string
+}): Promise<string> {
+  console.log('[TOOL] send_message called with:', {
+    prompt: input.prompt.substring(0, 100),
+    clone_ids: input.clone_ids,
+    session_id: input.session_id,
+  })
+
+  if (!input.clone_ids || input.clone_ids.length === 0) {
+    return JSON.stringify({ error: 'No persona IDs provided' })
+  }
+
+  const { data: personas, error: fetchError } = await supabase
+    .from('personas')
+    .select('id, reddit_username, profession, age, gender, location')
+    .in('id', input.clone_ids)
+
+  if (fetchError || !personas || personas.length === 0) {
+    console.log('[TOOL] send_message: Failed to fetch personas', fetchError)
+    return JSON.stringify({ error: 'Failed to fetch persona details' })
+  }
+
+  const personaMap = new Map(personas.map((p: any) => [String(p.id), p]))
+  const effectiveSessionId = input.session_id || `send_message_${Date.now()}`
+
+  const promises = input.clone_ids.map((cloneId) =>
+    callClone(cloneId, effectiveSessionId, input.prompt, null)
+      .then((content) => ({
+        clone_id: cloneId,
+        username: personaMap.get(String(cloneId))?.reddit_username || `persona_${cloneId}`,
+        demographics: (() => {
+          const p = personaMap.get(String(cloneId))
+          if (!p) return undefined
+          return {
+            profession: p.profession,
+            age: p.age,
+            gender: p.gender,
+            location: p.location,
+          }
+        })(),
+        response: content,
+        error: null,
+      }))
+      .catch((err) => ({
+        clone_id: cloneId,
+        username: personaMap.get(String(cloneId))?.reddit_username || `persona_${cloneId}`,
+        demographics: undefined,
+        response: null,
+        error: err instanceof Error ? err.message : String(err),
+      }))
+  )
+
+  const results = await Promise.all(promises)
+
+  const successCount = results.filter((r) => r.response !== null).length
+  console.log(`[TOOL] send_message: ${successCount}/${results.length} personas responded`)
+
+  return JSON.stringify({
+    prompt: input.prompt,
+    total_sent: input.clone_ids.length,
+    total_responded: successCount,
+    responses: results,
+  })
+}
+
 // Define tools for LLM binding
 const demographicSegmentsTool = tool(getDemographicSegments, {
   name: 'get_demographic_segments',
@@ -647,6 +739,15 @@ const listClonesTool = tool(listClones, {
   }),
 })
 
+const sendMessageTool = tool(sendMessage, {
+  name: 'send_message',
+  description: 'Send a prompt/question to specific personas and collect their responses. Use this when you want to ask personas a question on behalf of the customer — for example to gather opinions, test a pitch, or run a quick survey across the active panel. Returns each persona\'s response with their username and demographics.',
+  schema: z.object({
+    prompt: z.string().describe('The message or question to send to the personas'),
+    clone_ids: z.array(z.string()).describe('Array of persona IDs to send the message to'),
+  }),
+})
+
 export interface ReasoningStep {
   iteration: number
   action: string
@@ -697,6 +798,7 @@ export async function callCapybaraAI(
     recruitClonesTool,
     releaseClonesTool,
     listClonesTool,
+    sendMessageTool,
   ])
 
   // Build messages with system prompt (including session ID and conversation history) and message history
@@ -754,13 +856,23 @@ export async function callCapybaraAI(
             const args = toolCall.args as { segments: string[] }
             toolResult = await getDemographicValues(args)
             toolOutput = JSON.parse(toolResult)
-            const segmentsList = Object.keys(toolOutput).map(seg => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`).join(', ')
+            const segmentsList = Object.keys(toolOutput)
+              .map(seg => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`)
+              .join(', ')
+            // Trim large value lists for the SSE reasoning output (full list stays in the LLM context)
+            const reasoningOutput: Record<string, any> = {}
+            for (const seg of Object.keys(toolOutput)) {
+              const val = toolOutput[seg]
+              reasoningOutput[seg] = Array.isArray(val) && val.length > 20
+                ? { count: val.length, sample: val.slice(0, 20) }
+                : val
+            }
             pushReasoning({
               iteration: iterations,
               action: `Fetching available values for: ${args.segments.join(', ')}`,
               toolName: toolCall.name,
               input: args,
-              output: toolOutput,
+              output: reasoningOutput,
               summary: `Retrieved: ${segmentsList}`
             })
           } else if (toolCall.name === 'search_clones') {
@@ -896,6 +1008,36 @@ export async function callCapybaraAI(
                 summary: `Error: ${toolOutput.error}`
               })
             }
+          } else if (toolCall.name === 'send_message') {
+            // Tool 8: Send a message to personas and collect responses
+            const args = toolCall.args as { prompt: string; clone_ids: string[] }
+            toolResult = await sendMessage({ ...args, session_id: sessionId })
+            toolOutput = JSON.parse(toolResult)
+
+            if (!toolOutput.error) {
+              const responded = toolOutput.total_responded || 0
+              const total = toolOutput.total_sent || 0
+              const usernames = toolOutput.responses
+                ?.filter((r: any) => r.response)
+                .map((r: any) => r.username)
+                .join(', ')
+              pushReasoning({
+                iteration: iterations,
+                action: `Sending prompt to ${total} persona(s)`,
+                toolName: toolCall.name,
+                input: { prompt: args.prompt, clone_count: total },
+                output: { responded, usernames },
+                summary: `${responded}/${total} personas responded: ${usernames}`
+              })
+              console.log(`[ORCHESTRATOR] send_message: ${responded}/${total} responded`)
+            } else {
+              pushReasoning({
+                iteration: iterations,
+                action: `Sending prompt to personas`,
+                toolName: toolCall.name,
+                summary: `Error: ${toolOutput.error}`
+              })
+            }
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
             pushReasoning({
@@ -960,21 +1102,84 @@ export async function callCapybaraAI(
 }
 
 /**
+ * Build the full system prompt for a persona from the interaction history JSON.
+ * Template sections (preamble + task instructions) are identical across all personas;
+ * only the interaction history data differs.
+ */
+export function buildPersonaPrompt(interactionHistory: any): string {
+  const historyJson = typeof interactionHistory === 'string'
+    ? interactionHistory
+    : JSON.stringify(interactionHistory, null, 2)
+
+  return `You are a persona simulator. Your task is to generate ONE response that imitates how a specific User would reply to a given prompt.
+
+CONTEXT: User's Interaction History:
+
+Below is the user's interaction history:
+- "posts": list of posts the user has made with content
+- "comments": list of comments the user has made, replying to the nested "linked_content" in the same json object
+- "linked_content": if exist, the content the user is replying to ( may not be authored by the user)
+- "score": the sum of upvotes and downvotes of the content
+- "created_at": the timestamp of the content
+- "subreddit": the subreddit(or forum name) of the content and linked_content, providing context for content understanding
+- "references": if exist, the references to the linked content (if the content is a reply to a post or comment)
+
+USER INTERACTION HISTORY:
+${historyJson}
+
+YOUR TASK: Generate ONE Natural Response
+
+1. READ the interaction history carefully
+2. INFER the user's persona (interests, stance, tone, confidence, knowledge boundaries)
+3. WRITE a single, natural response that mimics how THIS USER would reply
+
+CRITICAL CONSTRAINTS:
+
+✓ DO: Use ONLY patterns from the interaction history
+✓ DO: Match the user's actual communication style
+✓ DO: Respond naturally (not like an analyst)
+✓ DO: Be grounded in the evidence (use concise evidence to support your response)
+✓ DO: Respond in English even when asked in other languages
+
+
+✗ DON'T: Use outside knowledge or make assumptions based on general knowledge that don't belong to this user
+✗ DON'T: Sound more polished/confident than the evidence supports
+✗ DON'T: Invent preferences or beliefs not in the history
+✗ DON'T: Explain your reasoning (just respond)
+✗ DON'T: Use generic/assistant-like language
+
+RESPONSE FORMAT:
+
+Your response MUST follow this EXACT format, in English:
+
+[YOUR NATURAL RESPONSE IN ENGLISH HERE]
+
+QUALITY CHECKS:
+
+Before responding, verify:
+1. Is my response grounded in the interaction history? (Yes = good, No = rewrite)
+2. Does it match the user's tone and style? (Check examples in history)
+3. Does it avoid outside knowledge? (Yes = good)
+4. Are my evidence citations valid? (Do they actually support the response?)
+5. more recent content should be given more weight than older content
+
+Now generate your response to the prompt above.`
+}
+
+/**
  * Call a digital persona with a message
- * Each persona uses its own thread for isolated state
- * ALWAYS queries real database for prompt - never uses mocks
+ * Loads per-persona conversation history from chat_messages for continuity and token savings.
+ * ALWAYS queries real database for interaction_history - never uses mocks
  */
 export async function callClone(
   cloneId: string,
-  threadId: string,
+  sessionId: string,
   userMessage: string,
   checkpointer: any
 ): Promise<string> {
-  // ALWAYS query the real personas table for prompt
-  // This ensures we're using actual persona personalities from the database
   const dbResult = await supabase
     .from('personas')
-    .select('prompt, reddit_username')
+    .select('interaction_history, reddit_username')
     .eq('id', cloneId)
     .single()
 
@@ -993,31 +1198,55 @@ export async function callClone(
     throw new Error(`Persona ${cloneId} not found in database`)
   }
 
-  // Log proof of database fetch without dumping the full prompt
+  const systemPrompt = buildPersonaPrompt(clone.interaction_history)
+
   log.info('orchestrator.clone_fetched', `Persona fetched from database`, {
     sourceFile: 'langgraph-orchestrator.ts',
     sourceLine: 576,
     metadata: {
       cloneId,
       username: clone.reddit_username,
-      promptLength: clone.prompt?.length || 0
+      promptLength: systemPrompt.length
     }
   })
   console.log(`[CLONE] ✓✓✓ FETCHED PERSONA ${cloneId} FROM personas TABLE ✓✓✓`)
   console.log(`[CLONE] ✓ Persona username: ${clone.reddit_username}`)
-  console.log(`[CLONE] ✓ System prompt for persona ${clone.reddit_username} (${clone.prompt.length} chars)`)
-  console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding with REAL DATABASE PROMPT...`)
+  console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding with dynamically built prompt...`)
+
+  // Load this persona's conversation history from the session for continuity
+  const historyMessages: BaseMessage[] = []
+  if (sessionId && !sessionId.startsWith('send_message_')) {
+    const { data: history } = await supabase
+      .from('chat_messages')
+      .select('role, sender_id, content')
+      .eq('session_id', sessionId)
+      .or(`role.eq.user,sender_id.eq.${cloneId}`)
+      .order('created_at', { ascending: true })
+      .limit(30)
+
+    if (history && history.length > 0) {
+      console.log(`[CLONE] Loaded ${history.length} history messages for persona ${cloneId}`)
+      for (const msg of history) {
+        if (msg.role === 'user') {
+          historyMessages.push(new HumanMessage(msg.content))
+        } else {
+          historyMessages.push(new AIMessage(msg.content))
+        }
+      }
+    }
+  }
 
   const llm = createDeepSeekLLM()
 
-  const messages = [
-    new SystemMessage(clone.prompt),
+  const messages: BaseMessage[] = [
+    new SystemMessage(systemPrompt),
+    ...historyMessages,
     new HumanMessage(userMessage),
   ]
 
+  console.log(`[CLONE] ${cloneId} invoking LLM with ${messages.length} messages (1 system + ${historyMessages.length} history + 1 new)`)
   const response = await llm.invoke(messages)
 
-  // Extract content from response
   const content = response.content
   let result = ''
   if (typeof content === 'string') {
@@ -1037,7 +1266,7 @@ export async function callClone(
  */
 export async function callMultipleClones(
   cloneIds: string[],
-  threadId: string,
+  sessionId: string,
   userMessage: string,
   checkpointer: any
 ) {
@@ -1052,7 +1281,7 @@ export async function callMultipleClones(
   })
 
   const promises = cloneIds.map((cloneId) =>
-    callClone(cloneId, threadId, userMessage, checkpointer)
+    callClone(cloneId, sessionId, userMessage, checkpointer)
       .then((content) => {
         log.info('orchestrator.clone_complete', `Clone completed successfully`, {
           sourceFile: 'langgraph-orchestrator.ts',
