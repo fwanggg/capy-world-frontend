@@ -5,11 +5,22 @@ export default defineConfig({
   plugins: [react()],
   envDir: '..',
   server: {
-    port: 3000,
+    port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+      },
+      '/test': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/waitlist': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        bypass: (req) => {
+          if (req.url === '/waitlist' || req.url === '/waitlist/') return req.url
+        },
       },
       '/chat': {
         target: 'http://localhost:3001',

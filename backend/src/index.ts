@@ -1,10 +1,16 @@
+import { config } from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env') })
+
 import express from 'express'
 import cors from 'cors'
+import { supabase } from 'shared'
 import chatRoutes from './routes/chat'
 import cloneRoutes from './routes/clones'
 import studyroomRoutes from './routes/studyrooms'
 import { requireAuth, requireApproval, AuthRequest } from './middleware/auth'
-import { supabase } from 'shared'
 
 const app = express()
 const PORT = 3001

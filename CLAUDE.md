@@ -62,6 +62,14 @@ npm run dev --workspace=frontend
 npm run dev --workspace=backend
 ```
 
+**Vercel dev** (production-like SPA routing):
+```bash
+npx vercel login   # One-time
+cd frontend && npx vercel link --yes   # One-time (root dir "capybara-AI" has uppercase; vercel must run from frontend/)
+npm run dev:vercel
+```
+Runs `vercel dev` from `frontend/` with backend (DEV=true). Tests rewrites and SPA routing as in production. Production: set `BACKEND_URL` in Vercel project settings; local uses 127.0.0.1:3001 when unset.
+
 **Build:**
 ```bash
 npm run build

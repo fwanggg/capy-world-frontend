@@ -10,12 +10,14 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
+    "dev:vercel": "concurrently \"DEV=true npm run dev --workspace=backend\" \"cd frontend && vercel dev --yes\"",
     "build": "npm run build --workspaces",
     "test": "npm test --workspaces",
     "lint": "npm run lint --workspaces"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "vercel": "^39.0.0"
   },
   "dependencies": {
     "zod": "^4.3.6"
