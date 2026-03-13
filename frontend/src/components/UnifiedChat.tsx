@@ -3,7 +3,6 @@ import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { RespondingBubble } from './RespondingBubble'
 import { getAuthHeaders } from '../services/auth'
-import { anonymizeUsername } from '../utils/anonymize'
 import { CloneEntry } from '../pages/Chat'
 import type { ReasoningStep, ChatMessageData, ChatResponse, RespondingState } from '../types/chat'
 
@@ -167,19 +166,19 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
         }
       }
 
-      // Determine if this routes to Capybara (stream) or clones (no stream)
-      const routeToCapybara = target === 'capybara' || (activeClones.length === 0 && !requestBody.target_clones)
+      // Default: route to Capybara. Only route to clones when explicitly requested (target=clones or target_clones specified)
+      const routeToCapybara = target !== 'clones' && !requestBody.target_clones
 
       if (routeToCapybara) {
         await sendStreamingCapybara(requestBody, headers, controller.signal)
       } else {
-        // Clone path: show per-clone responding bubbles
+        // Clone path: show per-clone responding bubbles (clone.name is anonymous_id)
         const cloneNames = requestBody.target_clones
           ? requestBody.target_clones.map((id: string) => {
               const clone = activeClones.find(c => c.id === id || c.name === id)
-              return clone ? anonymizeUsername(clone.name) : anonymizeUsername(id)
+              return clone ? clone.name : id
             })
-          : activeClones.map(c => anonymizeUsername(c.name))
+          : activeClones.map(c => c.name)
         setResponding({ type: 'clones', names: cloneNames })
 
         const response = await fetch('/chat/message', {
@@ -264,6 +263,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
             content={msg.content}
             reasoning={msg.reasoning}
             recipient={msg.recipient}
+            activeClones={activeClones}
           />
         ))}
 

@@ -1,4 +1,3 @@
-import { anonymizeUsername } from '../utils/anonymize'
 import { CloneEntry } from '../pages/Chat'
 
 interface Participant {
@@ -9,11 +8,12 @@ interface Participant {
 
 interface ParticipantSidebarProps {
   currentUserId: string
-  activeClones: CloneEntry[] // List of { id, name } for active clones
+  activeClones: CloneEntry[] // List of { id, name } where name is anonymous_id
 }
 
 export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantSidebarProps) {
   // Build participant list in order: You, Capybara, Active Clones
+  // clone.name is already anonymous_id from backend - use directly, no rehashing
   const participants: Participant[] = [
     {
       id: 'you',
@@ -28,7 +28,7 @@ export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantS
     ...activeClones.map(clone => ({
       id: clone.id,
       type: 'clone' as const,
-      displayName: anonymizeUsername(clone.name)
+      displayName: clone.name
     }))
   ]
 

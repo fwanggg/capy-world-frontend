@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm'
 import { anonymizeUsername } from '../utils/anonymize'
 import { ThinkingSteps } from './ThinkingSteps'
 import type { ReasoningStep } from '../types/chat'
+import type { CloneEntry } from '../pages/Chat'
 
 interface ChatMessageProps {
   role: 'user' | 'capybara' | 'clone'
@@ -10,16 +11,21 @@ interface ChatMessageProps {
   content: string
   reasoning?: ReasoningStep[]
   recipient?: string
+  activeClones?: CloneEntry[]
 }
 
-export function ChatMessage({ role, sender_id, content, reasoning, recipient }: ChatMessageProps) {
+export function ChatMessage({ role, sender_id, content, reasoning, recipient, activeClones }: ChatMessageProps) {
   const isUser = role === 'user'
   const isCapybara = role === 'capybara'
 
   const getDisplayName = () => {
     if (role === 'user') return 'You'
     if (role === 'capybara') return 'Capybara AI'
-    if (role === 'clone') return anonymizeUsername(sender_id)
+    if (role === 'clone') {
+      // Resolve sender_id (persona id) to anonymous_id from activeClones
+      const clone = activeClones?.find(c => c.id === sender_id)
+      return clone ? clone.name : anonymizeUsername(sender_id)
+    }
     return sender_id
   }
 

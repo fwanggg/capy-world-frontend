@@ -94,7 +94,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
         // Route to specific clone by name
         onSend(message, 'clones', recipient)
       } else {
-        // Route to default (clones if active, else Capybara)
+        // Default: route to Capybara (no mention = Capybara)
         onSend(message)
       }
 
@@ -191,7 +191,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Type your message... (use @capybara for the orchestrator)'}
+          placeholder={placeholder || 'Type your message... (default: Capybara; use @ to mention participants)'}
           disabled={disabled}
           style={{
             flex: 1,

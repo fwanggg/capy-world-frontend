@@ -248,7 +248,8 @@ Frontend receives response + optional session_transition
 
 **personas** — Digital personas with demographics and instructions
 - `id` — Unique identifier
-- `reddit_username` — Person's handle (e.g., "dryisnotwet")
+- `reddit_username` — Person's handle (internal only; never exposed to frontend or LLM)
+- `anonymous_id` — Opaque display identifier (hash of reddit_username). Use this everywhere user-facing. Formula: `left(md5(reddit_username), 8)`. **Future inserts must set anonymous_id** using this formula.
 - `age` — Age in years (for age range filtering)
 - `gender` — "male", "female", or null
 - `location` — City/region (e.g., "Seattle, USA")

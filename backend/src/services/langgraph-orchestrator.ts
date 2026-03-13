@@ -18,7 +18,7 @@ AVAILABLE TOOLS & WORKFLOWS:
      d. After you have chosen concrete filter values from get_demographic_values, call search_clones({...filters..., count: N}) to find matching personas.
      e. If search_clones ever returns 0 personas, you should either relax filters (for example by dropping the narrowest field) or choose different values from get_demographic_values, then call search_clones again until you find at least some personas that reasonably match the user's request.
      f. Once you have personas, call create_conversation_session({clone_ids, session_id}) to activate them.
-     g. Respond: "I've activated [count] personas: [list their usernames]"
+     g. Respond: "I've activated [count] personas." (Do not list usernames or identifiers.)
    - When user asks to add/recruit more personas to existing group:
      a. Call recruit_clones({demographic_filters, count, session_id})
      b. Respond with who was added and total active
@@ -210,8 +210,8 @@ async function searchClones(input: {
 
   // Select confidence sources when we have filters so we can order by confidence
   const selectFields = hasFilters
-    ? 'id, reddit_username, age, gender, location, profession, spending_power, interests, llm_explanation'
-    : 'id, reddit_username, age, gender, location, profession, spending_power'
+    ? 'id, anonymous_id, age, gender, location, profession, spending_power, interests, llm_explanation'
+    : 'id, anonymous_id, age, gender, location, profession, spending_power'
 
   // Single deterministic query: demographics + jsonb interests filter + LIMIT (fetch more when we'll sort by confidence)
   // Location uses ilike with %wildcards% so "USA" matches "Seattle, USA", "New York, USA", etc.
@@ -263,7 +263,7 @@ async function searchClones(input: {
   const result = {
     personas: (data || []).map((d: any) => ({
       id: d.id,
-      reddit_username: d.reddit_username,
+      anonymous_id: d.anonymous_id,
       age: d.age,
       gender: d.gender,
       location: d.location,
@@ -289,10 +289,10 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
     demoMode: isDemoMode,
   })
 
-  // Fetch persona usernames from database
+  // Fetch persona anonymous_ids from database
   const result = await supabase
     .from('personas')
-    .select('id, reddit_username')
+    .select('id, anonymous_id')
     .in('id', input.clone_ids)
 
   if (result.error || !result.data) {
@@ -301,7 +301,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
   }
   const clones = result.data
 
-  const clone_names = clones.map((c: any) => c.reddit_username)
+  const clone_names = clones.map((c: any) => c.anonymous_id)
 
   // Update session to set active clones and mode
   // Always update database regardless of TEST_MODE - we need the session state to persist
@@ -410,15 +410,15 @@ async function recruitClones(input: {
     return JSON.stringify({ error: 'Failed to update session' })
   }
 
-  // Fetch names for newly recruited clones
+  // Fetch anonymous_ids for newly recruited clones
   const { data: recruitedData } = await supabase
     .from('personas')
-    .select('id, reddit_username')
+    .select('id, anonymous_id')
     .in('id', newCloneIds)
 
   const addedClones = (recruitedData || []).map((c: any) => ({
     id: c.id,
-    name: c.reddit_username,
+    name: c.anonymous_id,
   }))
 
   const response = {
@@ -461,16 +461,16 @@ async function releaseClones(input: {
 
   console.log('[TOOL] Current:', currentCloneIds.length, 'Releasing:', input.release_all ? 'all' : input.clone_ids?.length || 0, 'Remaining:', newCloneIds.length)
 
-  // Get names of released clones for response
+  // Get anonymous_ids of released clones for response
   const idsToRelease = input.release_all ? currentCloneIds : input.clone_ids
   const { data: releasedData } = await supabase
     .from('personas')
-    .select('id, reddit_username')
+    .select('id, anonymous_id')
     .in('id', idsToRelease)
 
   const releasedClones = (releasedData || []).map((c: any) => ({
     id: c.id,
-    name: c.reddit_username,
+    name: c.anonymous_id,
   }))
 
   // Update session
@@ -526,7 +526,7 @@ async function listClones(input: { session_id: string }): Promise<string> {
   // Fetch clone details
   const { data: clones, error: clonesError } = await supabase
     .from('personas')
-    .select('id, reddit_username, age, gender, location, profession, spending_power')
+    .select('id, anonymous_id, age, gender, location, profession, spending_power')
     .in('id', activeCloneIds)
 
   if (clonesError || !clones) {
@@ -537,7 +537,7 @@ async function listClones(input: { session_id: string }): Promise<string> {
   const response = {
     active_clones: clones.map((c: any) => ({
       id: c.id,
-      reddit_username: c.reddit_username,
+      anonymous_id: c.anonymous_id,
       age: c.age,
       gender: c.gender,
       location: c.location,
@@ -572,7 +572,7 @@ async function sendMessage(input: {
 
   const { data: personas, error: fetchError } = await supabase
     .from('personas')
-    .select('id, reddit_username, profession, age, gender, location')
+    .select('id, anonymous_id, profession, age, gender, location')
     .in('id', input.clone_ids)
 
   if (fetchError || !personas || personas.length === 0) {
@@ -587,7 +587,7 @@ async function sendMessage(input: {
     callClone(cloneId, effectiveSessionId, input.prompt, null)
       .then((content) => ({
         clone_id: cloneId,
-        username: personaMap.get(String(cloneId))?.reddit_username || `persona_${cloneId}`,
+        username: personaMap.get(String(cloneId))?.anonymous_id || `persona_${cloneId}`,
         demographics: (() => {
           const p = personaMap.get(String(cloneId))
           if (!p) return undefined
@@ -603,7 +603,7 @@ async function sendMessage(input: {
       }))
       .catch((err) => ({
         clone_id: cloneId,
-        username: personaMap.get(String(cloneId))?.reddit_username || `persona_${cloneId}`,
+        username: personaMap.get(String(cloneId))?.anonymous_id || `persona_${cloneId}`,
         demographics: undefined,
         response: null,
         error: err instanceof Error ? err.message : String(err),
@@ -700,7 +700,7 @@ const listClonesTool = tool(listClones, {
 
 const sendMessageTool = tool(sendMessage, {
   name: 'send_message',
-  description: 'Send a prompt/question to specific personas and collect their responses. Use this when you want to ask personas a question on behalf of the customer — for example to gather opinions, test a pitch, or run a quick survey across the active panel. Returns each persona\'s response with their username and demographics.',
+  description: 'Send a prompt/question to specific personas and collect their responses. Use this when you want to ask personas a question on behalf of the customer — for example to gather opinions, test a pitch, or run a quick survey across the active panel. Returns each persona\'s response with their anonymous_id and demographics.',
   schema: z.object({
     prompt: z.string().describe('The message or question to send to the personas'),
     clone_ids: z.array(z.string()).describe('Array of persona IDs to send the message to'),
@@ -870,10 +870,10 @@ export async function callCapybaraAI(
                 action: `Activating personas in session`,
                 toolName: toolCall.name,
                 input: { clone_ids: toolArgs.clone_ids },
-                output: { clone_names: toolOutput.clone_names },
-                summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s): ${toolOutput.clone_names?.join(', ')}`
+                output: { count: toolOutput.clone_names?.length || 0 },
+                summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s)`
               })
-              console.log('[ORCHESTRATOR] Session transition set:', toolOutput.clone_names)
+              console.log('[ORCHESTRATOR] Session transition set:', toolOutput.clone_names?.length, 'personas')
             }
           } else if (toolCall.name === 'recruit_clones') {
             // Tool 5: Recruit new clones (add without removing existing)
@@ -950,13 +950,12 @@ export async function callCapybaraAI(
 
             if (!toolOutput.error) {
               const cloneCount = toolOutput.active_clones?.length || 0
-              const cloneNames = toolOutput.active_clones?.map((c: any) => c.reddit_username).join(', ')
               pushReasoning({
                 iteration: iterations,
                 action: `Listing active personas`,
                 toolName: toolCall.name,
-                output: { count: cloneCount, clones: cloneNames },
-                summary: `${cloneCount > 0 ? `Active clones: ${cloneNames}` : 'No active clones'}`
+                output: { count: cloneCount },
+                summary: `${cloneCount > 0 ? `${cloneCount} active persona(s)` : 'No active clones'}`
               })
               console.log('[ORCHESTRATOR] Listed clones:', cloneCount)
             } else {
@@ -976,17 +975,13 @@ export async function callCapybaraAI(
             if (!toolOutput.error) {
               const responded = toolOutput.total_responded || 0
               const total = toolOutput.total_sent || 0
-              const usernames = toolOutput.responses
-                ?.filter((r: any) => r.response)
-                .map((r: any) => r.username)
-                .join(', ')
               pushReasoning({
                 iteration: iterations,
                 action: `Sending prompt to ${total} persona(s)`,
                 toolName: toolCall.name,
                 input: { prompt: args.prompt, clone_count: total },
-                output: { responded, usernames },
-                summary: `${responded}/${total} personas responded: ${usernames}`
+                output: { responded, total },
+                summary: `${responded}/${total} personas responded`
               })
               console.log(`[ORCHESTRATOR] send_message: ${responded}/${total} responded`)
             } else {
@@ -1060,15 +1055,35 @@ export async function callCapybaraAI(
   }
 }
 
+/** Keys to redact from interaction_history to prevent username leakage to LLM */
+const USERNAME_KEYS = ['author', 'username', 'reddit_username', 'user', 'author_name', 'op']
+
+function redactUsernamesFromHistory(obj: any): any {
+  if (obj === null || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(redactUsernamesFromHistory)
+  const out: Record<string, any> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    const keyLower = k.toLowerCase()
+    if (USERNAME_KEYS.some((uk) => keyLower === uk.toLowerCase() || keyLower.includes('author') || keyLower.includes('username'))) {
+      continue // omit the field
+    }
+    out[k] = redactUsernamesFromHistory(v)
+  }
+  return out
+}
+
 /**
  * Build the full system prompt for a persona from the interaction history JSON.
  * Template sections (preamble + task instructions) are identical across all personas;
  * only the interaction history data differs.
+ * Redacts author/username fields to prevent privacy leakage.
  */
 export function buildPersonaPrompt(interactionHistory: any): string {
-  const historyJson = typeof interactionHistory === 'string'
-    ? interactionHistory
-    : JSON.stringify(interactionHistory, null, 2)
+  const parsed = typeof interactionHistory === 'string'
+    ? (() => { try { return JSON.parse(interactionHistory) } catch { return {} } })()
+    : interactionHistory
+  const redacted = redactUsernamesFromHistory(parsed)
+  const historyJson = JSON.stringify(redacted, null, 2)
 
   return `You are a persona simulator. Your task is to generate ONE response that imitates how a specific User would reply to a given prompt.
 
@@ -1139,7 +1154,7 @@ export async function callClone(
 ): Promise<string> {
   const dbResult = await supabase
     .from('personas')
-    .select('interaction_history, reddit_username')
+    .select('interaction_history, anonymous_id')
     .eq('id', cloneId)
     .single()
 
@@ -1165,13 +1180,12 @@ export async function callClone(
     sourceLine: 576,
     metadata: {
       cloneId,
-      username: clone.reddit_username,
+      anonymousId: clone.anonymous_id,
       promptLength: systemPrompt.length
     }
   })
   console.log(`[CLONE] ✓✓✓ FETCHED PERSONA ${cloneId} FROM personas TABLE ✓✓✓`)
-  console.log(`[CLONE] ✓ Persona username: ${clone.reddit_username}`)
-  console.log(`[CLONE] ${cloneId} (${clone.reddit_username}) responding with dynamically built prompt...`)
+  console.log(`[CLONE] ${cloneId} (${clone.anonymous_id}) responding with dynamically built prompt...`)
 
   // Load this persona's conversation history from the session for continuity
   const historyMessages: BaseMessage[] = []

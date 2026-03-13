@@ -293,8 +293,8 @@ router.post('/message', async (req: AuthRequest, res: Response) => {
     const hasActiveClones = session.active_clones && session.active_clones.length > 0
     const hasExplicitClones = target_clones && target_clones.length > 0
 
-    // Route to Capybara only if explicitly requested OR if no clones available
-    const routeToCapybara = target === 'capybara' || (!hasActiveClones && !hasExplicitClones)
+    // Default: route to Capybara. Only route to clones when explicitly requested (target=clones or target_clones specified)
+    const routeToCapybara = !(target === 'clones' || hasExplicitClones)
 
     log.info('chat.route_decision', 'Message routing decision', {
       sourceFile: 'chat.ts',

@@ -104,16 +104,16 @@ router.put('/update-session', async (req: AuthRequest, res: Response) => {
 
     if (error) throw error
 
-    // Fetch clone names for the response
+    // Fetch clone anonymous_ids for the response
     let clone_names: string[] = []
     if (clone_ids && clone_ids.length > 0) {
       const { data: clones, error: clonesError } = await supabase
         .from('personas')
-        .select('reddit_username')
+        .select('anonymous_id')
         .in('id', clone_ids)
 
       if (!clonesError && clones) {
-        clone_names = clones.map((c: any) => c.reddit_username)
+        clone_names = clones.map((c: any) => c.anonymous_id)
       }
     }
 
