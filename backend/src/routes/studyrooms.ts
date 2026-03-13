@@ -1,6 +1,7 @@
 import { Router, Response } from 'express'
 import { supabase } from 'shared'
 import { AuthRequest } from '../middleware/auth'
+import { log } from '../services/logging'
 
 const router = Router()
 
@@ -157,46 +158,141 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
 /**
  * DELETE /studyrooms/:id
- * Delete a studyroom (session and messages cascade via FK)
+ * Delete a studyroom and all associated persistent state:
+ * - studyroom row
+ * - chat_session (cascades to chat_messages via FK)
+ * - checkpoint_writes and checkpoint_blobs (LangGraph thread state)
  */
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!
     const { id } = req.params
 
-    // Fetch the studyroom to get its session_id before deleting
-    const { data: studyroom } = await supabase
+    // 1. Fetch studyroom and linked session (need session_id and thread_id for cascading deletes)
+    const { data: studyroom, error: srFetchError } = await supabase
       .from('studyrooms')
-      .select('session_id')
+      .select('id, name, session_id')
       .eq('id', id)
       .eq('user_id', userId)
       .single()
 
-    if (!studyroom) {
+    if (srFetchError || !studyroom) {
+      log.warn('studyrooms.delete_not_found', 'Studyroom not found for delete', {
+        userId,
+        metadata: { studyroomId: id, error: srFetchError?.message }
+      })
       return res.status(404).json({ error: 'Studyroom not found' })
     }
 
-    // Delete the studyroom (ON DELETE SET NULL on session_id)
-    const { error } = await supabase
+    let sessionId: string | null = studyroom.session_id
+    let threadId: string | null = null
+    let messageCount = 0
+
+    if (sessionId) {
+      const { data: session } = await supabase
+        .from('chat_sessions')
+        .select('id, metadata')
+        .eq('id', sessionId)
+        .single()
+
+      if (session?.metadata?.thread_id) {
+        threadId = session.metadata.thread_id as string
+      }
+
+      const { count } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('session_id', sessionId)
+      messageCount = count ?? 0
+    }
+
+    log.info('studyrooms.delete_start', 'Deleting studyroom and all associated state', {
+      userId,
+      metadata: {
+        studyroomId: id,
+        studyroomName: studyroom.name,
+        sessionId,
+        threadId,
+        messageCount
+      }
+    })
+
+    // 2. Delete studyroom row
+    const { error: deleteError } = await supabase
       .from('studyrooms')
       .delete()
       .eq('id', id)
       .eq('user_id', userId)
 
-    if (error) throw error
-
-    // Also delete the orphaned chat session (cascades to chat_messages)
-    if (studyroom.session_id) {
-      await supabase
-        .from('chat_sessions')
-        .delete()
-        .eq('id', studyroom.session_id)
+    if (deleteError) {
+      log.error('studyrooms.delete_studyroom_failed', 'Failed to delete studyroom row', {
+        userId,
+        metadata: { studyroomId: id, error: deleteError.message }
+      })
+      throw deleteError
     }
 
-    console.log(`[STUDYROOMS] Deleted ${id}`)
+    // 3. Delete LangGraph checkpoint state (blobs first due to FK, then writes)
+    if (threadId) {
+      const { error: blobsError } = await supabase
+        .from('checkpoint_blobs')
+        .delete()
+        .eq('thread_id', threadId)
+
+      if (blobsError) {
+        log.warn('studyrooms.delete_checkpoint_blobs_failed', 'Failed to delete checkpoint blobs (may not exist)', {
+          userId,
+          metadata: { threadId, studyroomId: id, error: blobsError.message }
+        })
+      }
+
+      const { error: writesError } = await supabase
+        .from('checkpoint_writes')
+        .delete()
+        .eq('thread_id', threadId)
+
+      if (writesError) {
+        log.warn('studyrooms.delete_checkpoint_writes_failed', 'Failed to delete checkpoint writes (may not exist)', {
+          userId,
+          metadata: { threadId, studyroomId: id, error: writesError.message }
+        })
+      }
+    }
+
+    // 4. Delete chat session (cascades to chat_messages via ON DELETE CASCADE)
+    if (sessionId) {
+      const { error: sessionError } = await supabase
+        .from('chat_sessions')
+        .delete()
+        .eq('id', sessionId)
+
+      if (sessionError) {
+        log.error('studyrooms.delete_session_failed', 'Failed to delete chat session and messages', {
+          userId,
+          metadata: { sessionId, studyroomId: id, error: sessionError.message }
+        })
+        throw sessionError
+      }
+    }
+
+    log.info('studyrooms.delete_complete', 'Studyroom and all associated state deleted', {
+      userId,
+      metadata: {
+        studyroomId: id,
+        studyroomName: studyroom.name,
+        sessionId,
+        threadId,
+        messageCount
+      }
+    })
+
     res.json({ success: true })
   } catch (error) {
-    console.error('[STUDYROOMS] Delete error:', error)
+    const err = error as { message?: string }
+    log.error('studyrooms.delete_failed', `Studyroom delete failed: ${err?.message ?? String(error)}`, {
+      userId: req.userId,
+      metadata: { studyroomId: req.params.id }
+    })
     res.status(500).json({ error: 'Failed to delete studyroom' })
   }
 })
