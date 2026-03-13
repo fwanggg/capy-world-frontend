@@ -46,8 +46,8 @@ Runs frontend (port 3000) + backend (port 3001) concurrently.
 DEV=true npm run dev --workspace=backend
 ```
 Enables:
-- Auto-creates users in `app_users` table
-- Skips approval checks (sets `approved: true`)
+- Auto-creates users in `waitlist` table (approval_status: approved)
+- Skips approval checks
 - Accepts `x-user-id` header for testing
 - Uses mock sessions to avoid foreign key constraints
 - Real database for all persistence
@@ -171,7 +171,7 @@ All three workspaces extend the root `tsconfig.json`:
 
 - **Frontend**: 3000 (Vite dev server)
 - **Backend**: 3001 (Express server)
-- Frontend proxies `/api/*`, `/chat/*`, `/auth/*`, `/clones/*` requests to backend
+- Frontend proxies `/api/*`, `/chat/*`, `/auth/*`, `/clones/*`, `/studyrooms/*`, `/user/*` to backend
 
 Change ports in:
 - `frontend/vite.config.ts` (frontend port + proxy config)
@@ -183,21 +183,19 @@ Change ports in:
 
 ### Recent Architecture Updates (Latest Session)
 
-✅ **Three Independent Tools** — Replaced nested LLM calls with clean tool-based architecture:
-- `get_demographic_segments()` — Explore available demographic fields
-- `get_demographic_values()` — Get unique values for specified fields
-- `search_clones()` — Query personas with demographic filters
-- `create_conversation_session()` — Activate selected personas
+✅ **Eight Tools** — Full clone lifecycle: `get_demographic_segments`, `get_demographic_values`, `search_clones`, `create_conversation_session`, `recruit_clones`, `release_clones`, `list_clones`, `send_message`
 
-✅ **Personas Table** — Switched from `agent_memory` to `personas` table with full demographic data
+✅ **Personas Table** — Uses `personas` table with demographics. `callClone()` fetches `interaction_history`, builds prompt via `buildPersonaPrompt()` (redacts author/username for privacy).
 
-✅ **Reasoning Chain Capture** — Every Capybara response includes complete reasoning showing:
-- Each tool call iteration
-- Tool inputs and outputs
-- Human-readable summaries
-- Displayed in frontend UI with expand/collapse
+✅ **anonymous_id Privacy** — Reddit usernames never exposed. All user-facing identifiers use `anonymous_id` (hash of reddit_username). See `docs/PERSONA_PRIVACY.md`.
 
-✅ **No LLM Calls in Tools** — All intelligence in agentic loop, tools return pure data
+✅ **Studyrooms** — Each studyroom owns one chat_session. Sidebar for switching rooms. Cascade delete on studyroom delete.
+
+✅ **SSE Streaming** — Capybara responses stream reasoning steps via SSE when `stream: true`. Frontend shows live "responding" bubbles (Capybara + clones).
+
+✅ **Reasoning Chain** — Every Capybara response includes reasoning; frontend expand/collapse. Max 15 iterations.
+
+✅ **search_clones** — Uses `ilike` for location (wildcards), profession/gender/spending_power (case-insensitive). Orders by confidence when filters applied.
 
 ### Overview
 Capybara AI is an intelligent orchestrator that:
@@ -239,10 +237,13 @@ Frontend receives response + optional session_transition
 - `backend/src/middleware/auth.ts` - Authentication middleware
 
 **Frontend:**
-- `frontend/src/components/ChatInput.tsx` - @capybara mention parsing (line 14-19)
-- `frontend/src/components/GodMode.tsx` - Initial message handling, clone activation UI
-- `frontend/src/components/ConversationMode.tsx` - Group chat with clones
-- `frontend/src/components/ChatMessage.tsx` - Message rendering with role-based styling
+- `frontend/src/pages/Chat.tsx` - Studyroom-based flow, boot loads studyrooms → select room → init session
+- `frontend/src/components/UnifiedChat.tsx` - Main chat UI, streaming, session_transition handling
+- `frontend/src/components/StudyroomSidebar.tsx` - Studyroom list, create/delete/switch
+- `frontend/src/components/ChatInput.tsx` - @capybara mention parsing, recipient dropdown
+- `frontend/src/components/ChatMessage.tsx` - Message rendering, ThinkingSteps for Capybara
+- `frontend/src/components/RespondingBubble.tsx` - Live "responding" indicator (Capybara reasoning / clone names)
+- `frontend/src/components/ParticipantSidebar.tsx` - You, Capybara, active clones (anonymous_id)
 
 **Database Tables:**
 
@@ -256,8 +257,10 @@ Frontend receives response + optional session_transition
 - `profession` — Job/role (e.g., "engineer", "student", "dancer")
 - `spending_power` — "high", "mid", "low", or null
 - `interests` — Array of interests (e.g., ["technology", "startups"])
-- `interaction_history` — JSONB of the persona's Reddit interaction data (posts, comments, references, total_conversations). Used by `buildPersonaPrompt()` to dynamically construct the full system prompt.
+- `interaction_history` — JSONB of the persona's Reddit interaction data (posts, comments, references). Used by `buildPersonaPrompt()` to construct the system prompt. Author/username fields are redacted before sending to LLM.
 - `prompt` — Legacy full system prompt (retained for reference; no longer read by `callClone()`)
+
+**persona_embeddings** — Vector embeddings of interaction_history chunks for semantic search. Populated by `backend/src/scripts/embed-personas.ts`.
 - `created_at`, `updated_at` — Timestamps
 
 **chat_sessions** — Session state for each conversation
@@ -268,6 +271,13 @@ Frontend receives response + optional session_transition
 - `metadata` — Additional context (JSON)
 - `created_at`, `updated_at` — Timestamps
 
+**studyrooms** — User's research rooms (each owns one chat_session)
+- `id` — Studyroom UUID
+- `user_id` — User's auth UUID
+- `name` — Room name
+- `session_id` — FK to chat_sessions (created on first message or init)
+- Cascade delete: deleting studyroom deletes checkpoint data and chat_session
+
 **chat_messages** — Conversation history
 - `id` — Message UUID
 - `session_id` — Session UUID (foreign key)
@@ -276,45 +286,40 @@ Frontend receives response + optional session_transition
 - `content` — Message text
 - `created_at` — Timestamp
 
-**app_users** — User profiles and approval status
+**waitlist** — Approval workflow (used by checkApproval middleware)
 - `user_id` — User UUID (foreign key to auth.users)
-- `approved` — Boolean (true = can access app)
-- `google_id` — OAuth identifier
+- `approval_status` — 'approved' | 'pending' (must be 'approved' to access app)
 - `created_at`, `updated_at` — Timestamps
 
-### Three-Tool Architecture
+### Eight-Tool Architecture
 
-Capybara uses **three independent tools** with **no LLM calls inside them**. The LLM orchestrates tool usage in the agentic loop:
+Capybara uses **eight tools** with **no LLM calls inside them**. The LLM orchestrates tool usage in the agentic loop:
 
-**Tool 1: `get_demographic_segments()`**
-- Returns available demographic field names: `["age", "gender", "location", "profession", "spending_power", "interests"]`
-- Pure data retrieval — no computation
+**Tools 1–4:** `get_demographic_segments`, `get_demographic_values`, `search_clones`, `create_conversation_session` (same as before)
 
-**Tool 2: `get_demographic_values({segments: string[]})`**
-- Input: List of demographic field names to explore
-- Output: Distinct values for each field (e.g., `{profession: ["engineer", "student", "dancer"], gender: ["male", "female"]}`)
-- Pure database query — helps LLM understand available values before searching
+**Tool 5: `recruit_clones({demographic_filters?, count?, session_id})`** — Add personas without removing existing. Deduplicates.
 
-**Tool 3: `search_clones({profession?, age_min?, age_max?, gender?, location?, spending_power?, interests?, count?})`**
-- Input: Specific demographic filters (not natural language)
-- Output: Array of matching personas from `personas` table
-- Pure SQL query — LLM decides which filters to apply based on Tool 2 results
+**Tool 6: `release_clones({clone_ids?, release_all?, session_id})`** — Remove specific or all personas from session.
 
-**Tool 4: `create_conversation_session({clone_ids: string[], session_id: string})`**
-- Activates selected personas in the session
-- Triggers `session_transition` for frontend routing
+**Tool 7: `list_clones({session_id})`** — List active personas with demographics (returns `anonymous_id`, not reddit_username).
+
+**Tool 8: `send_message({prompt, clone_ids})`** — Send a question to specific personas, collect responses (e.g. pitch testing, surveys).
+
+**search_clones** uses `ilike` for location (`%value%`), profession/gender/spending_power (case-insensitive). When filters applied, orders by confidence from `llm_explanation` / interests.
+
+**session_transition** — `clone_names` are `anonymous_id` values (never reddit_username).
 
 ### Agentic Loop (Capybara AI)
 
 Located in `backend/src/services/langgraph-orchestrator.ts:callCapybaraAI()`
 
 ```typescript
-1. Bind all four tools to LLM
-2. Loop (max 10 iterations):
+1. Bind all eight tools to LLM
+2. Loop (max 15 iterations):
    a. Invoke LLM with messages and tools
    b. Check response.tool_calls
    c. If tool_calls:
-      - Execute each tool (1-4)
+      - Execute each tool (1-8)
       - Capture ReasoningStep for each execution
       - Append ToolMessage with result
       - Continue loop
@@ -408,16 +413,13 @@ Each tool execution creates a `ReasoningStep` and stores in `reasoning[]` array.
 **Backend (`backend/src/routes/chat.ts` POST /chat/message):**
 
 ```typescript
-// Routing decision (lines 187-200)
-const hasActiveClones = session.active_clones?.length > 0
-const hasExplicitClones = target_clones?.length > 0
-const routeToCapybara = target === 'capybara'
-  || (session.mode === 'god' && target !== 'clones' && !hasActiveClones && !hasExplicitClones)
+// Default: route to Capybara. Only route to clones when target=clones or target_clones specified
+const routeToCapybara = !(target === 'clones' || (target_clones && target_clones.length > 0))
 
 if (routeToCapybara) {
   callCapybaraAI(session_id, content, messageHistory)
 } else {
-  callMultipleClones(target_clones || session.active_clones, threadId, content)
+  callMultipleClones(target_clones || session.active_clones, session_id, content)
 }
 ```
 
@@ -435,25 +437,17 @@ if (capybaraMatch) {
 
 **Each Clone (backend/src/services/langgraph-orchestrator.ts:callClone):**
 
-1. Fetch clone from `agent_memory` table - **ALWAYS queries database, never mocks**
-2. Log: `[CLONE] ✓✓✓ FETCHED CLONE X FROM agent_memory TABLE ✓✓✓`
-3. Create LangChain messages with real system_prompt
+1. Fetch from `personas` table: `interaction_history`, `anonymous_id`
+2. Redact author/username fields from `interaction_history` (privacy)
+3. Build system prompt via `buildPersonaPrompt(interaction_history)`
 4. Invoke LLM
 5. Return response
 
-**Multiple Clones (backend/src/services/langgraph-orchestrator.ts:callMultipleClones):**
-- Execute all clones in parallel via Promise.all
-- Return array of { clone_id, content }
+**Multiple Clones (callMultipleClones):** Execute in parallel via Promise.all. Return `{ clone_id, content }`.
 
-### Real System Prompts
+### Persona Prompts
 
-Each clone's `system_prompt` in agent_memory contains:
-- Persona simulation instructions
-- User's actual Reddit post/comment history (JSON)
-- Context about their communication style
-- Enables authentic, personalized responses
-
-Example clone: User 11 (dryisnotwet) - infrastructure engineer with specific posting patterns
+`buildPersonaPrompt()` in langgraph-orchestrator.ts constructs the system prompt from a template + redacted `interaction_history`. The `interaction_history` JSONB (posts, comments, linked_content) is stripped of author/username fields before being sent to the LLM to prevent privacy leakage.
 
 ### UUID Mapping
 
@@ -476,9 +470,8 @@ Session ID: generateUUID() → random UUID v4
 **Enable with:** `DEV=true npm run dev --workspace=backend`
 
 **Features:**
-- Auto-creates users in app_users table
-- Sets `approved: true` (skips approval check)
-- Sets `google_id: 'dev_' + userHeader` (required field)
+- Auto-creates users in waitlist table (approval_status: approved)
+- Skips waitlist approval check
 - Uses real database for all persistence
 
 **Why needed:** Allows E2E testing without OAuth setup
@@ -486,13 +479,16 @@ Session ID: generateUUID() → random UUID v4
 ### API Contracts
 
 **POST /chat/init**
-- Request: `{ mode: "god" }`
+- Request: `{ mode: "god", studyroom_id?: string }` — If `studyroom_id` provided, reuse that studyroom's session
 - Response: Session with `active_clones: []`, UUID id
 
 **POST /chat/message**
-- Request: `{ session_id, content, target?: "capybara" | "clones" }`
-- Response: `{ user_message, ai_responses[], session_transition? }`
-- `session_transition` appears when clones are activated (contains clone_ids + clone_names)
+- Request: `{ session_id, content, target?: "capybara" | "clones", target_clones?: string[], stream?: boolean }`
+- Response: `{ user_message, ai_responses[], session_transition?, capybara_reasoning? }`
+- `session_transition`: `{ clone_ids, clone_names }` — clone_names are `anonymous_id` values
+- When `stream: true`, response is SSE; final event is `{ type: "done", ... }` with full payload
+
+**GET /studyrooms** — List user's studyrooms. **POST /studyrooms** — Create. **DELETE /studyrooms/:id** — Delete (cascade).
 
 **GET /chat/history**
 - Query: `session_id={uuid}`
@@ -517,22 +513,21 @@ Session ID: generateUUID() → random UUID v4
 
 **Expected log flow for "Find 3 engineers in their 30s":**
 ```
-[ORCHESTRATOR] Iteration 1/10
+[ORCHESTRATOR] Iteration 1/15
 [ORCHESTRATOR] Executing tool: get_demographic_segments
 [TOOL] Available segments: ['age', 'gender', 'location', 'profession', 'spending_power', 'interests']
 
-[ORCHESTRATOR] Iteration 2/10
+[ORCHESTRATOR] Iteration 2/15
 [ORCHESTRATOR] Executing tool: get_demographic_values
 [TOOL] profession values: ['engineer', 'student', 'dancer', ...]
 
-[ORCHESTRATOR] Iteration 3/10
+[ORCHESTRATOR] Iteration 3/15
 [ORCHESTRATOR] Executing tool: search_clones
-[SEARCH_SQL] Query: ... WHERE profession = 'engineer' AND age >= 30 AND age <= 39 LIMIT 3
-[TOOL] Found: 1 personas
+[TOOL] Found: 1 personas (ilike filters for profession, age range)
 
-[ORCHESTRATOR] Iteration 4/10
+[ORCHESTRATOR] Iteration 4/15
 [ORCHESTRATOR] Executing tool: create_conversation_session
-[TOOL] Session activated with 1 persona(s): EQ4C
+[TOOL] Session activated with 1 persona(s)
 [ORCHESTRATOR] Returning response with session_transition: true
 ```
 
@@ -588,7 +583,7 @@ The project uses **Supabase Auth** with **Google OAuth** for user authentication
 
 **Backend:**
 - All protected routes use `requireAuth` middleware which sets `req.userId`
-- Additional `checkApproval` middleware ensures `app_users.approved = true`
+- Additional `checkApproval` middleware ensures `waitlist.approval_status === 'approved'`
 - JWT verification uses Supabase public key (from `SUPABASE_JWT_SECRET`)
 - Never trust claims without signature verification
 
@@ -600,8 +595,7 @@ The project uses **Supabase Auth** with **Google OAuth** for user authentication
 
 **Database:**
 - `auth.users` table managed by Supabase (user_id, email, metadata)
-- `app_users` table for approval workflow (user_id, approved)
-- First login creates `app_users` entry with `approved: false` (or `true` in DEV)
+- `waitlist` table for approval workflow (user_id, approval_status). `checkApproval` middleware enforces `approval_status === 'approved'`.
 
 ### Development Setup
 
@@ -614,7 +608,7 @@ DEV=true npm run dev
 ```
 
 Features:
-- Auto-creates users in `app_users` table with `approved: true`
+- Auto-creates users in waitlist table with `approval_status: 'approved'`
 - Allows testing without manual approval
 - Uses real database for persistence
 
@@ -638,7 +632,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/chat/init
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | "Invalid JWT" | Token expired | Supabase SDK auto-refreshes; re-authenticate if needed |
-| "User not approved" (403) | `app_users.approved = false` | Enable `DEV=true` or admin approval |
+| "User not approved" (403) | `waitlist.approval_status !== 'approved'` | Enable `DEV=true` or admin approval |
 | "Missing Authorization header" (401) | Frontend not including JWT | Verify `getAuthHeaders()` called before fetch |
 | Google OAuth fails | Bad credentials or redirect URI | Check Google Cloud Console and `supabase/config.toml` |
 
@@ -665,9 +659,14 @@ const res = await fetch('/api/protected', {
 
 ---
 
+## Environment
+
+- **Single root `.env`** — Vite loads via `envDir: '..'`, backend via shared dotenv. No `frontend/.env` or `backend/.env`.
+
 ## Next Steps
 
 1. Run `npm install` to install dependencies
 2. Run `npm run dev` to start development (or `DEV=true npm run dev --workspace=backend` for backend-only with dev mode)
-3. Open `http://localhost:3000` to see the app
+3. Open `http://localhost:3000` — Chat page boots studyrooms, selects first room, inits session
 4. Follow `docs/E2E_TESTING.md` to test the full flow
+5. Apply database migrations (managed separately; not in repo)

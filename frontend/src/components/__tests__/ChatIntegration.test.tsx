@@ -1,11 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ConversationMode } from '../ConversationMode'
+import { UnifiedChat } from '../UnifiedChat'
 
 // Mock the auth service
 vi.mock('../../services/auth', () => ({
   getAuthHeaders: vi.fn(() => Promise.resolve({})),
 }))
+
+// CloneEntry: { id, name } - name is anonymous_id or display id
+const toClones = (names: string[]) => names.map((name, i) => ({ id: String(i + 1), name }))
 
 describe('Message recipient display integration', () => {
   beforeEach(() => {
@@ -39,8 +42,8 @@ describe('Message recipient display integration', () => {
   })
 
   it('displays recipient in message when sent with @mention', async () => {
-    const { container } = render(
-      <ConversationMode sessionId="session_123" activeClones={['eng']} />
+    render(
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['eng'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/)
@@ -58,9 +61,9 @@ describe('Message recipient display integration', () => {
   })
 
   it('routes message to capybara with correct target when @capybara is used', async () => {
-    render(<ConversationMode sessionId="session_123" activeClones={[]} />)
+    render(<UnifiedChat sessionId="session_123" activeClones={[]} />)
 
-    const textarea = screen.getByPlaceholderText(/Ask your clones/)
+    const textarea = screen.getByPlaceholderText(/Describe your research|Ask your clones/)
     fireEvent.change(textarea, { target: { value: '@capybara analyze my market' } })
     fireEvent.click(screen.getByText('Send'))
 
@@ -81,7 +84,7 @@ describe('Message recipient display integration', () => {
 
   it('displays @all_participants when broadcast to clones', async () => {
     render(
-      <ConversationMode sessionId="session_123" activeClones={['eng', 'designer']} />
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['eng', 'designer'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/)
@@ -97,7 +100,7 @@ describe('Message recipient display integration', () => {
 
   it('message without @mention routes to default without showing recipient', async () => {
     render(
-      <ConversationMode sessionId="session_123" activeClones={['eng']} />
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['eng'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/)
@@ -116,7 +119,7 @@ describe('Message recipient display integration', () => {
 
   it('displays specific clone name as recipient', async () => {
     render(
-      <ConversationMode sessionId="session_123" activeClones={['engineer', 'designer']} />
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['engineer', 'designer'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/)
@@ -132,7 +135,7 @@ describe('Message recipient display integration', () => {
 
   it('clears input after sending message', async () => {
     render(
-      <ConversationMode sessionId="session_123" activeClones={['eng']} />
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['eng'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/) as HTMLTextAreaElement
@@ -147,7 +150,7 @@ describe('Message recipient display integration', () => {
 
   it('preserves message content while stripping @mention', async () => {
     render(
-      <ConversationMode sessionId="session_123" activeClones={['eng']} />
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['eng'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/)
@@ -166,7 +169,7 @@ describe('Message recipient display integration', () => {
 
   it('handles multiple messages in conversation with different recipients', async () => {
     render(
-      <ConversationMode sessionId="session_123" activeClones={['eng', 'designer']} />
+      <UnifiedChat sessionId="session_123" activeClones={toClones(['eng', 'designer'])} />
     )
 
     const textarea = screen.getByPlaceholderText(/Ask your clones/) as HTMLTextAreaElement

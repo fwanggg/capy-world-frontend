@@ -28,4 +28,4 @@ const anonymous_id = createHash('md5').update(reddit_username).digest('hex').sli
 
 ## Migration
 
-See `docs/migrations/008-persona-anonymous-id.sql` for the schema change and backfill.
+Migrations are managed separately (not in repo). Schema: add `anonymous_id` column, backfill with `left(md5(reddit_username), 8)`.

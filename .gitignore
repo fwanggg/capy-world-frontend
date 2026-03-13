@@ -10,3 +10,6 @@ dist/
 *.swo
 ~*
 .worktrees/
+
+# Internal implementation details (do not expose)
+docs/migrations/

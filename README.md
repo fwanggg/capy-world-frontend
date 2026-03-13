@@ -1,14 +1,22 @@
 # Capybara AI
 
-A full-stack web application built with React, Node.js, and TypeScript.
+A full-stack web application for research and persona testing. Capybara AI orchestrates digital personas—you describe your research goal, and it finds, activates, and manages relevant personas for group conversations.
+
+## Features
+
+- **Agentic orchestration** — Capybara AI uses tools to explore demographics, search personas, and activate them in your session
+- **Studyrooms** — Organize research by room; each studyroom owns one chat session
+- **Group conversations** — Message multiple personas in parallel, or route to Capybara for synthesis
+- **Streaming** — Live reasoning steps and responding indicators
+- **Privacy** — Personas are identified by `anonymous_id` only; Reddit usernames are never exposed
 
 ## Project Structure
 
 ```
-├── frontend/       # React + TypeScript web application
+├── frontend/       # React 18 + TypeScript + Vite
 ├── backend/        # Express.js API server
 ├── shared/         # Shared types and utilities
-└── package.json    # Root workspace configuration
+└── package.json    # Root npm workspace
 ```
 
 ## Development
@@ -16,7 +24,7 @@ A full-stack web application built with React, Node.js, and TypeScript.
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
+- npm
 
 ### Installation
 
@@ -26,32 +34,22 @@ npm install
 
 ### Running Development Servers
 
-Start both frontend and backend in development mode:
-
 ```bash
 npm run dev
 ```
 
-This will:
-- Run the frontend on `http://localhost:3000`
-- Run the backend on `http://localhost:3001`
-- Automatically proxy API calls from frontend to backend
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:3001`
+- Proxies: `/api`, `/chat`, `/auth`, `/clones`, `/studyrooms`, `/user` → backend
 
-### Running Individual Services
+### Individual Services
 
-**Frontend only:**
 ```bash
-npm run dev --workspace=frontend
+npm run dev --workspace=frontend   # Frontend only
+npm run dev --workspace=backend   # Backend only
 ```
 
-**Backend only:**
-```bash
-npm run dev --workspace=backend
-```
-
-### Building
-
-Build all workspaces:
+### Build
 
 ```bash
 npm run build
@@ -61,94 +59,46 @@ npm run build
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development servers (frontend + backend) |
+| `npm run dev` | Start frontend + backend |
 | `npm run build` | Build all workspaces |
 | `npm run lint` | Lint all workspaces |
-| `npm test` | Run tests in all workspaces |
 
 ## Architecture
 
-### Frontend
-
-- React 18 with TypeScript
-- Vite for fast development and optimized builds
-- API integration with backend
-
-### Backend
-
-- Express.js server
-- CORS enabled for frontend communication
-- Runs on port 3001
-
-### Shared
-
-Shared types and utilities used by both frontend and backend.
+- **Frontend:** React 18, Vite, studyroom-based chat flow
+- **Backend:** Express.js, Capybara agentic loop with 8 tools, persona/clone execution
+- **Shared:** TypeScript types and utilities
+- **Database:** Supabase (PostgreSQL). Key tables: `personas`, `chat_sessions`, `chat_messages`, `studyrooms`, `waitlist`
 
 ## Authentication
 
-Capybara AI uses **Supabase Auth** with **Google OAuth** for authentication.
+Uses **Supabase Auth** with **Google OAuth**.
 
-### Setup (Development)
+### Setup
 
-1. **Supabase Configuration**
-   - Local Supabase instance runs on port 54321
-   - Google OAuth provider configured in `supabase/config.toml`
-   - JWT secret stored in `SUPABASE_JWT_SECRET` environment variable
-
-2. **Google OAuth Credentials**
-   - Get from [Google Cloud Console](https://console.cloud.google.com/)
-   - Create OAuth 2.0 credentials (Web application type)
-   - Authorized JavaScript Origins: `http://localhost:3000`
-   - Authorized Redirect URIs: `http://localhost:3000/auth/callback`
-   - Add Client ID to `supabase/config.toml`
-   - Add Client Secret to `.env` as `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`
-
-3. **Environment Variables**
-   - Backend: `SUPABASE_JWT_SECRET` (from Supabase project settings)
-   - Frontend: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_CLIENT_ID`
-   - See `.env.example` and `frontend/.env.example` for template
+1. **Supabase** — Configure in `supabase/config.toml`, JWT secret in `SUPABASE_JWT_SECRET`
+2. **Google OAuth** — Create credentials in [Google Cloud Console](https://console.cloud.google.com/). Redirect: `http://localhost:3000/auth/callback`
+3. **Environment** — Single root `.env`. See `.env.example`. Vite loads via `envDir: '..'`
 
 ### Sign-In Flow
 
-1. User clicks "Sign in with Google" on `/waitlist` page
-2. Google One-Tap UI loads and user selects account
-3. Frontend calls `supabase.auth.signInWithIdToken()` with Google credential
-4. Supabase creates session and JWT token automatically
-5. Redirect to `/auth/callback` to verify session
-6. On successful verification, redirect to `/chat`
-7. Supabase SDK automatically stores session in localStorage and manages token refresh
-
-### Approval Workflow
-
-- New users are created with `approved: false` in `app_users` table
-- Admin manually approves users in Supabase Dashboard
-- Protected endpoints check approval status before granting access
-- Development mode (`DEV=true`) auto-approves users on first login
-
-### API Authentication
-
-All backend API requests require:
-```
-Authorization: Bearer {jwt_token}
-```
-
-The Supabase SDK automatically includes this header when making requests. Frontend code uses:
-```typescript
-const authHeaders = await getAuthHeaders()
-const response = await fetch('/api/...', {
-  headers: { ...authHeaders, 'Content-Type': 'application/json' },
-})
-```
+1. User signs in with Google on `/waitlist`
+2. Supabase creates session, stores JWT
+3. Redirect to `/auth/callback` → `/chat`
+4. `checkApproval` middleware enforces `waitlist.approval_status === 'approved'`
 
 ### Development Mode
 
-Enable with:
 ```bash
 DEV=true npm run dev
 ```
 
-Features:
-- Auto-creates users in `app_users` table with `approved: true`
-- Bypasses Supabase OAuth setup for testing
-- Uses real database for persistence
-- Allows E2E testing with test credentials
+- Auto-creates users in `waitlist` with `approval_status: 'approved'`
+- Skips approval check
+- Uses real database
+
+## Documentation
+
+- `CLAUDE.md` — Detailed architecture and implementation guide
+- `docs/PERSONA_PRIVACY.md` — anonymous_id and future inserts
+- `docs/E2E_TESTING.md` — Testing guide
