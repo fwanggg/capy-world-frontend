@@ -5,12 +5,26 @@ import { createClient, User } from "@supabase/supabase-js";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
+/**
+ * No-op lock to avoid Supabase auth Web Locks API deadlocks.
+ * Supabase uses navigator.locks.request() internally; concurrent requests
+ * (e.g. multiple tabs, rapid auth checks) can cause "Lock broken by another
+ * request with the 'steal' option" AbortError on Vercel/production.
+ * See: https://github.com/supabase/supabase-js/issues/1594
+ */
+const noOpLock = async <R>(
+  _name: string,
+  _acquireTimeout: number,
+  fn: () => Promise<R>
+): Promise<R> => fn();
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    lock: noOpLock,
   },
 });
 
