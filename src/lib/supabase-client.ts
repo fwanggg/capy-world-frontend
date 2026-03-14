@@ -40,11 +40,17 @@ export async function waitForAuthInitialization(): Promise<void> {
 }
 
 export async function signInWithGoogle() {
+  // Prod (Vercel): NEXT_PUBLIC_APP_URL set from VERCEL_URL in next.config
+  // Dev: NEXT_PUBLIC_APP_URL unset → use window.location.origin (http://localhost:3000)
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== "undefined" ? window.location.origin : null) ||
+    "http://localhost:3000";
+  const redirectTo = `${origin}/auth/callback`;
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    },
+    options: { redirectTo },
   });
   if (error) throw error;
   return data;
