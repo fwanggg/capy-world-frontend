@@ -30,7 +30,7 @@ app.use(express.json())
 
 // SPA page routes for /chat (before API - production only, dev uses Vite)
 if (process.env.NODE_ENV === 'production') {
-  const frontendDist = path.resolve(__dirname, '../../frontend/dist')
+  const frontendDist = path.resolve(__dirname, '../../dist')
   app.get('/chat', (req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
   app.get('/chat/', (req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
 }
@@ -111,7 +111,7 @@ app.get('/api/hello', (req, res) => {
 
 async function start() {
   if (process.env.NODE_ENV === 'production') {
-    const frontendDist = path.resolve(__dirname, '../../frontend/dist')
+    const frontendDist = path.resolve(__dirname, '../../dist')
     app.use(express.static(frontendDist))
     app.get('*', (req, res) => {
       res.sendFile(path.join(frontendDist, 'index.html'))

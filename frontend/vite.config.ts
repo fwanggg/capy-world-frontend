@@ -4,6 +4,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   envDir: '..',
+  build: {
+    outDir: '../dist',
+    emptyOutDir: true,
+  },
   server: {
     port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
     proxy: {
