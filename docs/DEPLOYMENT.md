@@ -205,6 +205,18 @@ If issues occur:
 ### Issue: Token expiration errors
 **Solution:** Verify token refresh is working in frontend SDK
 
+## Vercel (Frontend Static Only)
+
+Deploy the frontend as a static SPA to Vercel. The backend must run elsewhere (Railway, Render, etc.).
+
+**Root Directory:** In Vercel Project Settings → Build & Deployment, set **Root Directory** to either:
+- **`frontend`** — Uses `frontend/vercel.json`; build outputs to `frontend/dist`
+- **Project root** (empty) — Uses root `vercel.json`; build outputs to `frontend/dist`
+
+**Config:** Both `vercel.json` (root) and `frontend/vercel.json` are provided. Use whichever matches your Root Directory.
+
+**Note:** The frontend calls `/api`, `/chat`, `/auth`, etc. Configure these as environment variables or proxy to your backend URL in production.
+
 ## References
 
 - [Supabase Documentation](https://supabase.com/docs)
