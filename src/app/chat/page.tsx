@@ -63,6 +63,10 @@ function ChatContent() {
           method: "POST",
           body: JSON.stringify({ mode: "god", studyroom_id: studyroomId }),
         });
+        if (initRes.status === 403) {
+          window.location.href = "/waitlist?pending=1";
+          return;
+        }
         if (!initRes.ok) throw new Error("Failed to init session");
         const session = await initRes.json();
         setSessionId(session.id);
@@ -103,6 +107,11 @@ function ChatContent() {
       const res = await apiFetch("/studyrooms");
       if (res.status === 401) {
         window.location.href = "/waitlist";
+        return;
+      }
+      if (res.status === 403) {
+        // Pending approval - redirect to waitlist with message
+        window.location.href = "/waitlist?pending=1";
         return;
       }
       if (!res.ok) throw new Error("Failed to load studyrooms");

@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signInWithGoogle } from "@/lib/supabase-client";
 
 export default function Waitlist() {
+  const searchParams = useSearchParams();
+  const isPending = searchParams.get("pending") === "1";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +65,21 @@ export default function Waitlist() {
           Get early access to Capybara AI and start testing your ideas with
           AI-powered user research.
         </p>
+
+        {isPending && (
+          <div
+            style={{
+              backgroundColor: "#fef3c7",
+              color: "#92400e",
+              padding: "var(--space-base)",
+              borderRadius: "0.375rem",
+              marginBottom: "var(--space-lg)",
+              fontSize: "var(--text-sm)",
+            }}
+          >
+            You&apos;re on the waitlist. We&apos;ll notify you when you&apos;re approved.
+          </div>
+        )}
 
         {error && (
           <div

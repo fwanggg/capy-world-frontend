@@ -1,7 +1,6 @@
 "use client";
 
 import { createClient, User } from "@supabase/supabase-js";
-import { logAppUrlOnce } from "./logging";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -41,12 +40,11 @@ export async function waitForAuthInitialization(): Promise<void> {
 }
 
 export async function signInWithGoogle() {
-  logAppUrlOnce();
-  // Prod (Vercel): NEXT_PUBLIC_APP_URL set from VERCEL_URL in next.config
-  // Dev: NEXT_PUBLIC_APP_URL unset → use window.location.origin (http://localhost:3000)
+  // Always use current page origin when in browser (fixes prod redirect to localhost
+  // when NEXT_PUBLIC_APP_URL is wrongly set). Fallback only for SSR/build-time.
   const origin =
-    process.env.NEXT_PUBLIC_APP_URL ||
     (typeof window !== "undefined" ? window.location.origin : null) ||
+    process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3000";
   const redirectTo = `${origin}/auth/callback`;
 
