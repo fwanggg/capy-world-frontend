@@ -135,8 +135,8 @@ DEV=true  # Optional: enable development mode
 
 **Frontend (`.env`)**
 ```
-VITE_SUPABASE_URL=http://localhost:54321
-VITE_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_URL=http://localhost:54321
+SUPABASE_ANON_KEY=your-anon-key
 VITE_GOOGLE_CLIENT_ID=your-google-client-id
 ```
 
@@ -361,7 +361,7 @@ Use Supabase Row Level Security (RLS) to:
 
 **Solution:**
 - Frontend: Call `getAuthHeaders()` before fetch
-- Verify `VITE_SUPABASE_ANON_KEY` is set
+- Verify `SUPABASE_ANON_KEY` is set
 - Check that user is signed in: `const user = await getUser()`
 
 ### Google OAuth Fails

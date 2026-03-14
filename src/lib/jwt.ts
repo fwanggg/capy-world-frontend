@@ -2,11 +2,14 @@ import { createSecretKey } from 'node:crypto'
 import { jwtVerify, importJWK, createRemoteJWKSet } from 'jose'
 import { log } from './logging'
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '')
+const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(
+  /\/$/,
+  ""
+)
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET
 
 if (!SUPABASE_URL && !SUPABASE_JWT_SECRET) {
-  log.error('jwt.env_missing', 'Set SUPABASE_URL (or VITE_SUPABASE_URL) for JWKS, or SUPABASE_JWT_SECRET for legacy HS256', {
+  log.error('jwt.env_missing', 'Set SUPABASE_URL for JWKS, or SUPABASE_JWT_SECRET for legacy HS256', {
     sourceFile: 'jwt.ts',
     sourceLine: 8
   })

@@ -69,8 +69,8 @@ PORT=3001
 
 ```env
 # Supabase Production
-VITE_SUPABASE_URL=<production supabase URL>
-VITE_SUPABASE_ANON_KEY=<production anon key>
+SUPABASE_URL=<production supabase URL>
+SUPABASE_ANON_KEY=<production anon key>
 
 ```
 
