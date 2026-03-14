@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient, User } from "@supabase/supabase-js";
+import { logAppUrlOnce } from "./logging";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -40,6 +41,7 @@ export async function waitForAuthInitialization(): Promise<void> {
 }
 
 export async function signInWithGoogle() {
+  logAppUrlOnce();
   // Prod (Vercel): NEXT_PUBLIC_APP_URL set from VERCEL_URL in next.config
   // Dev: NEXT_PUBLIC_APP_URL unset → use window.location.origin (http://localhost:3000)
   const origin =
