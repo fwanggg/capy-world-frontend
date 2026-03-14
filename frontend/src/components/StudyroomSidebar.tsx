@@ -3,6 +3,7 @@ import { useState } from 'react'
 export interface Studyroom {
   id: string
   name: string
+  display_name: string | null
   session_id: string | null
   created_at: string
   updated_at: string
@@ -30,7 +31,7 @@ export function StudyroomSidebar({
 
   const startEditing = (room: Studyroom) => {
     setEditingId(room.id)
-    setEditName(room.name)
+    setEditName(room.display_name ?? room.name)
   }
 
   const commitRename = () => {
@@ -156,7 +157,7 @@ export function StudyroomSidebar({
                   whiteSpace: 'nowrap',
                   flex: 1,
                 }}>
-                  {room.name}
+                  {room.display_name ?? room.name}
                 </span>
               )}
 

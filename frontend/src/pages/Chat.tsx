@@ -137,7 +137,7 @@ export function Chat() {
       })
       if (!res.ok) throw new Error('Failed to rename studyroom')
       const updated = await res.json()
-      setStudyrooms(prev => prev.map(r => r.id === id ? { ...r, name: updated.name } : r))
+      setStudyrooms(prev => prev.map(r => r.id === id ? { ...r, display_name: updated.display_name } : r))
     } catch (err: any) {
       console.error('[CHAT] renameStudyroom error:', err)
     }

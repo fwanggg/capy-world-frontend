@@ -41,7 +41,7 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['chat_messages']['Insert']>
       }
       studyrooms: {
-        Row: { id: string; user_id: string; name: string; session_id: string | null; created_at: string; updated_at: string }
+        Row: { id: string; user_id: string; name: string; display_name: string | null; session_id: string | null; created_at: string; updated_at: string }
         Insert: Omit<Database['public']['Tables']['studyrooms']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['studyrooms']['Insert']>
       }

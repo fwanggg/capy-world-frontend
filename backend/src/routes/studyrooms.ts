@@ -15,7 +15,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     const { data, error } = await supabase
       .from('studyrooms')
-      .select('id, name, session_id, created_at, updated_at')
+      .select('id, name, display_name, session_id, created_at, updated_at')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false })
 
@@ -39,7 +39,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     const { data: studyroom, error } = await supabase
       .from('studyrooms')
-      .select('id, name, session_id, created_at, updated_at')
+      .select('id, name, display_name, session_id, created_at, updated_at')
       .eq('id', id)
       .eq('user_id', userId)
       .single()
@@ -107,6 +107,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       .insert({
         user_id: userId,
         name: studyroomName,
+        display_name: name ? studyroomName : null,
         session_id: session.id,
       })
       .select()
@@ -138,7 +139,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
     const { data, error } = await supabase
       .from('studyrooms')
-      .update({ name, updated_at: new Date().toISOString() })
+      .update({ display_name: name, updated_at: new Date().toISOString() })
       .eq('id', id)
       .eq('user_id', userId)
       .select()
@@ -171,7 +172,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     // 1. Fetch studyroom and linked session (need session_id and thread_id for cascading deletes)
     const { data: studyroom, error: srFetchError } = await supabase
       .from('studyrooms')
-      .select('id, name, session_id')
+      .select('id, name, display_name, session_id')
       .eq('id', id)
       .eq('user_id', userId)
       .single()
