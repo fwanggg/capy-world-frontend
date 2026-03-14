@@ -1,0 +1,139 @@
+import { useState } from 'react'
+import type { ReasoningStep } from '@/types/chat'
+
+interface RespondingBubbleProps {
+  entityType: 'capybara' | 'clone'
+  displayName: string
+  reasoning?: ReasoningStep[]
+  isStreaming?: boolean
+}
+
+export function RespondingBubble({
+  entityType,
+  displayName,
+  reasoning = [],
+  isStreaming = false,
+}: RespondingBubbleProps) {
+  const [reasoningExpanded, setReasoningExpanded] = useState(true)
+  const isCapybara = entityType === 'capybara'
+  const hasReasoning = reasoning.length > 0
+
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'flex-start',
+      gap: 'var(--space-base)',
+      animation: 'respondingPulse 2s ease-in-out infinite',
+    }}>
+      <div style={{
+        maxWidth: '75%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-xs)',
+      }}>
+        {/* Entity label */}
+        <div style={{
+          fontSize: 'var(--text-xs)',
+          fontWeight: '500',
+          color: isCapybara ? 'var(--color-teal)' : 'var(--color-gray-500)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+        }}>
+          {displayName}
+        </div>
+
+        {/* Bubble */}
+        <div style={{
+          padding: 'var(--space-base) var(--space-lg)',
+          borderRadius: '0.5rem',
+          backgroundColor: 'var(--color-gray-50)',
+          border: isCapybara ? '2px solid var(--color-teal)' : '1px solid var(--color-gray-200)',
+          borderLeft: isCapybara ? '4px solid var(--color-teal)' : undefined,
+          boxShadow: isCapybara ? '0 0 0 3px rgba(13, 148, 136, 0.1)' : 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-sm)',
+        }}>
+          {/* Status line */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-sm)',
+            fontSize: 'var(--text-sm)',
+            color: isCapybara ? 'var(--color-teal)' : 'var(--color-gray-500)',
+            fontWeight: '500',
+          }}>
+            <span style={{
+              display: 'inline-block',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              backgroundColor: isCapybara ? 'var(--color-teal)' : 'var(--color-gray-400)',
+              animation: 'respondingDot 1.4s ease-in-out infinite',
+            }} />
+            {isCapybara
+              ? (isStreaming && hasReasoning
+                ? `Thinking... (${reasoning.length} step${reasoning.length !== 1 ? 's' : ''})`
+                : 'Thinking...')
+              : 'Responding...'}
+          </div>
+
+          {/* Reasoning steps (Capybara only) */}
+          {isCapybara && hasReasoning && (
+            <div>
+              <div
+                onClick={() => setReasoningExpanded(!reasoningExpanded)}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-gray-500)',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>{reasoningExpanded ? '▼' : '▶'}</span>
+                <span>{reasoning.length} step{reasoning.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {reasoningExpanded && (
+                <div style={{
+                  marginTop: 'var(--space-xs)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                }}>
+                  {reasoning.map((step, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        paddingLeft: 'var(--space-base)',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-gray-600)',
+                        lineHeight: '1.4',
+                      }}
+                    >
+                      {step.iteration}. {step.action} → {step.summary}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes respondingDot {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+        @keyframes respondingPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.85; }
+        }
+      `}</style>
+    </div>
+  )
+}

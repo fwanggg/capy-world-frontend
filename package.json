@@ -1,26 +1,38 @@
 {
   "name": "capybara-ai",
   "version": "1.0.0",
-  "description": "A full-stack web application",
+  "description": "Capybara AI - Full-stack Next.js application",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "backend",
-    "shared"
-  ],
   "scripts": {
-    "dev": "npm run dev --workspace=backend",
-    "dev:vercel": "concurrently \"DEV=true npm run dev --workspace=backend\" \"cd frontend && vercel dev --yes\"",
-    "build": "npm run build --workspaces",
-    "start:prod": "npm run build --workspace=frontend && NODE_ENV=production npm run dev --workspace=backend",
-    "test": "npm test --workspaces",
-    "lint": "npm run lint --workspaces"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2",
-    "vercel": "^39.0.0"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.31",
+    "@langchain/langgraph": "^1.2.1",
+    "@langchain/openai": "^1.2.12",
+    "@react-oauth/google": "^0.13.4",
+    "@supabase/supabase-js": "^2.38.0",
+    "jose": "^6.2.0",
+    "jwt-decode": "^4.0.0",
+    "next": "16.1.6",
+    "pg": "^8.20.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
