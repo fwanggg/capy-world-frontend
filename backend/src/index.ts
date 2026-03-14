@@ -1,6 +1,7 @@
 import { config } from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import http from 'http'
 
 config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env') })
 
@@ -12,8 +13,9 @@ import cloneRoutes from './routes/clones'
 import studyroomRoutes from './routes/studyrooms'
 import { requireAuth, requireApproval, AuthRequest } from './middleware/auth'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
-const PORT = 3001
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000
 
 // ⚠️ DEV MODE WARNING
 if (process.env.DEV === 'true') {
@@ -26,7 +28,13 @@ if (process.env.DEV === 'true') {
 app.use(cors())
 app.use(express.json())
 
-// Protected chat routes
+// SPA page routes for /chat (before API - production only, dev uses Vite)
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.resolve(__dirname, '../../frontend/dist')
+  app.get('/chat', (req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
+  app.get('/chat/', (req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
+}
+// Protected chat API routes
 app.use('/chat', requireAuth, requireApproval, chatRoutes)
 
 // Protected clone routes
@@ -101,6 +109,35 @@ app.get('/api/hello', (req, res) => {
   })
 })
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-})
+async function start() {
+  if (process.env.NODE_ENV === 'production') {
+    const frontendDist = path.resolve(__dirname, '../../frontend/dist')
+    app.use(express.static(frontendDist))
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(frontendDist, 'index.html'))
+    })
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`)
+    })
+  } else {
+    const { createServer: createViteServer } = await import('vite')
+    const react = (await import('@vitejs/plugin-react')).default
+    const server = http.createServer(app)
+    const vite = await createViteServer({
+      configFile: false,
+      root: path.resolve(__dirname, '../../frontend'),
+      plugins: [react()],
+      envDir: path.resolve(__dirname, '../..'),
+      server: {
+        middlewareMode: { server },
+        hmr: { port: PORT + 1000 },
+      },
+    })
+    app.use(vite.middlewares)
+    server.listen(PORT, () => {
+      console.log(`Dev server running on http://localhost:${PORT}`)
+    })
+  }
+}
+
+start()

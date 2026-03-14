@@ -9,9 +9,10 @@
     "shared"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=frontend\" \"npm run dev --workspace=backend\"",
+    "dev": "npm run dev --workspace=backend",
     "dev:vercel": "concurrently \"DEV=true npm run dev --workspace=backend\" \"cd frontend && vercel dev --yes\"",
     "build": "npm run build --workspaces",
+    "start:prod": "npm run build --workspace=frontend && NODE_ENV=production npm run dev --workspace=backend",
     "test": "npm test --workspaces",
     "lint": "npm run lint --workspaces"
   },

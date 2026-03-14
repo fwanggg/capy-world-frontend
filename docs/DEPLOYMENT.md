@@ -1,5 +1,21 @@
 # Production Deployment Checklist
 
+## Single Server Deployment (Recommended)
+
+Express serves both the API and the frontend from one process. One deployment, one port, no `BACKEND_URL`.
+
+**Development:**
+```bash
+npm run dev
+```
+Single server on `http://localhost:3000` (or `PORT`). Vite middleware provides HMR.
+
+**Production:**
+```bash
+NODE_ENV=production npm run start:prod
+```
+Builds frontend, then starts Express serving API + static `frontend/dist`. Uses `tsx` to run the backend (avoids compiled output). Deploy to Railway, Render, Fly.io, or any Node host. Set `PORT` in platform env; no `BACKEND_URL` needed.
+
 ## Pre-Deployment Review
 
 - [ ] All tests passing locally
