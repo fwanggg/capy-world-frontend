@@ -11,6 +11,20 @@ export interface LogOptions {
   durationMs?: number
 }
 
+let _appUrlLogged = false
+
+/**
+ * Log NEXT_PUBLIC_APP_URL once per process (for debugging OAuth redirect)
+ */
+export function logAppUrlOnce(): void {
+  if (_appUrlLogged) return
+  _appUrlLogged = true
+  const value = process.env.NEXT_PUBLIC_APP_URL ?? '(unset)'
+  logEvent('info', 'env.app_url', `NEXT_PUBLIC_APP_URL=${value}`, {
+    metadata: { NEXT_PUBLIC_APP_URL: value }
+  })
+}
+
 /**
  * Get the environment from NODE_ENV or DEV flag
  * Returns 'prod' for production, 'dev' for development

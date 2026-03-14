@@ -1,6 +1,7 @@
 import { verifyJWT, extractUserIdFromJWT } from "./jwt";
 import { userIdToUUID } from "./uuid";
 import { supabase } from "./supabase";
+import { logAppUrlOnce } from "./logging";
 
 export interface AuthResult {
   userId: string;
@@ -38,6 +39,7 @@ export async function getAuthFromRequest(
 }
 
 export async function requireAuth(req: Request): Promise<AuthResult | Response> {
+  logAppUrlOnce();
   const auth = await getAuthFromRequest(req);
   if (!auth) {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
