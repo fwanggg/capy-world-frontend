@@ -63,20 +63,16 @@ DEV=false
 PORT=3001
 ```
 
-### Frontend / Vercel Environment Variables
+### Frontend Environment Variables
 
-**Vercel Project Settings** (for frontend deploy):
+**For single-server deployment** (Railway, Render, etc.):
 
 ```env
 # Supabase Production
 VITE_SUPABASE_URL=<production supabase URL>
 VITE_SUPABASE_ANON_KEY=<production anon key>
 
-# Backend URL for API rewrites (frontend/vercel.ts)
-BACKEND_URL=https://api.yourdomain.com
 ```
-
-`BACKEND_URL` is used by `frontend/vercel.ts` to proxy API requests. Set once in Vercel; local dev uses `http://127.0.0.1:3001` when unset.
 
 ### Production Build
 
