@@ -1,14 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { signInWithGoogle } from "@/lib/supabase-client";
+import {
+  signInWithGoogle,
+  getAuthHeaders,
+  waitForAuthInitialization,
+} from "@/lib/supabase-client";
 
 export default function Waitlist() {
   const searchParams = useSearchParams();
-  const isPending = searchParams.get("pending") === "1";
+  const urlPending = searchParams.get("pending") === "1";
+  const [isPending, setIsPending] = useState(urlPending);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await waitForAuthInitialization();
+      const headers = await getAuthHeaders();
+      if (!("Authorization" in headers)) return;
+      try {
+        const res = await fetch("/api/user/profile", {
+          headers: { ...headers, "Content-Type": "application/json" },
+        });
+        if (!res.ok) return;
+        const user = await res.json();
+        if (!cancelled && user?.approval_status === "pending") {
+          setIsPending(true);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (urlPending) setIsPending(true);
+  }, [urlPending]);
 
   const handleSignIn = async () => {
     setLoading(true);
