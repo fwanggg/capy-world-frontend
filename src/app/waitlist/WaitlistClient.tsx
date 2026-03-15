@@ -1,61 +1,96 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   signInWithGoogle,
   getAuthHeaders,
-  waitForAuthInitialization,
 } from "@/lib/supabase-client";
+import { useAuth } from "@/hooks/useAuth";
+
+type ApprovalStatus = "approved" | "pending" | null;
 
 export default function WaitlistClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const urlPending = searchParams.get("pending") === "1";
-  const [isPending, setIsPending] = useState(urlPending);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { isSignedIn, loading: authLoading } = useAuth();
+  const [approvalLoading, setApprovalLoading] = useState(true);
+  const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [signInLoading, setSignInLoading] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isSignedIn) {
+      setApprovalLoading(false);
+      setApprovalStatus(null);
+      return;
+    }
+
+    setApprovalLoading(true);
     let cancelled = false;
     (async () => {
-      await waitForAuthInitialization();
-      const headers = await getAuthHeaders();
-      if (!("Authorization" in headers)) return;
       try {
+        const headers = await getAuthHeaders();
         const res = await fetch("/api/user/profile", {
           headers: { ...headers, "Content-Type": "application/json" },
         });
-        if (!res.ok) return;
-        const user = await res.json();
-        if (!cancelled && user?.approval_status === "pending") {
-          setIsPending(true);
+        if (cancelled) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setProfileError(body?.error ?? "Failed to check approval status");
+          setApprovalStatus(null);
+          return;
         }
+        const user = await res.json();
+        const status =
+          user?.approval_status === "approved"
+            ? "approved"
+            : user?.approval_status === "pending"
+              ? "pending"
+              : null;
+        setApprovalStatus(urlPending ? "pending" : status);
       } catch {
-        /* ignore */
+        if (!cancelled) setProfileError("Failed to check approval status");
+      } finally {
+        if (!cancelled) setApprovalLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isSignedIn, urlPending]);
 
   useEffect(() => {
-    if (urlPending) setIsPending(true);
-  }, [urlPending]);
+    if (!isSignedIn) {
+      setApprovalStatus(null);
+      setProfileError(null);
+    }
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    if (approvalStatus === "approved") {
+      router.replace("/chat");
+    }
+  }, [approvalStatus, router]);
 
   const handleSignIn = async () => {
-    setLoading(true);
-    setError(null);
+    setSignInLoading(true);
+    setSignInError(null);
 
     try {
       await signInWithGoogle();
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Authentication failed";
-      setError(message);
-      setLoading(false);
+      setSignInError(message);
+      setSignInLoading(false);
     }
   };
+
+  const displayError = profileError ?? signInError;
+  const loading = authLoading || (isSignedIn && approvalLoading);
 
   return (
     <div
@@ -99,7 +134,19 @@ export default function WaitlistClient() {
           AI-powered user research.
         </p>
 
-        {isPending && (
+        {loading && (
+          <div
+            style={{
+              textAlign: "center",
+              color: "var(--color-gray-500)",
+              marginBottom: "var(--space-lg)",
+            }}
+          >
+            Checking...
+          </div>
+        )}
+
+        {!loading && isSignedIn && approvalStatus === "pending" && (
           <div
             style={{
               backgroundColor: "#fef3c7",
@@ -114,7 +161,19 @@ export default function WaitlistClient() {
           </div>
         )}
 
-        {error && (
+        {!loading && isSignedIn && approvalStatus === "approved" && (
+          <div
+            style={{
+              textAlign: "center",
+              color: "var(--color-gray-600)",
+              marginBottom: "var(--space-lg)",
+            }}
+          >
+            Redirecting to Chat...
+          </div>
+        )}
+
+        {displayError && (
           <div
             style={{
               backgroundColor: "#fee2e2",
@@ -125,38 +184,42 @@ export default function WaitlistClient() {
               fontSize: "var(--text-sm)",
             }}
           >
-            {error}
+            {displayError}
           </div>
         )}
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            marginBottom: "var(--space-2xl)",
-          }}
-        >
-          <button
-            onClick={handleSignIn}
-            disabled={loading}
+        {!loading && !isSignedIn && (
+          <div
             style={{
-              padding: "var(--space-sm) var(--space-xl)",
-              fontSize: "var(--text-base)",
-              fontWeight: 600,
-              backgroundColor: loading
-                ? "var(--color-gray-300)"
-                : "var(--color-teal)",
-              color: "var(--color-white)",
-              border: "none",
-              borderRadius: "0.375rem",
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.7 : 1,
-              transition: "all var(--transition-fast)",
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: "var(--space-2xl)",
             }}
           >
-            {loading ? "Signing in with Google..." : "Sign in with Google"}
-          </button>
-        </div>
+            <button
+              onClick={handleSignIn}
+              disabled={signInLoading}
+              style={{
+                padding: "var(--space-sm) var(--space-xl)",
+                fontSize: "var(--text-base)",
+                fontWeight: 600,
+                backgroundColor: signInLoading
+                  ? "var(--color-gray-300)"
+                  : "var(--color-teal)",
+                color: "var(--color-white)",
+                border: "none",
+                borderRadius: "0.375rem",
+                cursor: signInLoading ? "not-allowed" : "pointer",
+                opacity: signInLoading ? 0.7 : 1,
+                transition: "all var(--transition-fast)",
+              }}
+            >
+              {signInLoading
+                ? "Signing in with Google..."
+                : "Sign in with Google"}
+            </button>
+          </div>
+        )}
 
         <p
           style={{

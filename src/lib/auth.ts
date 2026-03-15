@@ -51,11 +51,6 @@ export async function requireApproval(
   req: Request,
   userId: string
 ): Promise<Response | null> {
-  const host = req.headers.get("host") || "";
-  const isLocalhost =
-    host.includes("localhost") || host.includes("127.0.0.1");
-  if (isLocalhost) return null;
-
   const { data: user, error } = await supabase
     .from("waitlist")
     .select("approval_status")

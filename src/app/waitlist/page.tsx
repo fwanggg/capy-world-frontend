@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import WaitlistClient from "./WaitlistClient";
 
+export const dynamic = "force-dynamic";
+
 export default function Waitlist() {
   return (
     <Suspense
