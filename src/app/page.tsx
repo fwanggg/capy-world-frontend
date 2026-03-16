@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { TypingHero } from "@/components/TypingHero";
-import { LandingUseCaseAnimation } from "@/components/LandingUseCaseAnimation";
 import { LandingCompetitiveAnalysis } from "@/components/LandingCompetitiveAnalysis";
 
 export default function Home() {
@@ -93,7 +92,18 @@ export default function Home() {
               justifyContent: "center",
             }}
           >
-            <LandingUseCaseAnimation />
+            <video
+              src="/video/landing_video.mp4"
+              autoPlay
+              loop
+              playsInline
+              style={{
+                width: "min(66.67vw, 1100px)",
+                minWidth: "320px",
+                borderRadius: "0.75rem",
+                boxShadow: "var(--shadow-lg)",
+              }}
+            />
           </div>
         </div>
       </section>
