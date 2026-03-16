@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TypingHero } from "@/components/TypingHero";
+import { LandingUseCaseAnimation } from "@/components/LandingUseCaseAnimation";
 
 export default function Home() {
   return (
@@ -51,6 +52,22 @@ export default function Home() {
           >
             Get Early Access Now
           </Link>
+
+          <div
+            style={{
+              marginTop: "var(--space-4xl)",
+              width: "100vw",
+              position: "relative",
+              left: "50%",
+              right: "50%",
+              marginLeft: "-50vw",
+              marginRight: "-50vw",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
+            <LandingUseCaseAnimation />
+          </div>
         </div>
       </section>
 
@@ -214,8 +231,8 @@ export default function Home() {
               </h4>
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 <li style={{ marginBottom: "var(--space-sm)" }}>
-                  <a
-                    href="#"
+                  <Link
+                    href="/privacy"
                     style={{
                       color: "var(--color-gray-300)",
                       textDecoration: "none",
@@ -223,11 +240,11 @@ export default function Home() {
                     }}
                   >
                     Privacy
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a
-                    href="#"
+                  <Link
+                    href="/terms"
                     style={{
                       color: "var(--color-gray-300)",
                       textDecoration: "none",
@@ -235,7 +252,7 @@ export default function Home() {
                     }}
                   >
                     Terms
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>
