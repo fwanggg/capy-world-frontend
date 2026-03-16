@@ -8,27 +8,29 @@ export async function GET(req: Request) {
   if (authResult instanceof Response) return authResult;
   const userId = authResult.userId;
 
-  try {
-    const { data: user, error } = await supabase
-      .from("waitlist")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+  const { data: user, error } = await supabase
+    .from("waitlist")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
 
-    const status = user?.approval_status ?? (error ? "not_found" : "null");
-    log.info("approval.profile", `user_id=${userId} approval_status=${status}`, {
-      userId,
-      metadata: { approval_status: status, error: error?.message },
-    });
+  const status = user?.approval_status ?? (error ? "error" : "not_found");
+  log.info("approval.profile", `user_id=${userId} approval_status=${status}`, {
+    userId,
+    metadata: { approval_status: status, error: error?.message },
+  });
 
-    if (error) throw error;
-
-    return NextResponse.json(user);
-  } catch (error) {
+  if (error) {
     console.error("Profile error:", error);
     return NextResponse.json(
       { error: "Failed to fetch profile" },
       { status: 500 }
     );
   }
+
+  if (!user) {
+    return NextResponse.json({ approval_status: null });
+  }
+
+  return NextResponse.json(user);
 }

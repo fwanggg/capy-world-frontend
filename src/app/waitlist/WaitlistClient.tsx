@@ -35,7 +35,8 @@ export default function WaitlistClient() {
           headers: { ...headers, "Content-Type": "application/json" },
         });
         if (cancelled) return;
-        if (!res.ok && "Authorization" in headers) {
+        let user = res.ok ? await res.json() : null;
+        if ((!res.ok || user?.approval_status == null) && "Authorization" in headers) {
           await fetch("/api/waitlist/join", {
             method: "POST",
             headers: { ...headers, "Content-Type": "application/json" },
@@ -44,15 +45,15 @@ export default function WaitlistClient() {
           res = await fetch("/api/user/profile", {
             headers: { ...headers, "Content-Type": "application/json" },
           });
+          if (cancelled) return;
+          user = res.ok ? await res.json() : null;
         }
-        if (cancelled) return;
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
+          const body = user ?? (await res.json().catch(() => ({})));
           setProfileError(body?.error ?? "Failed to check approval status");
           setApprovalStatus(null);
           return;
         }
-        const user = await res.json();
         const status =
           user?.approval_status === "approved"
             ? "approved"
