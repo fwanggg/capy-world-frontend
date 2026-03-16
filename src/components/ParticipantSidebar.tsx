@@ -8,12 +8,11 @@ interface Participant {
 
 interface ParticipantSidebarProps {
   currentUserId: string
-  activeClones: CloneEntry[] // List of { id, name } where name is anonymous_id
+  activeClones: CloneEntry[] // List of { id, name } where we display id (numeric)
 }
 
 export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantSidebarProps) {
   // Build participant list in order: You, Capybara, Active Clones
-  // clone.name is already anonymous_id from backend - use directly, no rehashing
   const participants: Participant[] = [
     {
       id: 'you',
@@ -23,12 +22,12 @@ export function ParticipantSidebar({ currentUserId, activeClones }: ParticipantS
     {
       id: 'capybara',
       type: 'capybara',
-      displayName: 'Capybara'
+      displayName: 'Capysan'
     },
     ...activeClones.map(clone => ({
       id: clone.id,
       type: 'clone' as const,
-      displayName: clone.name
+      displayName: clone.id
     }))
   ]
 

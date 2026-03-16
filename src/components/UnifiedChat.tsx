@@ -61,10 +61,10 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
       setMessages((prev) => [...prev, ...responsesWithReasoning])
     }
     if (data.session_transition) {
-      const { clone_ids, clone_names } = data.session_transition
-      const newClones: CloneEntry[] = clone_ids.map((id, idx) => ({
+      const { clone_ids } = data.session_transition
+      const newClones: CloneEntry[] = clone_ids.map((id) => ({
         id: String(id),
-        name: clone_names[idx] || String(id),
+        name: String(id), // Use numeric id for consistent display
       }))
       onActiveClonesChange?.(newClones)
     }
@@ -162,7 +162,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
         if (recipient === 'all_participants') {
           requestBody.target = 'clones'
         } else if (recipient) {
-          const cloneRecord = activeClones.find(c => c.name === recipient)
+          const cloneRecord = activeClones.find(c => c.id === recipient || c.name === recipient)
           if (cloneRecord) {
             requestBody.target_clones = [cloneRecord.id]
           } else {
@@ -179,13 +179,13 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
       if (routeToCapybara) {
         await sendStreamingCapybara(requestBody, headers, controller.signal)
       } else {
-        // Clone path: show per-clone responding bubbles (clone.name is anonymous_id)
+        // Clone path: show per-clone responding bubbles (use numeric id)
         const cloneNames = requestBody.target_clones
           ? requestBody.target_clones.map((id: string) => {
               const clone = activeClones.find(c => c.id === id || c.name === id)
-              return clone ? clone.name : id
+              return clone ? clone.id : id
             })
-          : activeClones.map(c => c.name)
+          : activeClones.map(c => c.id)
         setResponding({ type: 'clones', names: cloneNames })
 
         const response = await fetch('/chat/message', {
@@ -256,7 +256,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
               fontSize: 'var(--text-base)',
               margin: '0.5rem 0 0 0',
             }}>
-              Talk to Capybara AI to plan your research. For example: "I want to test my sales pitch on game developers."
+              Talk to Capysan to plan your research. For example: "I want to test my sales pitch on game developers."
             </p>
           </div>
         )}
@@ -278,7 +278,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
         {responding?.type === 'capybara' && (
           <RespondingBubble
             entityType="capybara"
-            displayName="Capybara AI"
+            displayName="Capysan"
             reasoning={responding.reasoning}
             isStreaming={true}
           />
@@ -312,7 +312,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
         onSend={handleSendMessage}
         disabled={loading}
         placeholder={activeClones.length > 0 ? "Ask your clones a question..." : "Describe your research goal..."}
-        activeClones={activeClones.map(c => c.name)}
+        activeClones={activeClones.map(c => c.id)}
       />
     </div>
   )

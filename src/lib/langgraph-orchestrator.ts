@@ -1,24 +1,23 @@
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage } from '@langchain/core/messages'
 import { createDeepSeekLLM } from './llm'
-import { supabase } from './supabase'
+import { supabase, supabaseForFunctions } from './supabase'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import { log } from './logging'
+import { wouldExceedPersonaLimit } from './persona-limit'
 
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
-  return `You are Capybara AI. Your job is to intelligently manage personas and facilitate group conversations.
+  return `You are Capysan. Your job is to intelligently manage personas and facilitate group conversations.
 
 AVAILABLE TOOLS & WORKFLOWS:
 
 1. RECRUITING PERSONAS (Initial or Adding More):
    - When user asks to find/recruit personas:
-     a. You MUST ALWAYS call get_demographic_segments() first to see available fields.
-     b. You MUST ALWAYS call get_demographic_values({segments: [...]}) next to explore the actual distinct values for the segments you plan to filter on (for example professions, locations, spending_power).
-     c. When constructing filters for search_clones, you MUST ONLY use values that were actually returned by get_demographic_values for those segments. Do NOT invent or guess new profession or location strings.
-     d. After you have chosen concrete filter values from get_demographic_values, call search_clones({...filters..., count: N}) to find matching personas.
-     e. If search_clones ever returns 0 personas, you should either relax filters (for example by dropping the narrowest field) or choose different values from get_demographic_values, then call search_clones again until you find at least some personas that reasonably match the user's request.
-     f. Once you have personas, call create_conversation_session({clone_ids, session_id}) to activate them.
-     g. Respond: "I've activated [count] personas." (Do not list usernames or identifiers.)
+     a. SEMANTIC SEARCH (preferred for vague/freeform requests): Translate User intent into keyword-rich query. Do NOT dump raw input — expand: "hate Atomic" → "hate Atomic design, minimal UI, design systems criticism"; "into skiing" → "skiing, winter sports, outdoor". Call search_clones({query: "...", count: N}). Add demographic filters (age_min, profession, etc.) only if user specified them; use get_demographic_values first for valid values.
+     b. DEMOGRAPHIC-ONLY (when user wants specific profession/location/age): Call get_demographic_segments(), then get_demographic_values({segments: [...]}), then search_clones({...filters..., count: N}) without query. Use ONLY values returned by get_demographic_values.
+     c. If search_clones returns 0 personas: for semantic path, broaden query; for demographic path, relax filters.
+     d. Once you have personas, call create_conversation_session({clone_ids, session_id}) to activate them.
+     e. Respond: "I've activated [count] personas." (Do not list usernames or identifiers.)
    - When user asks to add/recruit more personas to existing group:
      a. Call recruit_clones({demographic_filters, count, session_id})
      b. Respond with who was added and total active
@@ -42,14 +41,14 @@ AVAILABLE TOOLS & WORKFLOWS:
      a. Call list_clones({session_id}) to get active persona IDs (if needed)
      b. Call send_message({prompt: "...", clone_ids: [...]}) with a clear question
      c. Present the responses in a structured format (table or list)
-   - Use this for: pitch testing, opinion gathering, quick surveys, preference checks
+   - Use this for: pitch testing, opinion gathering, quick surveys, preference checks etc.
    - You decide the right question to ask based on what the customer needs
    - You can call send_message multiple times with different questions
 
 TOOLS (Use based on user intent):
 - get_demographic_segments(): List available demographic fields
 - get_demographic_values(segments): Get unique values for fields
-- search_clones(filters): Find personas matching criteria
+- search_clones(query?, filters): Find personas by semantic search (query) or demographics
 - create_conversation_session(clone_ids, session_id): Activate initial personas
 - recruit_clones(demographic_filters, count, session_id): Add personas without removing existing
 - release_clones(clone_ids | release_all, session_id): Remove personas from session
@@ -73,6 +72,8 @@ IMPORTANT TIPS:
 - After any recruit/release operation, consider calling list_clones() to confirm changes
 - When releasing specific clones, you need their IDs - ask user if unclear
 - Be conversational and explain what you're doing: "I'm adding 3 engineers in their 30s..."
+- Persona limit: Each customer has a max of 50 personas across all study rooms. If create_conversation_session or recruit_clones returns a limit error, tell the user to release some personas first.
+- When a tool returns an error (e.g. search_clones "Embed search failed"), relay it clearly to the user so they know what went wrong. Do not pretend the operation succeeded.
 
 ${labeledHistory ? `CONVERSATION HISTORY:\n${labeledHistory}\n` : ''}
 
@@ -177,23 +178,103 @@ function getSortConfidence(
 }
 
 /**
- * Tool 3: Search personas with demographic filters
- * Simple database query - NO LLM calls
- * LLM does the translation in the agentic loop
+ * Tool 3: Search personas - semantic (embedding) or demographic-only
+ * When query is provided: calls embed Edge Function via supabase.functions.invoke
+ * When no query: uses demographic filters on personas table
+ * authToken: user's JWT (Bearer xxx) for embed auth; fallback to anon when absent (e.g. DEV)
  */
-async function searchClones(input: {
-  count?: number
-  profession?: string
-  age_min?: number
-  age_max?: number
-  gender?: string
-  location?: string
-  spending_power?: string
-  interests?: string[]
-}): Promise<string> {
-  console.log('[TOOL] search_clones called with filters:', JSON.stringify(input, null, 2))
+async function searchClones(
+  input: {
+    query?: string
+    count?: number
+    profession?: string
+    age_min?: number
+    age_max?: number
+    gender?: string
+    location?: string
+    spending_power?: string
+    interests?: string[]
+  },
+  authToken?: string
+): Promise<string> {
+  console.log('[TOOL] search_clones called with:', JSON.stringify(input, null, 2))
 
   const requestedCount = input.count || 5
+
+  // Semantic search path: query provided → embed Edge Function via Supabase client
+  if (input.query && input.query.trim()) {
+    try {
+      const invokeHeaders: Record<string, string> = {}
+      if (authToken) invokeHeaders['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`
+
+      const { data, error } = await supabaseForFunctions.functions.invoke('embed', {
+        body: {
+          input: input.query.trim(),
+          count: requestedCount,
+          match_threshold: 0.6,
+          age_min: input.age_min ?? undefined,
+          age_max: input.age_max ?? undefined,
+          profession: input.profession ?? undefined,
+          gender: input.gender ?? undefined,
+          location: input.location ?? undefined,
+          spending_power: input.spending_power ?? undefined,
+          interests: input.interests ?? undefined,
+        },
+        headers: Object.keys(invokeHeaders).length > 0 ? invokeHeaders : undefined,
+      })
+
+      if (error) {
+        let detail = error instanceof Error ? error.message : String(error)
+        let code: string | undefined
+        const err = error as { context?: Response }
+        if (err?.context instanceof Response) {
+          try {
+            const body = (await err.context.json()) as { error?: string; message?: string; code?: string }
+            detail = body?.error ?? body?.message ?? detail
+            code = body?.code
+          } catch {
+            try {
+              const text = await err.context.text()
+              if (text) detail = text.length > 200 ? `${text.slice(0, 200)}...` : text
+            } catch {
+              /* keep detail */
+            }
+          }
+        }
+        const errMsg = code ? `[${code}] ${detail}` : detail
+        console.log('[TOOL] search_clones embed error:', errMsg)
+        return JSON.stringify({ error: `Embed search failed: ${errMsg}` })
+      }
+
+      const payload = data as { personas?: unknown[]; error?: string; code?: string }
+      if (payload?.error) {
+        const errMsg = payload.code ? `[${payload.code}] ${payload.error}` : payload.error
+        console.log('[TOOL] search_clones embed error (in body):', errMsg)
+        return JSON.stringify({ error: `Embed search failed: ${errMsg}` })
+      }
+
+      const personas = payload?.personas ?? []
+      const result = {
+        personas: personas.map((p: any) => ({
+          id: p.id,
+          anonymous_id: p.anonymous_id,
+          age: p.age,
+          gender: p.gender,
+          location: p.location,
+          profession: p.profession,
+          spending_power: p.spending_power,
+        })),
+      }
+      console.log('[TOOL] Found:', result.personas.length, 'personas (semantic)')
+      return JSON.stringify(result)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.log('[TOOL] search_clones embed exception:', msg)
+      return JSON.stringify({ error: `Embed search failed: ${msg}` })
+    }
+  }
+
+  // Demographic-only path (no query)
   const interestNames =
     input.interests && Array.isArray(input.interests) && input.interests.length > 0 ? input.interests : null
 
@@ -208,32 +289,27 @@ async function searchClones(input: {
       (interestNames && interestNames.length > 0)
     )
 
-  // Select confidence sources when we have filters so we can order by confidence
   const selectFields = hasFilters
     ? 'id, anonymous_id, age, gender, location, profession, spending_power, interests, llm_explanation'
     : 'id, anonymous_id, age, gender, location, profession, spending_power'
 
-  // Single deterministic query: demographics + jsonb interests filter + LIMIT (fetch more when we'll sort by confidence)
-  // Location uses ilike with %wildcards% so "USA" matches "Seattle, USA", "New York, USA", etc.
-  // Profession/gender/spending_power use ilike for case-insensitive exact match.
-  let query = supabase.from('personas').select(selectFields)
-  if (input.profession) query = query.ilike('profession', input.profession)
-  if (input.gender) query = query.ilike('gender', input.gender)
-  if (input.location) query = query.ilike('location', `%${input.location}%`)
-  if (input.spending_power) query = query.ilike('spending_power', input.spending_power)
-  if (input.age_min != null) query = query.gte('age', input.age_min)
-  if (input.age_max != null) query = query.lte('age', input.age_max)
+  let dbQuery = supabase.from('personas').select(selectFields)
+  if (input.profession) dbQuery = dbQuery.ilike('profession', input.profession)
+  if (input.gender) dbQuery = dbQuery.ilike('gender', input.gender)
+  if (input.location) dbQuery = dbQuery.ilike('location', `%${input.location}%`)
+  if (input.spending_power) dbQuery = dbQuery.ilike('spending_power', input.spending_power)
+  if (input.age_min != null) dbQuery = dbQuery.gte('age', input.age_min)
+  if (input.age_max != null) dbQuery = dbQuery.lte('age', input.age_max)
   if (interestNames && interestNames.length > 0) {
     const orClause = interestNames
       .map((n) => `interests.cs.${JSON.stringify([{ name: n }])}`)
       .join(',')
-    query = query.or(orClause)
+    dbQuery = dbQuery.or(orClause)
   }
-  // When ordering by confidence we need enough rows to pick top N; otherwise just requestedCount
   const fetchLimit = hasFilters ? Math.min(100, Math.max(requestedCount * 3, 20)) : requestedCount
-  query = query.limit(fetchLimit)
+  dbQuery = dbQuery.limit(fetchLimit)
 
-  const { data: rawData, error } = await query
+  const { data: rawData, error } = await dbQuery
 
   if (error) {
     console.log('[TOOL] search_clones error:', error)
@@ -242,12 +318,10 @@ async function searchClones(input: {
 
   let data = rawData || []
 
-  // When filters were applied, order by confidence for the matched field(s), then take requestedCount
   if (hasFilters && data.length > 0) {
     data = [...data].sort((a: any, b: any) => {
       const confA = getSortConfidence(a, input, interestNames)
       const confB = getSortConfidence(b, input, interestNames)
-      // Descending: higher confidence first; nulls last
       if (confA == null && confB == null) return 0
       if (confA == null) return 1
       if (confB == null) return -1
@@ -255,10 +329,6 @@ async function searchClones(input: {
     })
     data = data.slice(0, requestedCount)
   }
-
-  console.log(
-    `[TOOL] Database returned ${rawData?.length || 0} rows${hasFilters ? ', ordered by confidence' : ''}`,
-  )
 
   const result = {
     personas: (data || []).map((d: any) => ({
@@ -272,7 +342,7 @@ async function searchClones(input: {
     })),
   }
 
-  console.log('[TOOL] Found:', result.personas.length, 'personas')
+  console.log('[TOOL] Found:', result.personas.length, 'personas (demographic)')
   return JSON.stringify(result)
 }
 
@@ -288,6 +358,22 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
     session_id: input.session_id,
     demoMode: isDemoMode,
   })
+
+  // Fetch session to get user_id for limit check
+  const { data: session, error: sessionErr } = await supabase
+    .from('chat_sessions')
+    .select('user_id')
+    .eq('id', input.session_id)
+    .single()
+
+  if (sessionErr || !session?.user_id) {
+    return JSON.stringify({ error: 'Session not found' })
+  }
+
+  const limitCheck = await wouldExceedPersonaLimit(session.user_id, input.session_id, input.clone_ids.length)
+  if (!limitCheck.ok) {
+    return JSON.stringify({ error: limitCheck.message, limit: limitCheck.limit, total: limitCheck.total })
+  }
 
   // Fetch persona anonymous_ids from database
   const result = await supabase
@@ -337,6 +423,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
  * Deduplicates new recruits against already-active clones
  */
 async function recruitClones(input: {
+  query?: string
   demographic_filters?: {
     profession?: string
     age_min?: number
@@ -351,10 +438,10 @@ async function recruitClones(input: {
 }): Promise<string> {
   console.log('[TOOL] recruit_clones called with:', JSON.stringify(input, null, 2))
 
-  // Get current active clones from session
+  // Get current active clones and user_id from session
   const { data: session, error: sessionError } = await supabase
     .from('chat_sessions')
-    .select('active_clones')
+    .select('active_clones, user_id')
     .eq('id', input.session_id)
     .single()
 
@@ -365,8 +452,9 @@ async function recruitClones(input: {
   const currentCloneIds = session.active_clones || []
   console.log('[TOOL] Current active clones:', currentCloneIds)
 
-  // Search for new clones matching filters
+  // Search for new clones (semantic or demographic)
   const searchInput = {
+    query: input.query,
     ...input.demographic_filters,
     count: input.count || 3,
   }
@@ -395,6 +483,11 @@ async function recruitClones(input: {
 
   // Merge: current + new (deduplicated)
   const mergedCloneIds = [...new Set([...currentCloneIds, ...newCloneIds])]
+
+  const limitCheck = await wouldExceedPersonaLimit(session.user_id, input.session_id, mergedCloneIds.length)
+  if (!limitCheck.ok) {
+    return JSON.stringify({ error: limitCheck.message, limit: limitCheck.limit, total: limitCheck.total })
+  }
 
   // Update session via the endpoint
   const updateResult = await supabase
@@ -638,20 +731,30 @@ const demographicValuesTool = tool(getDemographicValues, {
   }),
 })
 
-const searchClonesTool = tool(searchClones, {
-  name: 'search_clones',
-  description: 'Search personas database with demographic filters and optional interests list. Use demographic fields (age, gender, location, profession, spending_power) as hard filters and interests[] for topic-based matching. No LLM calls are made inside this tool.',
+const searchClonesToolSchema = {
+  name: 'search_clones' as const,
+  description: `Search personas by semantic similarity (when query provided) or demographic filters. Prefer semantic search for freeform/vague user requests.
+- query: REQUIRED for semantic search. Translate user intent into keyword-rich search terms — do NOT dump raw user input. Expand vague phrases: "users who hate Atomic" → "hate Atomic design, prefer minimal UI, critical of design systems". "people into skiing" → "skiing, winter sports, outdoor recreation". Combine topics, attitudes, and concrete terms.
+- Demographics (age_min, age_max, profession, etc.): Optional filters applied together with semantic search. Use get_demographic_values first for valid values.`,
   schema: z.object({
+    query: z.string().optional().describe('Search terms for semantic matching. Translate user intent into keywords — expand vague phrases, add related terms. Required for semantic search.'),
     count: z.number().optional().describe('How many personas to return, default 5'),
-    profession: z.string().optional().describe('Exact profession value to filter by'),
+    profession: z.string().optional().describe('Exact profession value (use get_demographic_values)'),
     age_min: z.number().optional().describe('Minimum age'),
     age_max: z.number().optional().describe('Maximum age'),
-    gender: z.string().optional().describe('Exact gender value to filter by'),
-    location: z.string().optional().describe('Exact location value to filter by'),
-    spending_power: z.string().optional().describe('Exact spending power value to filter by'),
-    interests: z.array(z.string()).optional().describe('List of interest names to match against persona.interests (e.g. ["nba", "educational_technology"])'),
+    gender: z.string().optional().describe('Exact gender value'),
+    location: z.string().optional().describe('Location substring (e.g. Seattle, USA)'),
+    spending_power: z.string().optional().describe('Exact spending power value'),
+    interests: z.array(z.string()).optional().describe('Interest names matching persona.interests'),
   }),
-})
+}
+
+function createSearchClonesTool(authToken?: string) {
+  return tool(
+    async (args: Parameters<typeof searchClones>[0]) => searchClones(args, authToken),
+    searchClonesToolSchema
+  )
+}
 
 const createConversationSessionTool = tool(createConversationSession, {
   name: 'create_conversation_session',
@@ -664,17 +767,18 @@ const createConversationSessionTool = tool(createConversationSession, {
 
 const recruitClonesTool = tool(recruitClones, {
   name: 'recruit_clones',
-  description: 'Add new clones to session without removing existing ones. Search for personas matching demographics and/or explicit interests and add them to the conversation. Automatically deduplicates against already-active clones.',
+  description: 'Add new clones to session without removing existing ones. Use query for semantic search (translate user intent to keywords) or demographic_filters for structured search. Deduplicates against already-active clones.',
   schema: z.object({
+    query: z.string().optional().describe('Search terms for semantic matching. Translate user intent into keywords.'),
     demographic_filters: z.object({
-      profession: z.string().optional().describe('Exact profession value to filter by'),
-      age_min: z.number().optional().describe('Minimum age'),
-      age_max: z.number().optional().describe('Maximum age'),
-      gender: z.string().optional().describe('Exact gender value to filter by'),
-      location: z.string().optional().describe('Exact location value to filter by'),
-      spending_power: z.string().optional().describe('Exact spending power value to filter by'),
-      interests: z.array(z.string()).optional().describe('List of interest names to match against persona.interests'),
-    }).optional().describe('Demographic and/or interest filters to search by'),
+      profession: z.string().optional(),
+      age_min: z.number().optional(),
+      age_max: z.number().optional(),
+      gender: z.string().optional(),
+      location: z.string().optional(),
+      spending_power: z.string().optional(),
+      interests: z.array(z.string()).optional(),
+    }).optional(),
     count: z.number().optional().describe('How many new personas to recruit, default 3'),
     session_id: z.string().describe('The chat session ID'),
   }),
@@ -734,7 +838,7 @@ export async function callCapybaraAI(
   userMessage: string,
   messageHistory?: BaseMessage[],
   labeledHistory?: string,
-  options?: { onReasoningStep?: (step: ReasoningStep) => void }
+  options?: { onReasoningStep?: (step: ReasoningStep) => void; authToken?: string }
 ): Promise<CallCapybaraAIResponse> {
   log.info('orchestrator.capybara_start', 'Starting Capybara AI agentic loop', {
     sourceFile: 'langgraph-orchestrator.ts',
@@ -747,12 +851,13 @@ export async function callCapybaraAI(
   })
 
   const llm = createDeepSeekLLM()
+  const authToken = options?.authToken
 
-  // Bind tools to LLM - LLM will intelligently pick which tools to call and in what order
+  // Bind tools to LLM - searchClonesTool gets authToken for embed function (user JWT)
   const llmWithTools = llm.bindTools([
     demographicSegmentsTool,
     demographicValuesTool,
-    searchClonesTool,
+    createSearchClonesTool(authToken),
     createConversationSessionTool,
     recruitClonesTool,
     releaseClonesTool,
@@ -837,20 +942,31 @@ export async function callCapybaraAI(
           } else if (toolCall.name === 'search_clones') {
             // Tool 3: Search personas with specific filters
             const args = toolCall.args as any
-            toolResult = await searchClones(args)
+            toolResult = await searchClones(args, authToken)
             toolOutput = JSON.parse(toolResult)
             const filterDesc = Object.entries(args)
               .filter(([k, v]) => v !== undefined && k !== 'count')
               .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
               .join(', ') || 'no filters'
-            pushReasoning({
-              iteration: iterations,
-              action: `Searching with filters: ${filterDesc}`,
-              toolName: toolCall.name,
-              input: args,
-              output: { count: toolOutput.personas?.length || 0, personas: toolOutput.personas },
-              summary: `Found ${toolOutput.personas?.length || 0} persona(s) matching criteria`
-            })
+            if (toolOutput.error) {
+              pushReasoning({
+                iteration: iterations,
+                action: `Searching personas: ${filterDesc}`,
+                toolName: toolCall.name,
+                input: args,
+                output: { error: toolOutput.error },
+                summary: `Error: ${toolOutput.error}`
+              })
+            } else {
+              pushReasoning({
+                iteration: iterations,
+                action: `Searching personas: ${filterDesc}`,
+                toolName: toolCall.name,
+                input: args,
+                output: { count: toolOutput.personas?.length || 0, personas: toolOutput.personas },
+                summary: `Found ${toolOutput.personas?.length || 0} persona(s) matching criteria`
+              })
+            }
           } else if (toolCall.name === 'create_conversation_session') {
             // Tool 4: Activate personas in session
             const toolArgs = {
@@ -1061,6 +1177,101 @@ const USERNAME_KEYS = ['author', 'username', 'reddit_username', 'user', 'author_
 /** Keys to strip for privacy (re-identification risk); reply structure preserved via replying_to_ref */
 const PRIVACY_STRIP_KEYS = ['subreddit', 'content_id', 'created_at']
 
+/** Model context limit (DeepSeek); reserve space for system template, user message, completion */
+const MODEL_MAX_TOKENS = 131072
+const RESERVED_TOKENS = 50000
+const DEFAULT_HISTORY_MAX_TOKENS = MODEL_MAX_TOKENS - RESERVED_TOKENS
+
+/** Rough token estimate: ~4 chars per token for English/JSON */
+function estimateTokens(str: string): number {
+  if (!str || typeof str !== 'string') return 0
+  return Math.ceil(str.length / 4)
+}
+
+/** Minimum chars for an item to be worth keeping (filter noise) */
+const MIN_ITEM_CHARS = 15
+
+/**
+ * Truncate interaction_history to fit within token budget.
+ * - Prioritizes higher-score and more recent content
+ * - Drops very short items (< MIN_ITEM_CHARS)
+ * - When a comment is removed, its linked_content and replying_to_ref go with it (no orphan refs)
+ * - Drops top-level references when truncating to avoid orphan references
+ */
+function truncateInteractionHistory(history: any, maxTokens: number = DEFAULT_HISTORY_MAX_TOKENS): any {
+  if (!history || typeof history !== 'object') return history
+  const parsed = typeof history === 'string' ? (() => { try { return JSON.parse(history) } catch { return {} } })() : history
+
+  const posts: any[] = Array.isArray(parsed.posts) ? parsed.posts : []
+  const comments: any[] = Array.isArray(parsed.comments) ? parsed.comments : []
+  const refs = Array.isArray(parsed.references) ? parsed.references : []
+
+  if (posts.length === 0 && comments.length === 0) return parsed
+
+  type Item = { type: 'post' | 'comment'; obj: any; tokens: number; score: number; index: number }
+  const items: Item[] = []
+
+  posts.forEach((p, i) => {
+    const str = JSON.stringify(p)
+    if (str.length < MIN_ITEM_CHARS) return
+    const score = typeof p?.score === 'number' ? p.score : 0
+    items.push({ type: 'post', obj: p, tokens: estimateTokens(str), score, index: i })
+  })
+
+  comments.forEach((c, i) => {
+    const str = JSON.stringify(c)
+    if (str.length < MIN_ITEM_CHARS) return
+    const score = typeof c?.score === 'number' ? c.score : 0
+    items.push({ type: 'comment', obj: c, tokens: estimateTokens(str), score, index: i })
+  })
+
+  // Sort: higher score first (more engagement), then by index desc (newer = later in array)
+  items.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return b.index - a.index
+  })
+
+  let used = 0
+  const keptPosts: any[] = []
+  const keptComments: any[] = []
+
+  for (const it of items) {
+    if (used + it.tokens > maxTokens) continue
+    used += it.tokens
+    if (it.type === 'post') keptPosts.push(it.obj)
+    else keptComments.push(it.obj)
+  }
+
+  // Restore original order within each array for coherence
+  keptPosts.sort((a, b) => items.find(x => x.obj === a)!.index - items.find(x => x.obj === b)!.index)
+  keptComments.sort((a, b) => items.find(x => x.obj === a)!.index - items.find(x => x.obj === b)!.index)
+
+  const result: Record<string, any> = {}
+  if (keptPosts.length > 0) result.posts = keptPosts
+  if (keptComments.length > 0) result.comments = keptComments
+  // Drop references when truncating to avoid orphan refs (refs may point to removed content)
+  if (refs.length > 0 && keptPosts.length === posts.length && keptComments.length === comments.length) {
+    result.references = refs
+  }
+
+  const truncated = keptPosts.length < posts.length || keptComments.length < comments.length
+  if (truncated) {
+    log.info('orchestrator.history_truncated', 'Interaction history truncated to fit context', {
+      sourceFile: 'langgraph-orchestrator.ts',
+      metadata: {
+        postsBefore: posts.length,
+        postsAfter: keptPosts.length,
+        commentsBefore: comments.length,
+        commentsAfter: keptComments.length,
+        tokensUsed: used,
+        maxTokens,
+      },
+    })
+  }
+
+  return Object.keys(result).length > 0 ? result : { posts: [], comments: [] }
+}
+
 function redactUsernamesFromHistory(obj: any): any {
   if (obj === null || typeof obj !== 'object') return obj
   if (Array.isArray(obj)) return obj.map(redactUsernamesFromHistory)
@@ -1088,22 +1299,11 @@ export function buildPersonaPrompt(interactionHistory: any): string {
   const parsed = typeof interactionHistory === 'string'
     ? (() => { try { return JSON.parse(interactionHistory) } catch { return {} } })()
     : interactionHistory
-  const redacted = redactUsernamesFromHistory(parsed)
+  const truncated = truncateInteractionHistory(parsed)
+  const redacted = redactUsernamesFromHistory(truncated)
   const historyJson = JSON.stringify(redacted, null, 2)
 
   return `You are a persona simulator that mimics how a specific User would reply to a given prompt.
-
-CONTEXT: User's Interaction History:
-
-Below is the user's interaction history:
-- "posts": list of posts the user has made with content
-- "comments": list of comments the user has made, replying to the nested "linked_content" in the same json object
-- "linked_content": if exist, the content the user is replying to (may not be authored by the user)
-- "score": the sum of upvotes and downvotes of the content
-- "references": if exist, the references to the linked content (if the content is a reply to a post or comment)
-
-USER INTERACTION HISTORY:
-${historyJson}
 
 YOUR TASK: Generate ONE Natural Response
 
@@ -1141,6 +1341,18 @@ Before responding, verify:
 3. Does it avoid outside knowledge? (Yes = good)
 4. Are my evidence citations valid? (Do they actually support the response?)
 5. more recent content should be given more weight than older content
+
+CONTEXT: User's Interaction History:
+
+Below is the user's interaction history:
+- "posts": list of posts the user has made with content
+- "comments": list of comments the user has made, replying to the nested "linked_content" in the same json object
+- "linked_content": if exist, the content the user is replying to (may not be authored by the user)
+- "score": the sum of upvotes and downvotes of the content
+- "references": if exist, the references to the linked content (if the content is a reply to a post or comment)
+
+USER INTERACTION HISTORY:
+${historyJson}
 
 Now generate your response to the prompt above.`
 }

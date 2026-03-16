@@ -20,11 +20,11 @@ export function ChatMessage({ role, sender_id, content, reasoning, recipient, ac
 
   const getDisplayName = () => {
     if (role === 'user') return 'You'
-    if (role === 'capybara') return 'Capybara AI'
+    if (role === 'capybara') return 'Capysan'
     if (role === 'clone') {
-      // Resolve sender_id (persona id) to anonymous_id from activeClones
+      // Resolve sender_id (persona id) to display id from activeClones
       const clone = activeClones?.find(c => c.id === sender_id)
-      return clone ? clone.name : anonymizeUsername(sender_id)
+      return clone ? clone.id : anonymizeUsername(sender_id)
     }
     return sender_id
   }
