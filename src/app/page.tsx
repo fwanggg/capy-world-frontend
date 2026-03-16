@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { TypingHero } from "@/components/TypingHero";
 import { LandingUseCaseAnimation } from "@/components/LandingUseCaseAnimation";
+import { LandingCompetitiveAnalysis } from "@/components/LandingCompetitiveAnalysis";
 
 export default function Home() {
   return (
@@ -71,64 +72,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section
-        style={{
-          backgroundColor: "var(--color-gray-50)",
-          padding: "var(--space-4xl) var(--space-xl)",
-        }}
-      >
-        <div className="container">
-          <h2
-            style={{
-              textAlign: "center",
-              marginBottom: "var(--space-3xl)",
-              fontSize: "var(--text-3xl)",
-            }}
-          >
-            Why Capysan Works
-          </h2>
-
-          <div
-            className="grid grid-2"
-            style={{ maxWidth: "1000px", margin: "0 auto" }}
-          >
-            {[{
-                title: "Built for Early Stage AI Builders",
-                desc: "Natural Language, Vibe Check, and Get Feedback in Seconds.",
-              },
-              {
-                title: "Recuits ICP-Matched Personas in seconds",
-                desc: "High-fidelity Personas by segments.",
-              },
-              {
-                title: "Actionable Individual-Level Feedback, NO BS",
-                desc: "Actionable, brutally honest, individual-level feedback, backed by anonamized real human data. no BS.",
-              },
-              
-              {
-                title: "Future-Proof Insights",
-                desc: "Predict Emerging behaviors, not just history.",
-              },
-              {
-                title: "Always On, Conversational",
-                desc: "24/7 research. No scheduling, no waiting. Just ask.",
-              },
-            ].map((item) => (
-              <div key={item.title} className="card">
-                <h3
-                  style={{
-                    fontSize: "var(--text-xl)",
-                    marginBottom: "var(--space-base)",
-                  }}
-                >
-                  {item.title}
-                </h3>
-                <p style={{ fontSize: "var(--text-base)" }}>{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <LandingCompetitiveAnalysis />
 
       <footer
         style={{
