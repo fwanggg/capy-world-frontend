@@ -34,13 +34,15 @@ export async function requireAuth(req: Request): Promise<AuthResult | Response> 
   return auth;
 }
 
-export async function requireApproval(
-  req: Request,
-  userId: string
-): Promise<Response | null> {
+export type WaitlistUser = { approval_status: string; [key: string]: unknown };
+
+export async function getOrCreateWaitlistUser(userId: string): Promise<{
+  user: WaitlistUser | null;
+  error: unknown;
+}> {
   let { data: user, error } = await supabase
     .from("waitlist")
-    .select("approval_status")
+    .select("*")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -51,7 +53,7 @@ export async function requireApproval(
         { user_id: userId, approval_status: "approved" },
         { onConflict: "user_id" }
       )
-      .select("approval_status")
+      .select("*")
       .single();
     if (!upsertError && upserted) {
       user = upserted;
@@ -70,6 +72,15 @@ export async function requireApproval(
     userId,
     metadata: { approval_status: status, error: error?.message },
   });
+
+  return { user: user as WaitlistUser | null, error };
+}
+
+export async function requireApproval(
+  req: Request,
+  userId: string
+): Promise<Response | null> {
+  const { user, error } = await getOrCreateWaitlistUser(userId);
 
   if (error || !user) {
     return Response.json(
