@@ -95,8 +95,10 @@ export default function Home() {
             <video
               src="/video/landing_video.mp4"
               autoPlay
+              muted
               loop
               playsInline
+              controls
               style={{
                 width: "min(66.67vw, 1100px)",
                 minWidth: "320px",
