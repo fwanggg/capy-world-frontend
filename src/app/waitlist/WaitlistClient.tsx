@@ -31,9 +31,20 @@ export default function WaitlistClient() {
     (async () => {
       try {
         const headers = await getAuthHeaders();
-        const res = await fetch("/api/user/profile", {
+        let res = await fetch("/api/user/profile", {
           headers: { ...headers, "Content-Type": "application/json" },
         });
+        if (cancelled) return;
+        if (!res.ok && "Authorization" in headers) {
+          await fetch("/api/waitlist/join", {
+            method: "POST",
+            headers: { ...headers, "Content-Type": "application/json" },
+            body: "{}",
+          });
+          res = await fetch("/api/user/profile", {
+            headers: { ...headers, "Content-Type": "application/json" },
+          });
+        }
         if (cancelled) return;
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));

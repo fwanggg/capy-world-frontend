@@ -35,13 +35,35 @@ export default function AuthCallback() {
                 .single();
 
               if (selectError?.code === "PGRST116") {
+                const token = data.session.access_token;
+                const origin =
+                  typeof window !== "undefined"
+                    ? window.location.origin
+                    : "";
+                const joinRes = await fetch(`${origin}/api/waitlist/join`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: "{}",
+                });
+                if (!joinRes.ok) {
+                  await supabase.from("waitlist").insert({
+                    user_id: data.session.user.id,
+                    approval_status: "pending",
+                  });
+                }
+              }
+            } catch {
+              try {
                 await supabase.from("waitlist").insert({
                   user_id: data.session.user.id,
                   approval_status: "pending",
                 });
+              } catch {
+                /* ignore */
               }
-            } catch {
-              /* ignore */
             }
 
             router.replace("/chat");

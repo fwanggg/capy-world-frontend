@@ -123,7 +123,16 @@ function ChatContent() {
           method: "POST",
           body: JSON.stringify({}),
         });
-        if (!createRes.ok) throw new Error("Failed to create initial studyroom");
+        if (createRes.status === 403) {
+          window.location.href = "/waitlist?pending=1";
+          return;
+        }
+        if (!createRes.ok) {
+          const body = await createRes.json().catch(() => ({}));
+          const msg =
+            body?.error ?? "Failed to create initial studyroom";
+          throw new Error(msg);
+        }
         const newRoom = await createRes.json();
         rooms = [newRoom];
       }

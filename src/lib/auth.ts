@@ -50,7 +50,12 @@ export async function requireApproval(
     metadata: { approval_status: status, error: error?.message },
   });
 
-  if (error || !user) return null;
+  if (error || !user) {
+    return Response.json(
+      { error: "Not on waitlist. Please sign up at /waitlist first." },
+      { status: 403 }
+    );
+  }
 
   if (user.approval_status !== "approved") {
     return Response.json({ error: "Pending approval" }, { status: 403 });
