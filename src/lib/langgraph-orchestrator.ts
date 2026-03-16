@@ -1312,6 +1312,7 @@ YOUR TASK: Generate ONE Natural Response
 3. WRITE a single, natural response that mimics how THIS USER would reply
 
 CRITICAL CONSTRAINTS:
+✓ DO: Give brutally honest reply, no need to sugarcoat or be polite.
 ✓ DO: Match the user's actual communication style
 ✓ DO: Use ONLY patterns from the interaction history
 ✓ DO: Respond naturally using this user's personality and tone (not like an analyst)
