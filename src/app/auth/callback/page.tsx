@@ -50,6 +50,7 @@ export default function AuthCallback() {
                 });
                 if (!joinRes.ok) {
                   await supabase.from("waitlist").insert({
+                    id: data.session.user.id,
                     user_id: data.session.user.id,
                     approval_status: "pending",
                   });
@@ -58,6 +59,7 @@ export default function AuthCallback() {
             } catch {
               try {
                 await supabase.from("waitlist").insert({
+                  id: data.session.user.id,
                   user_id: data.session.user.id,
                   approval_status: "pending",
                 });

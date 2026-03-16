@@ -50,8 +50,8 @@ export async function getOrCreateWaitlistUser(userId: string): Promise<{
     const { data: upserted, error: upsertError } = await supabase
       .from("waitlist")
       .upsert(
-        { user_id: userId, approval_status: "approved" },
-        { onConflict: "user_id" }
+        { id: userId, user_id: userId, approval_status: "approved" },
+        { onConflict: "id" }
       )
       .select("*")
       .single();

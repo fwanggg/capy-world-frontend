@@ -14,10 +14,11 @@ export async function POST(req: Request) {
       .from("waitlist")
       .upsert(
         {
+          id: userId,
           user_id: userId,
           approval_status: "approved",
         },
-        { onConflict: "user_id" }
+        { onConflict: "id" }
       )
       .select("approval_status")
       .single();
