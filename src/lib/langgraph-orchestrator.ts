@@ -13,13 +13,19 @@ AVAILABLE TOOLS & WORKFLOWS:
 
 1. RECRUITING PERSONAS (Initial or Adding More):
    - When user asks to find/recruit personas:
-     a. SEMANTIC SEARCH (preferred for vague/freeform requests): Translate User intent into keyword-rich query. Do NOT dump raw input — expand: "hate Atomic" → "hate Atomic design, minimal UI, design systems criticism"; "into skiing" → "skiing, winter sports, outdoor". Call search_clones({query: "...", count: N}). Add demographic filters (age_min, profession, etc.) only if user specified them; use get_demographic_values first for valid values.
-     b. DEMOGRAPHIC-ONLY (when user wants specific profession/location/age): Call get_demographic_segments(), then get_demographic_values({segments: [...]}), then search_clones({...filters..., count: N}) without query. Use ONLY values returned by get_demographic_values.
-     c. If search_clones returns 0 personas: for semantic path, broaden query; for demographic path, relax filters.
-     d. Once you have personas, call create_conversation_session({clone_ids, session_id}) to activate them.
-     e. Respond: "I've activated [count] personas." (Do not list usernames or identifiers.)
+     a. ALWAYS combine semantic query + demographics:
+        - Call get_demographic_segments(), then get_demographic_values({segments: [...]}) for any fields user specifies.
+        - Translate user intent into a keyword-rich query.
+        - Infer demographic filters from the query: call get_demographic_values for profession, interests, etc., and add filters that match the intent (e.g. "experience with kids" → add profession: teacher or interests: children, parenting if those values exist). Always try to infer some demographics from the user's words.
+        - Add demographic filters when user specifies profession, location, age, gender, spending_power, or interests. Use ONLY values from get_demographic_values.
+        - Call search_clones({query: "...", profession, location, age_min, age_max, ..., match_threshold: 0.5, count: N}).
+     b. If search returns 0 or fewer than requested:
+        - Relax constraints in this order: (1) Lower match_threshold (e.g. 0.5 → 0.4 → 0.3), (2) Remove one demographic filter at a time (least important first), (3) Broaden the query (add related terms, remove restrictive words).
+        - Retry search_clones. Repeat until you have enough personas or all options exhausted.
+     c. Once you have personas, call create_conversation_session({clone_ids, session_id}) to activate them.
+     d. Respond: "I've activated [count] personas." (Do not list usernames or identifiers.)
    - When user asks to add/recruit more personas to existing group:
-     a. Call recruit_clones({demographic_filters, count, session_id})
+     a. Call recruit_clones({query, demographic_filters, match_threshold, count, session_id})
      b. Respond with who was added and total active
 
 2. RELEASING/MANAGING PERSONAS:
@@ -48,7 +54,7 @@ AVAILABLE TOOLS & WORKFLOWS:
 TOOLS (Use based on user intent):
 - get_demographic_segments(): List available demographic fields
 - get_demographic_values(segments): Get unique values for fields
-- search_clones(query?, filters): Find personas by semantic search (query) or demographics
+- search_clones(query, filters, match_threshold?): Find personas by combining semantic query and demographics. Always use both when possible.
 - create_conversation_session(clone_ids, session_id): Activate initial personas
 - recruit_clones(demographic_filters, count, session_id): Add personas without removing existing
 - release_clones(clone_ids | release_all, session_id): Remove personas from session
@@ -187,6 +193,7 @@ async function searchClones(
   input: {
     query?: string
     count?: number
+    match_threshold?: number
     profession?: string
     age_min?: number
     age_max?: number
@@ -202,6 +209,7 @@ async function searchClones(
   const requestedCount = input.count || 5
 
   // Semantic search path: query provided → embed Edge Function via Supabase client
+  let embedAuthFallback = false
   if (input.query && input.query.trim()) {
     try {
       const invokeHeaders: Record<string, string> = {}
@@ -211,7 +219,7 @@ async function searchClones(
         body: {
           input: input.query.trim(),
           count: requestedCount,
-          match_threshold: 0.6,
+          match_threshold: input.match_threshold ?? 0.5,
           age_min: input.age_min ?? undefined,
           age_max: input.age_max ?? undefined,
           profession: input.profession ?? undefined,
@@ -241,32 +249,48 @@ async function searchClones(
             }
           }
         }
-        const errMsg = code ? `[${code}] ${detail}` : detail
-        console.log('[TOOL] search_clones embed error:', errMsg)
-        return JSON.stringify({ error: `Embed search failed: ${errMsg}` })
+        const isAuthError = code === 'embed_invalid_jwt' || code === 'embed_unauthorized'
+        if (isAuthError) {
+          console.log('[TOOL] search_clones embed auth error (Invalid JWT), falling back to demographic-only')
+          embedAuthFallback = true
+        } else {
+          const errMsg = code ? `[${code}] ${detail}` : detail
+          console.log('[TOOL] search_clones embed error:', errMsg)
+          return JSON.stringify({ error: `Embed search failed: ${errMsg}` })
+        }
       }
 
+      if (!embedAuthFallback) {
       const payload = data as { personas?: unknown[]; error?: string; code?: string }
       if (payload?.error) {
-        const errMsg = payload.code ? `[${payload.code}] ${payload.error}` : payload.error
-        console.log('[TOOL] search_clones embed error (in body):', errMsg)
-        return JSON.stringify({ error: `Embed search failed: ${errMsg}` })
+        const code = payload.code ?? ''
+        const isAuthError = code === 'embed_invalid_jwt' || code === 'embed_unauthorized'
+        if (isAuthError) {
+          console.log('[TOOL] search_clones embed auth error (Invalid JWT), falling back to demographic-only')
+          embedAuthFallback = true
+        } else {
+          const errMsg = payload.code ? `[${payload.code}] ${payload.error}` : payload.error
+          console.log('[TOOL] search_clones embed error (in body):', errMsg)
+          return JSON.stringify({ error: `Embed search failed: ${errMsg}` })
+        }
       }
-
-      const personas = payload?.personas ?? []
-      const result = {
-        personas: personas.map((p: any) => ({
-          id: p.id,
-          anonymous_id: p.anonymous_id,
-          age: p.age,
-          gender: p.gender,
-          location: p.location,
-          profession: p.profession,
-          spending_power: p.spending_power,
-        })),
+      if (!embedAuthFallback) {
+        const personas = payload?.personas ?? []
+        const result = {
+          personas: personas.map((p: any) => ({
+            id: p.id,
+            anonymous_id: p.anonymous_id,
+            age: p.age,
+            gender: p.gender,
+            location: p.location,
+            profession: p.profession,
+            spending_power: p.spending_power,
+          })),
+        }
+        console.log('[TOOL] Found:', result.personas.length, 'personas (semantic)')
+        return JSON.stringify(result)
       }
-      console.log('[TOOL] Found:', result.personas.length, 'personas (semantic)')
-      return JSON.stringify(result)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.log('[TOOL] search_clones embed exception:', msg)
@@ -433,6 +457,7 @@ async function recruitClones(input: {
     spending_power?: string
     interests?: string[]
   }
+  match_threshold?: number
   count?: number
   session_id: string
 }): Promise<string> {
@@ -456,6 +481,7 @@ async function recruitClones(input: {
   const searchInput = {
     query: input.query,
     ...input.demographic_filters,
+    match_threshold: input.match_threshold,
     count: input.count || 3,
   }
   const searchResult = await searchClones(searchInput)
@@ -733,12 +759,15 @@ const demographicValuesTool = tool(getDemographicValues, {
 
 const searchClonesToolSchema = {
   name: 'search_clones' as const,
-  description: `Search personas by semantic similarity (when query provided) or demographic filters. Prefer semantic search for freeform/vague user requests.
-- query: REQUIRED for semantic search. Translate user intent into keyword-rich search terms — do NOT dump raw user input. Expand vague phrases: "users who hate Atomic" → "hate Atomic design, prefer minimal UI, critical of design systems". "people into skiing" → "skiing, winter sports, outdoor recreation". Combine topics, attitudes, and concrete terms.
-- Demographics (age_min, age_max, profession, etc.): Optional filters applied together with semantic search. Use get_demographic_values first for valid values.`,
+  description: `Search personas by combining semantic query and demographic filters. Always use both when possible. Use get_demographic_values first for valid filter values.
+- query: REQUIRED for semantic search. Translate user intent into keyword-rich terms.
+- Demographics: Infer from the query when possible. E.g. "experience with kids" → call get_demographic_values for profession, interests; add profession: teacher (or parent, nanny) and/or interests: children, parenting if those values exist. Always try to infer some demographic filters from the user's intent.
+- Demographics (profession, location, age_min, age_max, etc.): Add when user specifies. Use ONLY values from get_demographic_values.
+- match_threshold: Similarity threshold 0–1. Default 0.5. Higher = stricter. When 0 results, lower to 0.4 or 0.3 to relax.`,
   schema: z.object({
-    query: z.string().optional().describe('Search terms for semantic matching. Translate user intent into keywords — expand vague phrases, add related terms. Required for semantic search.'),
+    query: z.string().optional().describe('Search terms for semantic matching. Translate user intent into keywords. Required for semantic path.'),
     count: z.number().optional().describe('How many personas to return, default 5'),
+    match_threshold: z.number().optional().describe('Similarity threshold 0–1. Default 0.5. Lower (e.g. 0.3) when relaxing to get more results.'),
     profession: z.string().optional().describe('Exact profession value (use get_demographic_values)'),
     age_min: z.number().optional().describe('Minimum age'),
     age_max: z.number().optional().describe('Maximum age'),
@@ -767,7 +796,7 @@ const createConversationSessionTool = tool(createConversationSession, {
 
 const recruitClonesTool = tool(recruitClones, {
   name: 'recruit_clones',
-  description: 'Add new clones to session without removing existing ones. Use query for semantic search (translate user intent to keywords) or demographic_filters for structured search. Deduplicates against already-active clones.',
+  description: 'Add new clones to session without removing existing ones. Always combine query (semantic) and demographic_filters. Infer demographic filters from the query — e.g. "experience with kids" → add profession or interests from get_demographic_values that match. When 0 results: lower match_threshold, remove filters, or broaden query. Deduplicates against already-active clones.',
   schema: z.object({
     query: z.string().optional().describe('Search terms for semantic matching. Translate user intent into keywords.'),
     demographic_filters: z.object({
@@ -779,6 +808,7 @@ const recruitClonesTool = tool(recruitClones, {
       spending_power: z.string().optional(),
       interests: z.array(z.string()).optional(),
     }).optional(),
+    match_threshold: z.number().optional().describe('Similarity threshold 0–1. Default 0.5. Lower when relaxing to get more results.'),
     count: z.number().optional().describe('How many new personas to recruit, default 3'),
     session_id: z.string().describe('The chat session ID'),
   }),

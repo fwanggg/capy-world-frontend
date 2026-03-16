@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Capybara AI** is a full-stack web application using:
-- **Frontend**: React 18 + TypeScript + Vite
-- **Backend**: Express.js + TypeScript + Node.js
-- **Shared**: TypeScript utilities and types shared between frontend and backend
+**Capybara AI** is a full-stack Next.js application that allows users to interview AI personas representing real Reddit users. It combines:
+- **Frontend**: React 19 + TypeScript (pages in `src/app/`)
+- **Backend**: Next.js API routes (handlers in `src/app/api/`)
+- **Services**: Business logic in `src/lib/` (LangGraph orchestration, authentication, logging, Supabase client)
+- **Database**: Supabase PostgreSQL with auth, personas, chat sessions, studyrooms, etc.
 
-The project uses npm workspaces to manage three independent packages (`frontend`, `backend`, `shared`) with shared TypeScript configuration at the root.
+Everything runs as a **single Next.js application** on one port (default 3000).
 
 ## Recent Major Updates
 
@@ -23,160 +24,220 @@ The project uses npm workspaces to manage three independent packages (`frontend`
 
 ## Architecture
 
-### Frontend (`/frontend`)
-- Vite-powered React development
-- Hot module replacement for fast iteration
-- Proxies API requests to backend on `localhost:3001`
-- Components in `src/`, styles in `main.css`
-- Builds to `dist/`
+### Project Structure
 
-### Backend (`/backend`)
-- Express.js REST API
-- Runs on port 3001
-- CORS enabled for frontend requests
-- Auto-reloads with `tsx watch` during development
-- Compiles to `dist/`
+```
+src/
+├── app/
+│   ├── api/                 # Next.js API routes (request handlers)
+│   │   ├── chat/           # Chat endpoints
+│   │   ├── clones/         # Clone management
+│   │   ├── studyrooms/     # Studyroom CRUD
+│   │   ├── user/           # User profile
+│   │   ├── auth/           # Authentication
+│   │   └── waitlist/       # Waitlist signup
+│   ├── (pages)             # Server/client pages (chat, waitlist, about, etc.)
+│   └── layout.tsx          # Root layout
+├── components/             # React components (UI, chat, sidebar, etc.)
+├── lib/                    # Business logic & services
+│   ├── auth.ts            # Auth utilities
+│   ├── jwt.ts             # JWT verification
+│   ├── langgraph-orchestrator.ts  # Agentic loop & persona execution
+│   ├── logging.ts         # App logging service
+│   ├── supabase.ts        # Supabase client
+│   └── llm.ts             # LLM setup
+├── hooks/                  # React hooks
+├── types/                  # TypeScript types
+└── utils/                  # Utility functions
+```
 
-### Shared (`/shared`)
-- Reusable TypeScript types and utilities
-- Used by both frontend and backend
-- Think: API response types, validation functions, helpers
-- Keep minimal — only genuinely shared code goes here
+### Frontend (React Pages & Components)
+
+- **Pages** in `src/app/` — Next.js App Router pages (Chat, Waitlist, About, etc.)
+- **Components** in `src/components/` — Reusable React components (ChatMessage, ChatInput, Sidebar, etc.)
+- **Hooks** in `src/hooks/` — Custom React hooks for state management
+- **Styling** — Tailwind CSS (configured in `tailwind.config.ts`)
+
+### Backend (API Routes)
+
+All API endpoints are in `src/app/api/`:
+- **POST `/api/chat/init`** — Initialize chat session
+- **POST `/api/chat/message`** — Send message (routes to Capybara or clones)
+- **GET `/api/chat/history`** — Retrieve conversation history
+- **GET `/api/studyrooms`** — List user's studyrooms
+- **POST `/api/studyrooms`** — Create studyroom
+- **DELETE `/api/studyrooms/[id]`** — Delete studyroom
+- **GET `/api/clones/search`** — Search personas by demographics
+- **GET `/api/clones/list`** — List active clones in session
+- **POST `/api/user/profile`** — Get user profile
+- **POST `/api/waitlist/join`** — Join waitlist
+
+### Services (Business Logic)
+
+Located in `src/lib/`:
+- **`langgraph-orchestrator.ts`** — Agentic loop, tool execution, persona responses
+- **`auth.ts`** — Auth utilities and middleware
+- **`jwt.ts`** — JWT verification and claims extraction
+- **`logging.ts`** — App logging service with database writes
+- **`supabase.ts`** — Supabase client initialization and helpers
+- **`llm.ts`** — Claude API client setup
 
 ## Development Commands
 
-**Start all services:**
+**Start development server:**
 ```bash
 npm run dev
 ```
-Runs frontend (port 3000) + backend (port 3001) concurrently.
+Runs Next.js dev server on `http://localhost:3000`. Hot reload enabled.
 
-**Backend with dev mode** (auto-creates test users, skips OAuth):
-```bash
-DEV=true npm run dev --workspace=backend
-```
-Enables:
-- Auto-creates users in `waitlist` table (approval_status: approved)
-- Skips approval checks
-- Accepts `x-user-id` header for testing
-- Uses mock sessions to avoid foreign key constraints
-- Real database for all persistence
-
-**Frontend only:**
-```bash
-npm run dev --workspace=frontend
-```
-
-**Backend only:**
-```bash
-npm run dev --workspace=backend
-```
-
-**Vercel dev** (production-like SPA routing):
-```bash
-npx vercel login   # One-time
-cd frontend && npx vercel link --yes   # One-time (root dir "capybara-AI" has uppercase; vercel must run from frontend/)
-npm run dev:vercel
-```
-Runs `vercel dev` from `frontend/` with backend (DEV=true). Tests rewrites and SPA routing as in production. Production: set `BACKEND_URL` in Vercel project settings; local uses 127.0.0.1:3001 when unset.
-
-**Build:**
+**Build for production:**
 ```bash
 npm run build
 ```
-Compiles TypeScript and bundles frontend with Vite.
+Creates optimized build in `.next/`.
+
+**Start production server:**
+```bash
+npm run start
+```
+Runs built app (requires `npm run build` first).
 
 **Lint:**
 ```bash
 npm run lint
 ```
 
+## Development Setup
+
+**With dev mode** (auto-creates test users, skips OAuth):
+```bash
+DEV=true npm run dev
+```
+Enables:
+- Auto-creates users in `waitlist` table (approval_status: approved)
+- Skips approval checks
+- Uses real database for all persistence
+- Allows testing without OAuth setup
+
+**Environment variables** (in root `.env`):
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_ANON_KEY` — Supabase anon key
+- `SUPABASE_JWT_SECRET` — JWT secret for verification
+- `OPENAI_API_KEY` — Claude API key (note: uses Anthropic not OpenAI)
+- `DEV` — Set to `true` to enable dev mode (optional)
+
 ## Common Workflows
 
 ### Adding a New API Endpoint
 
-1. **Backend**: Add route in `backend/src/index.ts` or create a new route file
-2. **Frontend**: Fetch from `/api/your-endpoint` (Vite proxy handles routing)
-3. **Types** (optional): If sharing response types, define in `shared/src/types.ts`
+1. Create route handler: `src/app/api/[domain]/[endpoint]/route.ts`
+2. Implement `POST`, `GET`, or `DELETE` function
+3. Use auth middleware (`requireAuth`, `checkApproval`) if protected
+4. Use Supabase client from `lib/supabase.ts` for database access
+5. Return JSON response
 
 Example:
 ```typescript
-// backend/src/index.ts
-app.get('/api/data', (req, res) => {
-  res.json({ data: 'example' })
-})
+// src/app/api/example/route.ts
+import { requireAuth } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 
-// frontend/src/App.tsx
-const res = await fetch('/api/data')
+export async function GET(req: Request) {
+  const userId = await requireAuth(req)
+
+  const { data, error } = await supabase
+    .from('some_table')
+    .select()
+    .eq('user_id', userId)
+
+  if (error) throw error
+  return Response.json(data)
+}
 ```
-
-### Adding Shared Types
-
-1. Create file in `shared/src/` (e.g., `types.ts`)
-2. Export types from `shared/src/index.ts`
-3. Import in frontend/backend:
-   ```typescript
-   import { MyType } from '../shared/src/types'
-   ```
 
 ### Adding Frontend Components
 
-- Create in `frontend/src/` directory
-- Keep components focused and single-purpose
-- Naming: PascalCase (e.g., `UserCard.tsx`)
+1. Create in `src/components/` directory
+2. Keep components focused and single-purpose
+3. Use React hooks for state management
+4. Naming: PascalCase (e.g., `ChatMessage.tsx`)
+5. Import and use in pages or other components
 
-### Adding Backend Routes
+### Adding a New Page
 
-- Keep routes organized; create separate files as complexity grows
-- Keep business logic separate from Express route handlers
-- Example structure as you grow:
-  ```
-  backend/src/
-  ├── routes/
-  │   ├── api.ts
-  │   └── health.ts
-  └── index.ts
-  ```
+1. Create directory in `src/app/` (e.g., `src/app/mypage/`)
+2. Add `page.tsx` file
+3. Implement as client or server component
+4. Next.js automatically creates route `/mypage`
+
+### Modifying Persona Behavior
+
+- **Data**: Edit `interaction_history` JSONB in `personas` table
+- **Prompt**: Edit `buildPersonaPrompt()` in `langgraph-orchestrator.ts`
+- **Result**: Changes take effect immediately on next message (no caching)
+
+### Adding a New Tool for Capybara
+
+1. Define function in `langgraph-orchestrator.ts` (pure logic, NO LLM calls)
+2. Create tool definition with schema using `tool()` from @langchain/core/tools
+3. Add to tools array in `llmWithTools = llm.bindTools([...])`
+4. Handle execution in tool_calls loop with reasoning capture
+5. Return plain data — let LLM interpret results
 
 ## File Organization Principles
 
 - **One responsibility per file** — split files larger than ~300 lines
-- **Domain-based structure** — organize by feature, not by type (don't put all "components" together)
+- **Domain-based structure** — organize by feature, not by type
 - **Avoid duplication** — check if similar functionality exists before creating new files
 - **Keep it modular** — each file should be independently understandable
+- **API routes** — keep route handlers thin; move logic to `src/lib/`
+- **Components** — keep UI components small; extract state logic to hooks or services
 
 ## TypeScript Configuration
 
-All three workspaces extend the root `tsconfig.json`:
-- `compilerOptions.strict: true` — strict type checking enabled
-- `target: ES2020` — modern JavaScript target
-- Each workspace has its own `tsconfig.json` for specific compiler options
+- `tsconfig.json` — Strict mode enabled (`compilerOptions.strict: true`)
+- Target: ES2020
+- Path aliases: `@/*` points to `src/*` for clean imports
 
 ## Debugging
 
 **Frontend debugging:**
-- Open DevTools in browser (port 3000)
+- Open DevTools in browser (http://localhost:3000)
 - Network tab shows requests to `/api/*` endpoints
 - Console shows React errors and logs
+- React DevTools extension helpful for component inspection
 
 **Backend debugging:**
-- Terminal shows server logs
-- Add `console.log()` statements or use a debugger with `node --inspect`
+- Terminal shows Next.js server logs
+- Add `console.log()` statements in route handlers or services
+- Check `app_log` table for structured logging of important events
+- Use `node --inspect` flag for debugger breakpoints
 
 ## Important Patterns
 
 ### API Integration
-- Frontend always fetches from `/api/...` (Vite proxy handles routing)
-- Backend should use `res.json()` for JSON responses
+
+- Frontend fetches from `/api/...` (same origin)
+- Backend returns JSON responses via `Response.json()`
 - Always handle errors on both sides
 
 ### State Management
-- Currently using React hooks (useState, useEffect)
-- If state grows complex, consider adding state management library
 
-### Shared Code
-- Before adding to `shared/`, confirm it's truly used by both frontend and backend
-- Keep `shared/` lightweight — it's imported by both, so size impacts both builds
+- React hooks (`useState`, `useEffect`) for component state
+- Custom hooks in `src/hooks/` for shared logic
+- No global state library currently (add if state grows complex)
+
+### Authentication
+
+- All protected routes use `requireAuth` middleware (sets `userId`)
+- Use `checkApproval` middleware for approval workflow enforcement
+- JWT verified server-side using Supabase public key
+
+### Database Access
+
+- Use Supabase client from `lib/supabase.ts`
+- Always verify user has permission to access data
+- Handle errors gracefully (don't expose internal details)
 
 ## When Modifying Existing Code
 
@@ -184,16 +245,7 @@ All three workspaces extend the root `tsconfig.json`:
 2. Check if your change breaks anything (test common flows)
 3. Keep the architecture clean — refactor bloated files while making changes
 4. Update relevant docs if architecture changes
-
-## Port Configuration
-
-- **Frontend**: 3000 (Vite dev server)
-- **Backend**: 3001 (Express server)
-- Frontend proxies `/api/*`, `/chat/*`, `/auth/*`, `/clones/*`, `/studyrooms/*`, `/user/*` to backend
-
-Change ports in:
-- `frontend/vite.config.ts` (frontend port + proxy config)
-- `backend/src/index.ts` (backend port)
+5. Verify auth/permissions for any data access changes
 
 ---
 
@@ -206,9 +258,9 @@ Change ports in:
 - Indexed on: timestamp, level, environment, event, user_id, request_id, and composite index for performance
 - No FK constraint on `user_id` (Supabase manages auth.users separately)
 
-**Logging Service (`backend/src/services/logging.ts`):**
+**Logging Service (`src/lib/logging.ts`):**
 ```typescript
-import { log } from '../services/logging'
+import { log } from '@/lib/logging'
 log.info('event_name', 'Message', { metadata })
 log.warn('event_name', 'Message', { metadata })
 log.error('event_name', 'Message', { metadata })
@@ -266,7 +318,7 @@ Capybara AI is an intelligent orchestrator that:
 
 **Message Flow:**
 ```
-User → /chat/message
+User → POST /api/chat/message
   ↓
 Routing Decision:
   if (target === 'capybara')        → Capybara AI (agentic loop with tools)
@@ -280,19 +332,25 @@ Frontend receives response + optional session_transition
 
 ### Key Implementation Files
 
-**Backend:**
-- `backend/src/routes/chat.ts` - Message routing logic, session management
-- `backend/src/services/langgraph-orchestrator.ts` - Agentic loop, clone execution
-- `backend/src/middleware/auth.ts` - Authentication middleware
+**API Routes:**
+- `src/app/api/chat/init/route.ts` - Session initialization
+- `src/app/api/chat/message/route.ts` - Message routing logic, session management
+- `src/app/api/studyrooms/route.ts` - Studyroom management
+- `src/app/api/clones/search/route.ts` - Clone search
+
+**Services:**
+- `src/lib/langgraph-orchestrator.ts` - Agentic loop, clone execution, tool binding
+- `src/lib/auth.ts` - Authentication middleware
+- `src/lib/logging.ts` - Structured logging
 
 **Frontend:**
-- `frontend/src/pages/Chat.tsx` - Studyroom-based flow, boot loads studyrooms → select room → init session
-- `frontend/src/components/UnifiedChat.tsx` - Main chat UI, streaming, session_transition handling
-- `frontend/src/components/StudyroomSidebar.tsx` - Studyroom list, create/delete/switch
-- `frontend/src/components/ChatInput.tsx` - @capybara mention parsing, recipient dropdown
-- `frontend/src/components/ChatMessage.tsx` - Message rendering, ThinkingSteps for Capybara
-- `frontend/src/components/RespondingBubble.tsx` - Live "responding" indicator (Capybara reasoning / clone names)
-- `frontend/src/components/ParticipantSidebar.tsx` - You, Capybara, active clones (anonymous_id)
+- `src/app/chat/page.tsx` - Studyroom-based chat page
+- `src/components/UnifiedChat.tsx` - Main chat UI, streaming, session_transition handling
+- `src/components/StudyroomSidebar.tsx` - Studyroom list, create/delete/switch
+- `src/components/ChatInput.tsx` - @capybara mention parsing, recipient dropdown
+- `src/components/ChatMessage.tsx` - Message rendering, ThinkingSteps for Capybara
+- `src/components/RespondingBubble.tsx` - Live "responding" indicator
+- `src/components/ParticipantSidebar.tsx` - You, Capybara, active clones (anonymous_id)
 
 **Database Tables:**
 
@@ -316,7 +374,6 @@ Frontend receives response + optional session_transition
 - `id` — Session UUID
 - `user_id` — User's auth UUID
 - `active_clones` — Array of persona IDs currently active (e.g., [17, 24])
-- `mode` — "god" (Capybara only) or "conversation" (with personas)
 - `metadata` — Additional context (JSON)
 - `created_at`, `updated_at` — Timestamps
 
@@ -360,7 +417,7 @@ Capybara uses **eight tools** with **no LLM calls inside them**. The LLM orchest
 
 ### Agentic Loop (Capybara AI)
 
-Located in `backend/src/services/langgraph-orchestrator.ts:callCapybaraAI()`
+Located in `src/lib/langgraph-orchestrator.ts:callCapybaraAI()`
 
 ```typescript
 1. Bind all eight tools to LLM
@@ -399,7 +456,7 @@ Located in `backend/src/services/langgraph-orchestrator.ts:callCapybaraAI()`
 
 Every Capybara response includes a **reasoning chain** showing the thought process. This is captured during tool execution and displayed in the frontend UI.
 
-**Backend Capture** (`backend/src/services/langgraph-orchestrator.ts`):
+**Backend Capture** (`src/lib/langgraph-orchestrator.ts`):
 ```typescript
 interface ReasoningStep {
   iteration: number          // Which iteration (1, 2, 3...)
@@ -413,7 +470,7 @@ interface ReasoningStep {
 
 Each tool execution creates a `ReasoningStep` and stores in `reasoning[]` array.
 
-**API Response** (`backend/src/routes/chat.ts`):
+**API Response** (`src/app/api/chat/message/route.ts`):
 ```json
 {
   "user_message": {...},
@@ -442,7 +499,7 @@ Each tool execution creates a `ReasoningStep` and stores in `reasoning[]` array.
 }
 ```
 
-**Frontend Display** (`frontend/src/components/ChatMessage.tsx`):
+**Frontend Display** (`src/components/ChatMessage.tsx`):
 - Capybara messages show "▶ Show Capybara's Thinking (N steps)" button
 - On click, expands to show numbered steps with:
   - Iteration circle badge
@@ -459,7 +516,7 @@ Each tool execution creates a `ReasoningStep` and stores in `reasoning[]` array.
 
 ### Message Routing Logic
 
-**Backend (`backend/src/routes/chat.ts` POST /chat/message):**
+**Backend (`src/app/api/chat/message/route.ts` POST /api/chat/message):**
 
 ```typescript
 // Default: route to Capybara. Only route to clones when target=clones or target_clones specified
@@ -484,7 +541,7 @@ if (capybaraMatch) {
 
 ### Clone Execution
 
-**Each Clone (backend/src/services/langgraph-orchestrator.ts:callClone):**
+**Each Clone (`src/lib/langgraph-orchestrator.ts:callClone`):**
 
 1. Fetch from `personas` table: `interaction_history`, `anonymous_id`
 2. Redact author/username fields from `interaction_history` (privacy)
@@ -502,7 +559,7 @@ if (capybaraMatch) {
 
 **Why needed:** Supabase foreign keys require proper UUID format
 
-**Implementation (backend/src/routes/chat.ts):**
+**Implementation (`src/app/api/chat/message/route.ts`):**
 ```typescript
 const userHeaderToUUID = (header: string): string => {
   const hash = createHash('md5').update(header).digest('hex')
@@ -516,7 +573,7 @@ Session ID: generateUUID() → random UUID v4
 
 ### Development Mode
 
-**Enable with:** `DEV=true npm run dev --workspace=backend`
+**Enable with:** `DEV=true npm run dev`
 
 **Features:**
 - Auto-creates users in waitlist table (approval_status: approved)
@@ -527,19 +584,19 @@ Session ID: generateUUID() → random UUID v4
 
 ### API Contracts
 
-**POST /chat/init**
-- Request: `{ mode: "god", studyroom_id?: string }` — If `studyroom_id` provided, reuse that studyroom's session
+**POST /api/chat/init**
+- Request: `{ studyroom_id?: string }` — If `studyroom_id` provided, reuse that studyroom's session
 - Response: Session with `active_clones: []`, UUID id
 
-**POST /chat/message**
+**POST /api/chat/message**
 - Request: `{ session_id, content, target?: "capybara" | "clones", target_clones?: string[], stream?: boolean }`
 - Response: `{ user_message, ai_responses[], session_transition?, capybara_reasoning? }`
 - `session_transition`: `{ clone_ids, clone_names }` — clone_names are `anonymous_id` values
 - When `stream: true`, response is SSE; final event is `{ type: "done", ... }` with full payload
 
-**GET /studyrooms** — List user's studyrooms. **POST /studyrooms** — Create. **DELETE /studyrooms/:id** — Delete (cascade).
+**GET /api/studyrooms** — List user's studyrooms. **POST /api/studyrooms** — Create. **DELETE /api/studyrooms/[id]** — Delete (cascade).
 
-**GET /chat/history**
+**GET /api/chat/history**
 - Query: `session_id={uuid}`
 - Response: Array of all messages in chronological order
 
@@ -548,17 +605,17 @@ Session ID: generateUUID() → random UUID v4
 **See:** `docs/E2E_TESTING.md` for complete testing guide with curl examples and bash scripts.
 
 **Quick test flow:**
-1. `POST /chat/init` → get session_id
-2. `POST /chat/message` "test my pitch on startup founders" → Capybara activates clones
+1. `POST /api/chat/init` → get session_id
+2. `POST /api/chat/message` "test my pitch on startup founders" → Capybara activates clones
 3. Look for `session_transition` in response
-4. `POST /chat/message` "here's my pitch..." → clones respond
-5. `POST /chat/message` "@capybara what patterns?" with `target: "capybara"` → synthesis
+4. `POST /api/chat/message` "here's my pitch..." → clones respond
+5. `POST /api/chat/message` "@capybara what patterns?" with `target: "capybara"` → synthesis
 
 **Verification:**
-- Check backend logs for `[ORCHESTRATOR]`, `[TOOL]`, `[ROUTE]` prefixes
+- Check server logs for `[ORCHESTRATOR]`, `[TOOL]`, `[ROUTE]` prefixes
 - Verify reasoning chain is captured in response (`capybara_reasoning` array)
 - Query `chat_messages` table to verify persistence
-- Run `GET /chat/history` to retrieve full conversation
+- Run `GET /api/chat/history` to retrieve full conversation
 
 **Expected log flow for "Find 3 engineers in their 30s":**
 ```
@@ -583,7 +640,7 @@ Session ID: generateUUID() → random UUID v4
 ### Common Tasks
 
 **Modifying message routing:**
-- Location: `backend/src/routes/chat.ts` lines 187-220
+- Location: `src/app/api/chat/message/route.ts`
 - Always check: target parameter first, then active_clones state
 - Test: All three routing paths (capybara, clones, fallback)
 
@@ -601,7 +658,7 @@ Session ID: generateUUID() → random UUID v4
 - Changes take effect immediately on next message
 
 **Testing the tool orchestration:**
-- Use `DEV=true npm run dev --workspace=backend` for testing
+- Use `DEV=true npm run dev` for testing
 - Test with `x-user-id: test_user` header
 - Verify in logs that LLM calls tools in logical order
 - Check `capybara_reasoning` in API response for reasoning steps
@@ -632,19 +689,18 @@ The project uses **Supabase Auth** with **Google OAuth** for user authentication
 
 ### Key Implementation Files
 
-- `backend/src/middleware/auth.ts` - JWT verification middleware
-- `backend/src/utils/jwt.ts` - JWT utility functions (verify, extract user ID)
-- `backend/src/routes/auth.ts` - Auth endpoints (profile, callback handling)
-- `frontend/src/components/AuthCallback.tsx` - OAuth callback handler with retry logic (see Auth Regression Fix)
-- `frontend/src/components/ProtectedRoute.tsx` - Route protection with event listener + fallback
-- `frontend/src/services/auth.ts` - Auth SDK wrapper (sign-in, headers, user info)
-- `supabase/config.toml` - Supabase configuration with Google OAuth
+- `src/lib/auth.ts` - Auth utilities and middleware
+- `src/lib/jwt.ts` - JWT verification and claims extraction
+- `src/app/api/user/profile/route.ts` - User profile endpoint
+- `src/components/AuthCallback.tsx` - OAuth callback handler with retry logic (see Auth Regression Fix)
+- `src/components/ProtectedRoute.tsx` - Route protection with event listener + fallback
+- `src/app/auth/page.tsx` - Auth page with Google sign-in button
 - `.env` - Secrets: `SUPABASE_JWT_SECRET`, `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`
 
 ### Important Patterns
 
 **Backend:**
-- All protected routes use `requireAuth` middleware which sets `req.userId`
+- All protected routes use `requireAuth` middleware which sets `userId` in request
 - Additional `checkApproval` middleware ensures `waitlist.approval_status === 'approved'`
 - JWT verification uses Supabase public key (from `SUPABASE_JWT_SECRET`)
 - Never trust claims without signature verification
@@ -677,9 +733,6 @@ Race condition in event-based auth. Old approach (simple `isLoggedIn()` check on
 
 ```bash
 # With development mode (auto-approves users)
-DEV=true npm run dev --workspace=backend
-
-# Or with frontend+backend
 DEV=true npm run dev
 ```
 
@@ -691,17 +744,11 @@ Features:
 ### Testing Auth Flow
 
 1. Start development servers: `DEV=true npm run dev`
-2. Navigate to `http://localhost:3000/waitlist`
-3. Click "Sign in with Google"
-4. Complete OAuth flow
-5. Verify Authorization header in network requests (DevTools → Network)
+2. Navigate to `http://localhost:3000`
+3. Sign in (skip OAuth in dev mode, uses x-user-id header)
+4. Verify you're redirected to `/chat` with active session
+5. Verify requests include `Authorization: Bearer {token}` header (DevTools → Network)
 6. Check localStorage for `supabase.auth.token`
-
-**Testing protected endpoints:**
-```bash
-TOKEN=$(curl -s http://localhost:3001/auth/session | jq -r '.session.access_token')
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/chat/init
-```
 
 ### Common Issues
 
@@ -710,39 +757,65 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/chat/init
 | "Invalid JWT" | Token expired | Supabase SDK auto-refreshes; re-authenticate if needed |
 | "User not approved" (403) | `waitlist.approval_status !== 'approved'` | Enable `DEV=true` or admin approval |
 | "Missing Authorization header" (401) | Frontend not including JWT | Verify `getAuthHeaders()` called before fetch |
-| Google OAuth fails | Bad credentials or redirect URI | Check Google Cloud Console and `supabase/config.toml` |
+| Google OAuth fails | Bad credentials or redirect URI | Check Google Cloud Console and Supabase auth settings |
 
 ### Adding Protected Endpoints
 
 ```typescript
-// backend/src/routes/myroute.ts
-app.post('/api/protected', requireAuth, checkApproval, (req, res) => {
-  const userId = req.userId  // Available after requireAuth
-  // Protected logic here
-  res.json({ data: 'protected' })
-})
-```
+// src/app/api/protected/route.ts
+import { requireAuth } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 
-Frontend usage:
-```typescript
-const headers = await getAuthHeaders()
-const res = await fetch('/api/protected', {
-  method: 'POST',
-  headers: { ...headers, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ data: 'example' })
-})
+export async function GET(req: Request) {
+  const userId = await requireAuth(req)
+
+  // Check approval
+  const { data: approval } = await supabase
+    .from('waitlist')
+    .select('approval_status')
+    .eq('user_id', userId)
+    .single()
+
+  if (approval?.approval_status !== 'approved') {
+    return Response.json({ error: 'Not approved' }, { status: 403 })
+  }
+
+  // Protected logic here
+  return Response.json({ data: 'protected' })
+}
 ```
 
 ---
 
 ## Environment
 
-- **Single root `.env`** — Vite loads via `envDir: '..'`, backend via shared dotenv. No `frontend/.env` or `backend/.env`.
+- **Single root `.env`** — All environment variables in one file at project root
+- **Variables loaded** automatically by Next.js
+- **Frontend access** — Only variables prefixed `NEXT_PUBLIC_` are accessible in browser
+
+---
+
+## Useful Commands
+
+```bash
+# Development
+npm run dev              # Start dev server (http://localhost:3000)
+
+# Production
+npm run build            # Build for production
+npm run start            # Start production server
+
+# Linting
+npm run lint             # Run ESLint
+
+# Database
+# (Migrations managed separately; not in repo)
+```
 
 ## Next Steps
 
 1. Run `npm install` to install dependencies
-2. Run `npm run dev` to start development (or `DEV=true npm run dev --workspace=backend` for backend-only with dev mode)
-3. Open `http://localhost:3000` — Chat page boots studyrooms, selects first room, inits session
-4. Follow `docs/E2E_TESTING.md` to test the full flow
-5. Apply database migrations (managed separately; not in repo)
+2. Configure `.env` with Supabase credentials and API keys
+3. Run `npm run dev` to start development server
+4. Navigate to `http://localhost:3000`
+5. Follow `docs/E2E_TESTING.md` to test the full flow
