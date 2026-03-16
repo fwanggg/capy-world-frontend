@@ -11,6 +11,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The project uses npm workspaces to manage three independent packages (`frontend`, `backend`, `shared`) with shared TypeScript configuration at the root.
 
+## Recent Major Updates
+
+✅ **Observability System Complete** — Production-ready logging with `app_log` table, 30+ events covering auth, chat, and orchestration layers. See **Observability & Logging** section.
+
+✅ **Personas Table Architecture** — Smart demographic search with conversational memory. Capybara accesses interaction_history for context-aware responses. See **Capybara AI Feature** section.
+
+✅ **Auth Flow Stabilized** — Fixed regression with hybrid event listener + fallback pattern. See **Auth Regression Fix & Lessons** in Authentication section.
+
+✅ **Authentication Clarified** — No custom users table; all auth managed by Supabase Auth exclusively. Updated documentation for clarity.
+
 ## Architecture
 
 ### Frontend (`/frontend`)
@@ -184,6 +194,37 @@ All three workspaces extend the root `tsconfig.json`:
 Change ports in:
 - `frontend/vite.config.ts` (frontend port + proxy config)
 - `backend/src/index.ts` (backend port)
+
+---
+
+## Observability & Logging
+
+**Complete logging infrastructure for production visibility:**
+
+**App Log Table (`app_log`):**
+- Columns: `id`, `timestamp`, `level`, `environment`, `event`, `message`, `user_id`, `request_id`, `source_file`, `source_line`, `metadata` (JSONB), `duration_ms`
+- Indexed on: timestamp, level, environment, event, user_id, request_id, and composite index for performance
+- No FK constraint on `user_id` (Supabase manages auth.users separately)
+
+**Logging Service (`backend/src/services/logging.ts`):**
+```typescript
+import { log } from '../services/logging'
+log.info('event_name', 'Message', { metadata })
+log.warn('event_name', 'Message', { metadata })
+log.error('event_name', 'Message', { metadata })
+```
+- Async non-blocking writes to database
+- Automatic console logging for dev visibility
+- Error-resilient (logs to console if DB write fails)
+- Environment auto-detection from `NODE_ENV` or `DEV` flag
+
+**Coverage (30+ events):**
+- **Auth events (10):** dev_mode, header_check, header_missing, token_verify, token_invalid, success, extraction_failed, etc.
+- **Approval events (7):** localhost_skip, check_start, user_not_found, not_approved, check_failed, success, no_user_id
+- **Chat events (7):** session_init, init_failed, message_invalid_input, route_decision, route_capybara, route_clones, route_clones_failed
+- **Orchestration events (6):** capybara_start, tool_execution_failed, clone_fetched, clone_fetch_failed, clones_start, clone_complete
+
+**Usage:** Events are automatically logged at critical junctures. No configuration needed — just run the app.
 
 ---
 
@@ -578,11 +619,24 @@ Session ID: generateUUID() → random UUID v4
 
 The project uses **Supabase Auth** with **Google OAuth** for user authentication.
 
+### Architecture Overview
+
+⚠️ **Important:** No `app_users` table exists. All users are managed exclusively by **Supabase Auth** in the `auth.users` table (Supabase-managed schema, not in our app schema). The `user_id` field in our code and logs refers to Supabase's `auth.users.id`, not a custom users table.
+
+**User flow:**
+1. User signs in with Google OAuth
+2. Supabase Auth creates entry in `auth.users` (id, email, metadata)
+3. Backend verifies JWT token and extracts `user_id` (Supabase's ID)
+4. Approval check: lookup `user_id` in our `waitlist` table (FK to auth.users, no constraint needed since auth.users is in separate schema)
+5. User gains access to protected routes
+
 ### Key Implementation Files
 
 - `backend/src/middleware/auth.ts` - JWT verification middleware
 - `backend/src/utils/jwt.ts` - JWT utility functions (verify, extract user ID)
 - `backend/src/routes/auth.ts` - Auth endpoints (profile, callback handling)
+- `frontend/src/components/AuthCallback.tsx` - OAuth callback handler with retry logic (see Auth Regression Fix)
+- `frontend/src/components/ProtectedRoute.tsx` - Route protection with event listener + fallback
 - `frontend/src/services/auth.ts` - Auth SDK wrapper (sign-in, headers, user info)
 - `supabase/config.toml` - Supabase configuration with Google OAuth
 - `.env` - Secrets: `SUPABASE_JWT_SECRET`, `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`
@@ -602,8 +656,22 @@ The project uses **Supabase Auth** with **Google OAuth** for user authentication
 - No x-user-id headers (deprecated) - only JWT Authorization headers
 
 **Database:**
-- `auth.users` table managed by Supabase (user_id, email, metadata)
+- `auth.users` table managed by Supabase (user_id, email, metadata) — NOT in our app schema
 - `waitlist` table for approval workflow (user_id, approval_status). `checkApproval` middleware enforces `approval_status === 'approved'`.
+
+### Auth Regression Fix & Lessons
+
+**The Bug (Commit 84ca834):**
+After Google OAuth login, users weren't redirected to `/chat` — they stayed on waitlist or got stuck.
+
+**Root Cause:**
+Race condition in event-based auth. Old approach (simple `isLoggedIn()` check on mount) worked reliably. New approach (event listener for `onAuthStateChange`) missed events fired before listener attached. Problem: Supabase parses OAuth fragment → fires event → but listener attaches too late.
+
+**The Fix:**
+1. **AuthCallback.tsx:** Retry loop instead of single wait. Keeps trying to get session up to 10 times (200ms each = 2 seconds total).
+2. **ProtectedRoute.tsx:** Hybrid approach — both event listener (waits up to 3 seconds for auth ready event) AND fallback direct `getSession()` check. Handles both fast and slow auth initialization paths.
+
+**Lesson:** Event-based auth can miss events if listener attaches after event fires. Mixing event listeners with fallback direct checks is more robust. Always verify complete auth flow in E2E testing, not just backend features.
 
 ### Development Setup
 
