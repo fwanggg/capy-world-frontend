@@ -6,6 +6,14 @@ const supabaseKey =
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+/** Server-side client for Edge Function invocation. Uses anon key only — never service_role. */
+const supabaseForFunctions = createClient(
+  supabaseUrl,
+  process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+);
+
+export { supabaseForFunctions };
+
 export type Database = {
   public: {
     Tables: {

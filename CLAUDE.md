@@ -268,7 +268,7 @@ Frontend receives response + optional session_transition
 - `interaction_history` — JSONB of the persona's Reddit interaction data (posts, comments, references). Used by `buildPersonaPrompt()` to construct the system prompt. Author/username fields are redacted before sending to LLM.
 - `prompt` — Legacy full system prompt (retained for reference; no longer read by `callClone()`)
 
-**persona_embeddings** — Vector embeddings of interaction_history chunks for semantic search. Populated by `backend/src/scripts/embed-personas.ts`.
+**persona_embeddings** — Vector embeddings of interaction_history chunks for semantic search. Populated by `embed-personas` Edge Function (invoke from Supabase Dashboard). See `docs/TEST_SEMANTIC_SEARCH_SUPABASE.md`.
 - `created_at`, `updated_at` — Timestamps
 
 **chat_sessions** — Session state for each conversation
@@ -313,7 +313,7 @@ Capybara uses **eight tools** with **no LLM calls inside them**. The LLM orchest
 
 **Tool 8: `send_message({prompt, clone_ids})`** — Send a question to specific personas, collect responses (e.g. pitch testing, surveys).
 
-**search_clones** uses `ilike` for location (`%value%`), profession/gender/spending_power (case-insensitive). When filters applied, orders by confidence from `llm_explanation` / interests.
+**search_clones** — Two paths: (1) Semantic: when `query` provided, calls embed Edge Function → `search_personas_semantic` RPC (one SQL: embedding + demographics). LLM translates user intent to keywords. (2) Demographic-only: `ilike` for location/profession/gender/spending_power, interests filter. Orders by confidence when filters applied.
 
 **session_transition** — `clone_names` are `anonymous_id` values (never reddit_username).
 

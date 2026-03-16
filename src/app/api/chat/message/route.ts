@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     const labeledHistory = lastMessages
       .map((msg) => {
         if (msg.role === "user") return `[USER]: ${msg.content}`;
-        if (msg.role === "capybara") return `[CAPYBARA]: ${msg.content}`;
+        if (msg.role === "capybara") return `[CAPYSAN]: ${msg.content}`;
         if (msg.role === "clone") return `[CLONE ${msg.sender_id}]: ${msg.content}`;
         return `[${msg.role.toUpperCase()}]: ${msg.content}`;
       })
@@ -140,12 +140,14 @@ export async function POST(req: Request) {
               );
             };
             try {
+              const authHeader = req.headers.get("authorization");
               const capybaraResult = await callCapybaraAI(
                 session_id,
                 content,
                 messageHistory,
                 labeledHistory,
                 {
+                  authToken: authHeader ?? undefined,
                   onReasoningStep(step) {
                     writeSSE({ type: "reasoning", step });
                   },
@@ -196,11 +198,13 @@ export async function POST(req: Request) {
         });
       }
 
+      const authHeader = req.headers.get("authorization");
       const capybaraResult = await callCapybaraAI(
         session_id,
         content,
         messageHistory,
-        labeledHistory
+        labeledHistory,
+        { authToken: authHeader ?? undefined }
       );
       responses = [
         {

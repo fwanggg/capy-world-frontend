@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
+import { wouldExceedPersonaLimit } from "@/lib/persona-limit";
 
 export async function PUT(req: Request) {
   const authResult = await requireAuth(req);
@@ -22,12 +23,20 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const mode =
-      clone_ids && clone_ids.length > 0 ? "conversation" : "god";
+    const ids = Array.isArray(clone_ids) ? clone_ids : [];
+    const limitCheck = await wouldExceedPersonaLimit(userId, session_id, ids.length);
+    if (!limitCheck.ok) {
+      return NextResponse.json(
+        { error: limitCheck.message, limit: limitCheck.limit, total: limitCheck.total },
+        { status: 403 }
+      );
+    }
+
+    const mode = ids.length > 0 ? "conversation" : "god";
 
     const { data: updated, error } = await supabase
       .from("chat_sessions")
-      .update({ active_clones: clone_ids, mode })
+      .update({ active_clones: ids, mode })
       .eq("id", session_id)
       .select()
       .single();
@@ -35,11 +44,11 @@ export async function PUT(req: Request) {
     if (error) throw error;
 
     let clone_names: string[] = [];
-    if (clone_ids && clone_ids.length > 0) {
+    if (ids.length > 0) {
       const { data: clones, error: clonesError } = await supabase
         .from("personas")
         .select("anonymous_id")
-        .in("id", clone_ids);
+        .in("id", ids);
 
       if (!clonesError && clones) {
         clone_names = clones.map((c: { anonymous_id: string }) => c.anonymous_id);

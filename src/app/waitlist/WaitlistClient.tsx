@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   signInWithGoogle,
   getAuthHeaders,
@@ -12,8 +12,6 @@ type ApprovalStatus = "approved" | "pending" | null;
 
 export default function WaitlistClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const urlPending = searchParams.get("pending") === "1";
   const { isSignedIn, loading: authLoading } = useAuth();
   const [approvalLoading, setApprovalLoading] = useState(true);
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus>(null);
@@ -50,7 +48,7 @@ export default function WaitlistClient() {
             : user?.approval_status === "pending"
               ? "pending"
               : null;
-        setApprovalStatus(urlPending ? "pending" : status);
+        setApprovalStatus(status);
       } catch {
         if (!cancelled) setProfileError("Failed to check approval status");
       } finally {
@@ -60,7 +58,7 @@ export default function WaitlistClient() {
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, urlPending]);
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (!isSignedIn) {
@@ -130,7 +128,7 @@ export default function WaitlistClient() {
             marginBottom: "var(--space-2xl)",
           }}
         >
-          Get early access to Capybara AI and start testing your ideas with
+          Get early access to Capysan and start testing your ideas with
           AI-powered user research.
         </p>
 

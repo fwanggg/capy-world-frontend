@@ -161,27 +161,48 @@ export function StudyroomSidebar({
                 </span>
               )}
 
-              {/* Delete button - only show on hover via CSS-in-JS approach */}
+              {/* Rename and Delete buttons */}
               {!isEditing && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (studyrooms.length > 1) onDelete(room.id)
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: studyrooms.length > 1 ? 'pointer' : 'not-allowed',
-                    fontSize: '11px',
-                    color: 'var(--color-gray-400)',
-                    padding: '0 2px',
-                    opacity: studyrooms.length > 1 ? 0.5 : 0.2,
-                    lineHeight: 1,
-                  }}
-                  title={studyrooms.length > 1 ? 'Delete studyroom' : 'Cannot delete last studyroom'}
-                >
-                  ×
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEditing(room)
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      color: 'var(--color-gray-400)',
+                      padding: '0 2px',
+                      opacity: 0.6,
+                      lineHeight: 1,
+                    }}
+                    title="Rename studyroom"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (studyrooms.length > 1) onDelete(room.id)
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: studyrooms.length > 1 ? 'pointer' : 'not-allowed',
+                      fontSize: '11px',
+                      color: 'var(--color-gray-400)',
+                      padding: '0 2px',
+                      opacity: studyrooms.length > 1 ? 0.5 : 0.2,
+                      lineHeight: 1,
+                    }}
+                    title={studyrooms.length > 1 ? 'Delete studyroom' : 'Cannot delete last studyroom'}
+                  >
+                    ×
+                  </button>
+                </div>
               )}
             </div>
           )

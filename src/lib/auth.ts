@@ -1,7 +1,7 @@
 import { verifyJWT, extractUserIdFromJWT } from "./jwt";
 import { userIdToUUID } from "./uuid";
 import { supabase } from "./supabase";
-import { logAppUrlOnce } from "./logging";
+import { logAppUrlOnce, log } from "./logging";
 
 export interface AuthResult {
   userId: string;
@@ -56,6 +56,12 @@ export async function requireApproval(
     .select("approval_status")
     .eq("user_id", userId)
     .single();
+
+  const status = user?.approval_status ?? (error ? "not_found" : "null");
+  log.info("approval.check", `user_id=${userId} approval_status=${status}`, {
+    userId,
+    metadata: { approval_status: status, error: error?.message },
+  });
 
   if (error || !user) return null;
 

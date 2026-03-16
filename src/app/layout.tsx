@@ -3,7 +3,7 @@ import "./globals.css";
 import { Navigation } from "@/components/Navigation";
 
 export const metadata: Metadata = {
-  title: "Capybara AI",
+  title: "Capysan",
   description: "AI-powered user research for founders and marketers",
 };
 

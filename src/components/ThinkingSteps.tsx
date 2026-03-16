@@ -48,8 +48,8 @@ export function ThinkingSteps({
         </span>
         <span>
           {isLoading
-            ? `Capybara is thinking... (${steps.length} steps)`
-            : `Show Capybara's thinking (${steps.length} steps)`}
+            ? `Capysan is thinking... (${steps.length} steps)`
+            : `Show Capysan's thinking (${steps.length} steps)`}
         </span>
       </div>
 

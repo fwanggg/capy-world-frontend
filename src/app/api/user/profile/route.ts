@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
+import { log } from "@/lib/logging";
 
 export async function GET(req: Request) {
   const authResult = await requireAuth(req);
@@ -13,6 +14,12 @@ export async function GET(req: Request) {
       .select("*")
       .eq("user_id", userId)
       .single();
+
+    const status = user?.approval_status ?? (error ? "not_found" : "null");
+    log.info("approval.profile", `user_id=${userId} approval_status=${status}`, {
+      userId,
+      metadata: { approval_status: status, error: error?.message },
+    });
 
     if (error) throw error;
 

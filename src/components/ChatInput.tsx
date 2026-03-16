@@ -20,7 +20,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const mentionOptions: MentionOption[] = [
-    { name: 'capybara', label: 'Capybara AI (Orchestrator)' },
+    { name: 'capysan', label: 'Capysan (Orchestrator)' },
     ...(activeClones.length > 0 ? [{ name: 'all_participants', label: 'All Participants' }] : []),
     ...activeClones.map(clone => ({ name: clone, label: `@${clone}` }))
   ]
@@ -84,9 +84,9 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
     if (input.trim()) {
       const { message, recipient } = extractRecipient(input.trim())
 
-      if (recipient === 'capybara') {
-        // Route to Capybara AI
-        onSend(message, 'capybara', 'capybara')
+      if (recipient === 'capysan' || recipient === 'capybara') {
+        // Route to Capysan (orchestrator)
+        onSend(message, 'capybara', 'capysan')
       } else if (recipient === 'all_participants') {
         // Route to all clones
         onSend(message, 'clones', 'all_participants')
@@ -94,7 +94,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
         // Route to specific clone by name
         onSend(message, 'clones', recipient)
       } else {
-        // Default: route to Capybara (no mention = Capybara)
+        // Default: route to Capysan (no mention = Capysan)
         onSend(message)
       }
 
@@ -191,7 +191,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'Type your message... (default: Capybara; use @ to mention participants)'}
+          placeholder={placeholder || 'Type your message... (default: Capysan; use @ to mention participants)'}
           disabled={disabled}
           style={{
             flex: 1,
