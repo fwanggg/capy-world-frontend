@@ -109,22 +109,17 @@ npm run lint
 
 ## Development Setup
 
-**With dev mode** (auto-creates test users, skips OAuth):
+Auth works the same in development and production. Use Google OAuth to sign in; no shortcuts.
+
 ```bash
-DEV=true npm run dev
+npm run dev
 ```
-Enables:
-- Auto-creates users in `waitlist` table (approval_status: approved)
-- Skips approval checks
-- Uses real database for all persistence
-- Allows testing without OAuth setup
 
 **Environment variables** (in root `.env`):
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_ANON_KEY` — Supabase anon key
 - `SUPABASE_JWT_SECRET` — JWT secret for verification
 - `OPENAI_API_KEY` — Claude API key (note: uses Anthropic not OpenAI)
-- `DEV` — Set to `true` to enable dev mode (optional)
 
 ## Common Workflows
 
@@ -559,28 +554,7 @@ if (capybaraMatch) {
 
 **Why needed:** Supabase foreign keys require proper UUID format
 
-**Implementation (`src/app/api/chat/message/route.ts`):**
-```typescript
-const userHeaderToUUID = (header: string): string => {
-  const hash = createHash('md5').update(header).digest('hex')
-  // MD5 hex → UUID v4 format
-  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`
-}
-```
-
-DEV mode: x-user-id header (any string) → deterministic UUID
-Session ID: generateUUID() → random UUID v4
-
-### Development Mode
-
-**Enable with:** `DEV=true npm run dev`
-
-**Features:**
-- Auto-creates users in waitlist table (approval_status: approved)
-- Skips waitlist approval check
-- Uses real database for all persistence
-
-**Why needed:** Allows E2E testing without OAuth setup
+Session ID: generateUUID() → random UUID v4. User ID comes from JWT (Supabase auth.users.id).
 
 ### API Contracts
 
@@ -658,8 +632,7 @@ Session ID: generateUUID() → random UUID v4
 - Changes take effect immediately on next message
 
 **Testing the tool orchestration:**
-- Use `DEV=true npm run dev` for testing
-- Test with `x-user-id: test_user` header
+- Sign in with Google OAuth to get JWT
 - Verify in logs that LLM calls tools in logical order
 - Check `capybara_reasoning` in API response for reasoning steps
 - Use `docs/E2E_TESTING.md` as reference for curl commands
@@ -709,7 +682,7 @@ The project uses **Supabase Auth** with **Google OAuth** for user authentication
 - Use `await getAuthHeaders()` to get `Authorization: Bearer {token}` header
 - Supabase SDK automatically manages session and token refresh
 - Session stored in localStorage as `supabase.auth.token`
-- No x-user-id headers (deprecated) - only JWT Authorization headers
+- Use JWT Authorization headers only
 
 **Database:**
 - `auth.users` table managed by Supabase (user_id, email, metadata) — NOT in our app schema
@@ -732,21 +705,17 @@ Race condition in event-based auth. Old approach (simple `isLoggedIn()` check on
 ### Development Setup
 
 ```bash
-# With development mode (auto-approves users)
-DEV=true npm run dev
+npm run dev
 ```
 
-Features:
-- Auto-creates users in waitlist table with `approval_status: 'approved'`
-- Allows testing without manual approval
-- Uses real database for persistence
+Auth works the same as production. Sign in with Google OAuth.
 
 ### Testing Auth Flow
 
-1. Start development servers: `DEV=true npm run dev`
+1. Start development server: `npm run dev`
 2. Navigate to `http://localhost:3000`
-3. Sign in (skip OAuth in dev mode, uses x-user-id header)
-4. Verify you're redirected to `/chat` with active session
+3. Sign in with Google on `/waitlist`
+4. Verify you're redirected to `/chat` with active session (after admin approves in waitlist)
 5. Verify requests include `Authorization: Bearer {token}` header (DevTools → Network)
 6. Check localStorage for `supabase.auth.token`
 
@@ -755,7 +724,7 @@ Features:
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | "Invalid JWT" | Token expired | Supabase SDK auto-refreshes; re-authenticate if needed |
-| "User not approved" (403) | `waitlist.approval_status !== 'approved'` | Enable `DEV=true` or admin approval |
+| "User not approved" (403) | `waitlist.approval_status !== 'approved'` | Admin must set approval_status in waitlist table |
 | "Missing Authorization header" (401) | Frontend not including JWT | Verify `getAuthHeaders()` called before fetch |
 | Google OAuth fails | Bad credentials or redirect URI | Check Google Cloud Console and Supabase auth settings |
 

@@ -5,18 +5,18 @@ This document explains how to test the Capybara AI system end-to-end using only 
 ## Prerequisites
 
 ```bash
-# 1. Start backend in dev mode
-npm run dev --workspace=backend
-
-# 2. In another terminal, start frontend
-npm run dev --workspace=frontend
-
-# 3. Both should be running:
-# - Frontend: http://localhost:3000
-# - Backend: http://localhost:3001
+npm run dev
 ```
 
-**Environment:** DEV=true enables auto-user-creation and skips approval checks for testing.
+App runs at `http://localhost:3000`. Auth uses JWT (same as production).
+
+### Obtaining a JWT for curl/scripted tests
+
+1. Sign in with Google at `http://localhost:3000/waitlist`
+2. Open DevTools → Application → Local Storage, find the key like `sb-<project>-auth-token`
+3. Copy the `access_token` from the JSON value
+4. Admin must set `approval_status: 'approved'` in the waitlist table for your user
+5. Export for curl: `export TOKEN="eyJhbGc..."`
 
 ---
 
@@ -25,9 +25,9 @@ npm run dev --workspace=frontend
 ### 1. POST /chat/init - Initialize Session
 
 ```bash
-curl -X POST http://localhost:3001/chat/init \
+curl -X POST http://localhost:3000/chat/init \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{ "mode": "god" }'
 ```
 
@@ -54,9 +54,9 @@ curl -X POST http://localhost:3001/chat/init \
 ```bash
 SESS_ID="550e8400-e29b-41d4-a716-446655440000"
 
-curl -X POST http://localhost:3001/chat/message \
+curl -X POST http://localhost:3000/chat/message \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"session_id\": \"$SESS_ID\",
     \"content\": \"I want to test my pitch on startup founders\"
@@ -107,9 +107,9 @@ curl -X POST http://localhost:3001/chat/message \
 ```bash
 SESS_ID="550e8400-e29b-41d4-a716-446655440000"
 
-curl -X POST http://localhost:3001/chat/message \
+curl -X POST http://localhost:3000/chat/message \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"session_id\": \"$SESS_ID\",
     \"content\": \"Here's my elevator pitch: my SaaS automates repetitive tasks for solopreneurs\"
@@ -166,9 +166,9 @@ You are a persona simulator...
 ```bash
 SESS_ID="550e8400-e29b-41d4-a716-446655440000"
 
-curl -X POST http://localhost:3001/chat/message \
+curl -X POST http://localhost:3000/chat/message \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"session_id\": \"$SESS_ID\",
     \"content\": \"@capybara what patterns do you see from their feedback?\",
@@ -212,8 +212,8 @@ curl -X POST http://localhost:3001/chat/message \
 ```bash
 SESS_ID="550e8400-e29b-41d4-a716-446655440000"
 
-curl http://localhost:3001/chat/history?session_id=$SESS_ID \
-  -H "x-user-id: test-user-001"
+curl http://localhost:3000/chat/history?session_id=$SESS_ID \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 **Response:**
@@ -262,11 +262,14 @@ curl http://localhost:3001/chat/history?session_id=$SESS_ID \
 ```bash
 #!/bin/bash
 
+# Set TOKEN before running (see "Obtaining a JWT" section above)
+# export TOKEN="eyJhbGc..."
+
 # Step 1: Initialize session
 echo "=== Initializing session ==="
-INIT_RESPONSE=$(curl -s -X POST http://localhost:3001/chat/init \
+INIT_RESPONSE=$(curl -s -X POST http://localhost:3000/chat/init \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{ "mode": "god" }')
 
 SESSION_ID=$(echo $INIT_RESPONSE | jq -r '.id')
@@ -274,9 +277,9 @@ echo "Session ID: $SESSION_ID"
 
 # Step 2: Ask Capybara to search and activate clones
 echo -e "\n=== Asking Capybara to find clones ==="
-CAPYBARA_RESPONSE=$(curl -s -X POST http://localhost:3001/chat/message \
+CAPYBARA_RESPONSE=$(curl -s -X POST http://localhost:3000/chat/message \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"session_id\": \"$SESSION_ID\",
     \"content\": \"I want to test my SaaS pitch on startup founders\"
@@ -288,9 +291,9 @@ echo $CAPYBARA_RESPONSE | jq '.session_transition.clone_names'
 
 # Step 3: Send message to clones
 echo -e "\n=== Sending pitch to clones ==="
-CLONE_RESPONSE=$(curl -s -X POST http://localhost:3001/chat/message \
+CLONE_RESPONSE=$(curl -s -X POST http://localhost:3000/chat/message \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"session_id\": \"$SESSION_ID\",
     \"content\": \"Here's my pitch: My SaaS automates email follow-ups, saving 10 hours per week\"
@@ -301,9 +304,9 @@ echo $CLONE_RESPONSE | jq '.ai_responses[] | {sender_id, content}'
 
 # Step 4: Ask Capybara to synthesize
 echo -e "\n=== Asking Capybara for synthesis ==="
-SYNTHESIS_RESPONSE=$(curl -s -X POST http://localhost:3001/chat/message \
+SYNTHESIS_RESPONSE=$(curl -s -X POST http://localhost:3000/chat/message \
   -H "Content-Type: application/json" \
-  -H "x-user-id: test-user-001" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{
     \"session_id\": \"$SESSION_ID\",
     \"content\": \"@capybara what are the main objections?\",
@@ -314,8 +317,8 @@ echo $SYNTHESIS_RESPONSE | jq '.ai_responses[0].content'
 
 # Step 5: View full conversation history
 echo -e "\n=== Full conversation history ==="
-curl -s http://localhost:3001/chat/history?session_id=$SESSION_ID \
-  -H "x-user-id: test-user-001" | jq '.[] | {role, sender_id, content}'
+curl -s http://localhost:3000/chat/history?session_id=$SESSION_ID \
+  -H "Authorization: Bearer $TOKEN" | jq '.[] | {role, sender_id, content}'
 ```
 
 Save this as `test_e2e.sh` and run:
@@ -351,7 +354,7 @@ bash test_e2e.sh
 ### Issue: "Session not found"
 - Reason: Session ID is wrong or session not persisted to database
 - Check: POST /chat/init response contains valid UUID
-- Fix: Confirm DEV=true is set, Supabase is running
+- Fix: Confirm Supabase is running and user is approved in waitlist
 
 ### Issue: Clone responses all identical
 - Reason: System prompt not being fetched from agent_memory

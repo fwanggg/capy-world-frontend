@@ -25,9 +25,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const isDev = process.env.DEV === "true";
-    let session: { id: string; user_id: string; mode: string; active_clones: unknown[]; metadata: { thread_id?: string } } | null;
-
     const result = await supabase
       .from("chat_sessions")
       .select("*")
@@ -35,75 +32,38 @@ export async function POST(req: Request) {
       .eq("user_id", userId)
       .single();
 
-    session = result.data;
     if (result.error) {
-      if (isDev) {
-        session = {
-          id: session_id,
-          user_id: userId,
-          mode: "god",
-          active_clones: [],
-          metadata: { thread_id: `session_${Date.now()}` },
-        };
-      } else {
-        return NextResponse.json(
-          { error: "Failed to fetch session", details: result.error.message },
-          { status: 500 }
-        );
-      }
+      return NextResponse.json(
+        { error: "Failed to fetch session", details: result.error.message },
+        { status: 500 }
+      );
     }
 
+    const session = result.data;
     if (!session) {
-      if (isDev) {
-        session = {
-          id: session_id,
-          user_id: userId,
-          mode: "god",
-          active_clones: [],
-          metadata: { thread_id: `session_${Date.now()}` },
-        };
-      } else {
-        return NextResponse.json({ error: "Session not found" }, { status: 404 });
-      }
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const threadId = (session.metadata as { thread_id?: string })?.thread_id;
-
-    let userMessage: { id: string; session_id: string; role: string; sender_id: string; content: string; created_at: string };
-    if (isDev) {
-      userMessage = {
-        id: `msg_${Date.now()}`,
+    const msgResult = await supabase
+      .from("chat_messages")
+      .insert({
         session_id,
         role: "user",
         sender_id: userId,
         content,
-        created_at: new Date().toISOString(),
-      };
-    } else {
-      const msgResult = await supabase
-        .from("chat_messages")
-        .insert({
-          session_id,
-          role: "user",
-          sender_id: userId,
-          content,
-        })
-        .select()
-        .single();
-      if (msgResult.error) throw msgResult.error;
-      userMessage = msgResult.data;
-    }
+      })
+      .select()
+      .single();
+    if (msgResult.error) throw msgResult.error;
+    const userMessage = msgResult.data;
 
-    let lastMessages: { role: string; sender_id: string; content: string }[] = [];
-    if (!isDev) {
-      const { data } = await supabase
-        .from("chat_messages")
-        .select("role, sender_id, content")
-        .eq("session_id", session_id)
-        .order("created_at", { ascending: true })
-        .limit(20);
-      lastMessages = data || [];
-    }
+    const { data: lastMessagesData } = await supabase
+      .from("chat_messages")
+      .select("role, sender_id, content")
+      .eq("session_id", session_id)
+      .order("created_at", { ascending: true })
+      .limit(20);
+    const lastMessages = lastMessagesData || [];
 
     const messageHistory = lastMessages.map((msg) =>
       msg.role === "user"
@@ -120,8 +80,6 @@ export async function POST(req: Request) {
       })
       .join("\n");
 
-    const hasActiveClones =
-      session.active_clones && (session.active_clones as unknown[]).length > 0;
     const hasExplicitClones = target_clones && target_clones.length > 0;
     const routeToCapybara = !(target === "clones" || hasExplicitClones);
 
@@ -162,15 +120,13 @@ export async function POST(req: Request) {
                   content: capybaraResult.response,
                 },
               ];
-              if (!isDev) {
-                for (const r of responses) {
-                  await supabase.from("chat_messages").insert({
-                    session_id,
-                    role: r.role,
-                    sender_id: r.sender_id,
-                    content: r.content,
-                  });
-                }
+              for (const r of responses) {
+                await supabase.from("chat_messages").insert({
+                  session_id,
+                  role: r.role,
+                  sender_id: r.sender_id,
+                  content: r.content,
+                });
               }
               const donePayload: Record<string, unknown> = {
                 type: "done",
@@ -236,15 +192,13 @@ export async function POST(req: Request) {
       }));
     }
 
-    if (!isDev) {
-      for (const r of responses) {
-        await supabase.from("chat_messages").insert({
-          session_id,
-          role: r.role,
-          sender_id: r.sender_id,
-          content: r.content,
-        });
-      }
+    for (const r of responses) {
+      await supabase.from("chat_messages").insert({
+        session_id,
+        role: r.role,
+        sender_id: r.sender_id,
+        content: r.content,
+      });
     }
 
     const responseBody: Record<string, unknown> = {

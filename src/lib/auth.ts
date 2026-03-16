@@ -1,5 +1,4 @@
 import { verifyJWT, extractUserIdFromJWT } from "./jwt";
-import { userIdToUUID } from "./uuid";
 import { supabase } from "./supabase";
 import { logAppUrlOnce, log } from "./logging";
 
@@ -11,18 +10,6 @@ export interface AuthResult {
 export async function getAuthFromRequest(
   req: Request
 ): Promise<AuthResult | null> {
-  const isDev = process.env.DEV === "true";
-
-  if (isDev) {
-    const userIdHeader = req.headers.get("x-user-id");
-    if (userIdHeader) {
-      return {
-        userId: userIdToUUID(userIdHeader),
-        userEmail: "dev@example.com",
-      };
-    }
-  }
-
   const authHeader = req.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return null;

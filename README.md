@@ -106,15 +106,9 @@ Uses **Supabase Auth** with **Google OAuth**.
 3. Redirect to `/auth/callback` → `/chat`
 4. `checkApproval` middleware enforces `waitlist.approval_status === 'approved'`
 
-### Development Mode
+### Development
 
-```bash
-DEV=true npm run dev
-```
-
-- Auto-creates users in `waitlist` with `approval_status: 'approved'`
-- Skips approval check
-- Uses real database
+Auth works the same as production. Sign in with Google OAuth on `/waitlist`. Admin must approve users in the waitlist table for chat access.
 
 ## Documentation
 

@@ -6,15 +6,16 @@ export async function POST(req: Request) {
   const authResult = await requireAuth(req);
   if (authResult instanceof Response) return authResult;
   const userId = authResult.userId;
-  const isDev = process.env.DEV === "true";
 
   try {
+    // TODO: if user reaction is good, change back to insert pending
+    // currently reducing friction for users to join the waitlist, and early access is important for us.
     const { data: user, error } = await supabase
       .from("waitlist")
       .upsert(
         {
           user_id: userId,
-          approval_status: isDev ? "approved" : "pending",
+          approval_status: "approved",
         },
         { onConflict: "user_id" }
       )

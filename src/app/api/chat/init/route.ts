@@ -14,7 +14,6 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { mode, studyroom_id } = body;
-    const isDev = process.env.DEV === "true";
 
     if (!mode || !["god", "conversation"].includes(mode)) {
       return NextResponse.json(
@@ -23,24 +22,17 @@ export async function POST(req: Request) {
       );
     }
 
-    if (isDev) {
-      await supabase.from("waitlist").insert({
-        user_id: userId,
-        approval_status: "approved",
-      });
-    } else {
-      const { data: user, error: userError } = await supabase
-        .from("waitlist")
-        .select("id")
-        .eq("user_id", userId)
-        .single();
+    const { data: user, error: userError } = await supabase
+      .from("waitlist")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
 
-      if (userError || !user) {
-        return NextResponse.json(
-          { error: "Not on waitlist. Please sign up at /waitlist first." },
-          { status: 403 }
-        );
-      }
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: "Not on waitlist. Please sign up at /waitlist first." },
+        { status: 403 }
+      );
     }
 
     if (studyroom_id) {
