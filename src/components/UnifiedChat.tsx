@@ -256,7 +256,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
               fontSize: 'var(--text-base)',
               margin: '0.5rem 0 0 0',
             }}>
-              Talk to Capysan to plan your research. For example: "I want to test my sales pitch on game developers."
+              Talk to Capysan to plan your research. For example: "Recruit 10 game developers in U.S. for a quick interview"
             </p>
           </div>
         )}

@@ -77,7 +77,7 @@ export default function UseCases() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3xl)" }}>
             {/* Step 0 */}
-            <div>
+            <div id="studyroom">
               <div
                 style={{
                   display: "flex",

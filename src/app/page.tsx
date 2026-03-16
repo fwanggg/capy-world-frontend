@@ -54,6 +54,32 @@ export default function Home() {
             Get Early Access Now
           </Link>
 
+          <p
+            style={{
+              marginTop: "var(--space-xl)",
+              fontSize: "var(--text-sm)",
+              color: "var(--color-gray-500)",
+              maxWidth: "480px",
+              marginLeft: "auto",
+              marginRight: "auto",
+              lineHeight: 1.6,
+            }}
+          >
+            Early access: 3000 Persona Pool, each user may recruit up to 50
+            personas across all{" "}
+            <Link
+              href="/use-cases#studyroom"
+              style={{
+                color: "var(--color-teal)",
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
+              }}
+            >
+              studyrooms
+            </Link>
+            .
+          </p>
+
           <div
             style={{
               marginTop: "var(--space-4xl)",
