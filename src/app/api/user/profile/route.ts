@@ -26,6 +26,8 @@ export async function GET(req: Request) {
     if (!upsertError && upserted) {
       user = upserted;
       log.info("approval.profile", `Created waitlist entry for user_id=${userId}`);
+    } else if (upsertError) {
+      console.error("[PROFILE] Waitlist upsert failed:", upsertError.message, { userId });
     }
   }
 

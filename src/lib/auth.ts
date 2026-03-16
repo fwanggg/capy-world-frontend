@@ -38,13 +38,34 @@ export async function requireApproval(
   req: Request,
   userId: string
 ): Promise<Response | null> {
-  const { data: user, error } = await supabase
+  let { data: user, error } = await supabase
     .from("waitlist")
     .select("approval_status")
     .eq("user_id", userId)
-    .single();
+    .maybeSingle();
 
-  const status = user?.approval_status ?? (error ? "not_found" : "null");
+  if (!user && !error) {
+    const { data: upserted, error: upsertError } = await supabase
+      .from("waitlist")
+      .upsert(
+        { user_id: userId, approval_status: "approved" },
+        { onConflict: "user_id" }
+      )
+      .select("approval_status")
+      .single();
+    if (!upsertError && upserted) {
+      user = upserted;
+      log.info("approval.check", `Created waitlist entry for user_id=${userId}`);
+    } else if (upsertError) {
+      console.error("[AUTH] Waitlist upsert failed:", upsertError.message, { userId });
+      log.warn("approval.check", `Upsert failed for user_id=${userId}`, {
+        userId,
+        metadata: { error: upsertError.message },
+      });
+    }
+  }
+
+  const status = user?.approval_status ?? (error ? "error" : "not_found");
   log.info("approval.check", `user_id=${userId} approval_status=${status}`, {
     userId,
     metadata: { approval_status: status, error: error?.message },
