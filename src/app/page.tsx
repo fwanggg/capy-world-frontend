@@ -25,10 +25,10 @@ export default function Home() {
               lineHeight: "var(--line-tight)",
             }}
           >
-            Talk to Digital Clones.
+            Talk to AI Personas
             <br />
             <span style={{ color: "var(--color-teal)" }}>
-              Get Honest Feedback in Minutes.
+              Feedback in Seconds.
             </span>
           </h1>
 
@@ -41,8 +41,8 @@ export default function Home() {
               margin: "0 auto var(--space-3xl)",
             }}
           >
-            Instant, actionable user research powered by AI. Test your pitch,
-            validate ideas, and find gaps—without waiting weeks for surveys.
+            Recruit army of high-fidelity personas aligned with your Ideal Customer Profile.
+            Run surveys, validate ideas, and get brutally honest feedback, in seconds.
           </p>
 
           <Link
@@ -69,7 +69,7 @@ export default function Home() {
               fontSize: "var(--text-3xl)",
             }}
           >
-            Why Capybara Works
+            Why Capysan Works
           </h2>
 
           <div
@@ -78,20 +78,20 @@ export default function Home() {
           >
             {[
               {
-                title: "Speed",
-                desc: "Get feedback in minutes, not weeks",
+                title: "Recuits ICP-Matched Personas in seconds",
+                desc: "High-fidelity Personas by segments.",
               },
               {
-                title: "Depth",
-                desc: "Real user perspectives, not aggregated patterns",
+                title: "Actionable Individual-Level Feedback, NO BS",
+                desc: "Actionable, brutally honest, individual-level feedback, backed by anonamized real human data. no BS.",
               },
               {
-                title: "Actionability",
-                desc: "Catch what will actually fail with users",
+                title: "Future-Proof Insights",
+                desc: "Predict Emerging behaviors, not just history.",
               },
               {
-                title: "AI-Powered",
-                desc: "Fully intelligent digital personas at scale",
+                title: "Always On, Conversational",
+                desc: "24/7 research. No scheduling, no waiting. Just ask.",
               },
             ].map((item) => (
               <div key={item.title} className="card">
@@ -135,7 +135,7 @@ export default function Home() {
                   fontSize: "var(--text-lg)",
                 }}
               >
-                Capybara AI
+                Capysan
               </h3>
               <p
                 style={{
@@ -143,7 +143,7 @@ export default function Home() {
                   lineHeight: "1.6",
                 }}
               >
-                AI-powered user research for founders and marketers.
+                ICP-matched personas. Real-time validation. Unfiltered feedback.
               </p>
             </div>
 
@@ -185,14 +185,14 @@ export default function Home() {
                 </li>
                 <li>
                   <Link
-                    href="/docs"
+                    href="/use-cases"
                     style={{
                       color: "var(--color-gray-300)",
                       textDecoration: "none",
                       fontSize: "var(--text-sm)",
                     }}
                   >
-                    Docs
+                    Use Cases
                   </Link>
                 </li>
               </ul>
@@ -247,7 +247,7 @@ export default function Home() {
               color: "var(--color-gray-400)",
             }}
           >
-            <p>© 2025 Capybara AI. All rights reserved.</p>
+            <p>© 2025 Capysan. All rights reserved.</p>
           </div>
         </div>
       </footer>

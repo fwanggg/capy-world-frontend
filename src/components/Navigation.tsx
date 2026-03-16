@@ -54,13 +54,13 @@ export function Navigation() {
     >
       <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
         <Link href="/" style={{ fontWeight: "bold", textDecoration: "none" }}>
-          Capybara
+          Capysan
         </Link>
         <Link href="/about" style={{ textDecoration: "none" }}>
           About
         </Link>
-        <Link href="/docs" style={{ textDecoration: "none" }}>
-          Docs
+        <Link href="/use-cases" style={{ textDecoration: "none" }}>
+          Use Cases
         </Link>
         {!user && (
           <Link href="/waitlist" style={{ textDecoration: "none" }}>

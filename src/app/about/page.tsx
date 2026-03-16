@@ -7,62 +7,139 @@ export default function About() {
           backgroundColor: "var(--color-gray-50)",
         }}
       >
-        <div className="container" style={{ maxWidth: "800px" }}>
-          <h1 style={{ marginBottom: "var(--space-2xl)" }}>
-            The Problem with User Research Today
+        <div className="container" style={{ maxWidth: "720px" }}>
+          <h1
+            style={{
+              marginBottom: "var(--space-2xl)",
+              fontSize: "var(--text-xl)",
+              fontWeight: 600,
+              color: "var(--color-navy)",
+            }}
+          >
+            Why we built Capysan
           </h1>
-          <p style={{ fontSize: "var(--text-lg)" }}>
-            Existing research tools are slow, expensive, and miss the nuance.
-            You wait weeks for insights that don&apos;t capture implicit user
-            needs. Capybara changes that.
+          <p
+            style={{
+              fontSize: "var(--text-base)",
+              lineHeight: 1.7,
+              color: "var(--color-gray-700)",
+              marginBottom: "var(--space-2xl)",
+            }}
+          >
+            We observed three recurring gaps in how early-stage teams validate
+            product direction:
           </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2xl)" }}>
+            <div>
+              <h2
+                style={{
+                  fontSize: "var(--text-base)",
+                  fontWeight: 600,
+                  color: "var(--color-navy)",
+                  marginBottom: "var(--space-sm)",
+                }}
+              >
+                Deep research tools
+              </h2>
+              <p
+                style={{
+                  fontSize: "var(--text-sm)",
+                  lineHeight: 1.7,
+                  color: "var(--color-gray-600)",
+                }}
+              >
+                Aggregated insights are packaged into long-form reports that
+                take 10+ minutes to generate and often require multiple retries.
+                The output can be difficult to parse and act on.
+              </p>
+            </div>
+
+            <div>
+              <h2
+                style={{
+                  fontSize: "var(--text-base)",
+                  fontWeight: 600,
+                  color: "var(--color-navy)",
+                  marginBottom: "var(--space-sm)",
+                }}
+              >
+                Direct customer engagement
+              </h2>
+              <p
+                style={{
+                  fontSize: "var(--text-sm)",
+                  lineHeight: 1.7,
+                  color: "var(--color-gray-600)",
+                }}
+              >
+                To validate direction, founders need hands-on conversations with
+                customers who match their ICP. Capturing nuanced needs and
+                catching misalignments early typically takes days or weeks—even
+                for early-stage validation.
+              </p>
+            </div>
+
+            <div>
+              <h2
+                style={{
+                  fontSize: "var(--text-base)",
+                  fontWeight: 600,
+                  color: "var(--color-navy)",
+                  marginBottom: "var(--space-sm)",
+                }}
+              >
+                Comfort with outreach
+              </h2>
+              <p
+                style={{
+                  fontSize: "var(--text-sm)",
+                  lineHeight: 1.7,
+                  color: "var(--color-gray-600)",
+                }}
+              >
+                Customer validation is essential, but founders who are less
+                comfortable talking to strangers may avoid it—blocking critical
+                feedback from reaching them.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
       <section style={{ padding: "var(--space-4xl) var(--space-xl)" }}>
-        <div className="container" style={{ maxWidth: "800px" }}>
-          <h2 style={{ marginBottom: "var(--space-xl)" }}>Our Solution</h2>
-          <p style={{ marginBottom: "var(--space-lg)" }}>
-            Digital clones trained on real user personas. Each clone understands
-            implicit needs, not just surface-level signals. You get instant
-            feedback designed for action.
-          </p>
-          <p>
-            Built for founders, marketers, and product teams who don&apos;t have
-            time to wait. Test faster. Iterate smarter. Ship with confidence.
-          </p>
-        </div>
-      </section>
-
-      <section
-        style={{
-          backgroundColor: "var(--color-navy)",
-          color: "var(--color-white)",
-          padding: "var(--space-4xl) var(--space-xl)",
-        }}
-      >
-        <div className="container" style={{ maxWidth: "800px" }}>
+        <div className="container" style={{ maxWidth: "720px" }}>
           <h2
             style={{
-              color: "var(--color-white)",
-              marginBottom: "var(--space-xl)",
-            }}
-          >
-            For Early-Stage Founders & Marketers
-          </h2>
-          <p
-            style={{
-              color: "var(--color-gray-200)",
+              fontSize: "var(--text-lg)",
+              fontWeight: 600,
+              color: "var(--color-navy)",
               marginBottom: "var(--space-lg)",
             }}
           >
-            You&apos;re building something new. You need real feedback, not
-            generic surveys. You need it fast. Capybara gives you honest,
-            individual perspectives from AI personas trained on real user data.
+            What we offer
+          </h2>
+          <p
+            style={{
+              fontSize: "var(--text-sm)",
+              lineHeight: 1.7,
+              color: "var(--color-gray-600)",
+              marginBottom: "var(--space-base)",
+            }}
+          >
+            Capysan lets you chat directly with AI personas backed by anonamized real human data. Each persona reflects implicit needs and communication style,
+            not just demographics. You get individual feedback in minutes instead
+            of aggregated reports or weeks of outreach.
           </p>
-          <p style={{ color: "var(--color-gray-200)" }}>
-            Validate your go-to-market strategy. Test messaging. Find product
-            gaps. All in minutes.
+          <p
+            style={{
+              fontSize: "var(--text-sm)",
+              lineHeight: 1.7,
+              color: "var(--color-gray-600)",
+            }}
+          >
+            Built for founders, marketers, and product teams who need to test
+            ideas quickly and iterate with confidence.
           </p>
         </div>
       </section>
