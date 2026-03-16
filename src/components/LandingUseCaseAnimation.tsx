@@ -145,8 +145,33 @@ export function LandingUseCaseAnimation() {
 
         {/* Found */}
         {phase >= PHASES.FOUND && (
-          <div style={{ alignSelf: "flex-start", maxWidth: "90%", animation: "fadeIn 0.3s ease-out" }}>
+          <div style={{ alignSelf: "flex-start", maxWidth: "90%", display: "flex", flexDirection: "column", gap: "var(--space-sm)", animation: "fadeIn 0.3s ease-out" }}>
             <span style={{ fontSize: "var(--text-xs)", color: "var(--color-gray-500)", marginBottom: "2px", display: "block" }}>Capysan</span>
+            <div
+              style={{
+                padding: "var(--space-xs) var(--space-sm)",
+                background: "var(--color-gray-50)",
+                color: "var(--color-gray-600)",
+                borderRadius: "0.5rem",
+                fontSize: "var(--text-xs)",
+                lineHeight: 1.5,
+                borderLeft: "3px solid var(--color-teal)",
+              }}
+            >
+              <span style={{ fontWeight: 600, color: "var(--color-gray-500)" }}>Reasoning:</span> get_demographic_segments → location, profession, interests. search_clones: Whistler, Big Sky, carpooling. Found 10.
+            </div>
+            <div
+              style={{
+                padding: "var(--space-xs) var(--space-sm)",
+                background: "var(--color-gray-50)",
+                color: "var(--color-gray-600)",
+                borderRadius: "0.5rem",
+                fontSize: "var(--text-xs)",
+                lineHeight: 1.5,
+              }}
+            >
+              Recruited Persona 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 to the studyroom.
+            </div>
             <div
               style={{
                 padding: "var(--space-sm) var(--space-base)",
