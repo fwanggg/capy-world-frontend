@@ -8,11 +8,26 @@ export async function GET(req: Request) {
   if (authResult instanceof Response) return authResult;
   const userId = authResult.userId;
 
-  const { data: user, error } = await supabase
+  let { data: user, error } = await supabase
     .from("waitlist")
     .select("*")
     .eq("user_id", userId)
     .maybeSingle();
+
+  if (!user && !error) {
+    const { data: upserted, error: upsertError } = await supabase
+      .from("waitlist")
+      .upsert(
+        { user_id: userId, approval_status: "approved" },
+        { onConflict: "user_id" }
+      )
+      .select("*")
+      .single();
+    if (!upsertError && upserted) {
+      user = upserted;
+      log.info("approval.profile", `Created waitlist entry for user_id=${userId}`);
+    }
+  }
 
   const status = user?.approval_status ?? (error ? "error" : "not_found");
   log.info("approval.profile", `user_id=${userId} approval_status=${status}`, {

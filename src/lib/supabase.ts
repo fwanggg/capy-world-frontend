@@ -4,6 +4,7 @@ const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE
 const supabaseKey =
   process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
+/** Server-side Supabase client. Uses anon key only — never service_role, never bypasses RLS. */
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 /** Server-side client for Edge Function invocation. Uses anon key only — never service_role. */
