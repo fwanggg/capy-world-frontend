@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TypingHero } from "@/components/TypingHero";
 
 export default function Home() {
   return (
@@ -27,9 +28,7 @@ export default function Home() {
           >
             Talk to AI Personas
             <br />
-            <span style={{ color: "var(--color-teal)" }}>
-              Feedback in Seconds.
-            </span>
+            <TypingHero />
           </h1>
 
           <p
@@ -76,7 +75,10 @@ export default function Home() {
             className="grid grid-2"
             style={{ maxWidth: "1000px", margin: "0 auto" }}
           >
-            {[
+            {[{
+                title: "Built for Early Stage AI Builders",
+                desc: "Natural Language, Vibe Check, and Get Feedback in Seconds.",
+              },
               {
                 title: "Recuits ICP-Matched Personas in seconds",
                 desc: "High-fidelity Personas by segments.",
@@ -85,6 +87,7 @@ export default function Home() {
                 title: "Actionable Individual-Level Feedback, NO BS",
                 desc: "Actionable, brutally honest, individual-level feedback, backed by anonamized real human data. no BS.",
               },
+              
               {
                 title: "Future-Proof Insights",
                 desc: "Predict Emerging behaviors, not just history.",
