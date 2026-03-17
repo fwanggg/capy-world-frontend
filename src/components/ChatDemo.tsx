@@ -19,6 +19,7 @@ export function ChatDemo() {
   const [userInput, setUserInput] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const timeoutRefsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const shouldAnimateRef = useRef(true);
 
   useEffect(() => {
     const clearTimeouts = () => {
@@ -49,14 +50,19 @@ export function ChatDemo() {
     const runCycle = async () => {
       // Type out each message sequentially
       for (let i = 0; i < USE_CASES.length; i++) {
+        if (!shouldAnimateRef.current) return; // Stop if user started editing
         await typeMessage(USE_CASES[i]);
         if (i < USE_CASES.length - 1) {
           await delay(PAUSE_BETWEEN_MESSAGES);
         }
       }
 
+      if (!shouldAnimateRef.current) return;
+
       // View all messages
       await delay(PAUSE_BEFORE_CLEAR);
+
+      if (!shouldAnimateRef.current) return;
 
       // Delete the last message
       await deleteMessage(USE_CASES[USE_CASES.length - 1]);
@@ -65,13 +71,18 @@ export function ChatDemo() {
       // Pause before next cycle
       await delay(PAUSE_BETWEEN_CYCLES);
 
+      if (!shouldAnimateRef.current) return;
+
       // Restart
       runCycle();
     };
 
     runCycle();
 
-    return clearTimeouts;
+    return () => {
+      shouldAnimateRef.current = false;
+      clearTimeouts();
+    };
   }, []);
 
   return (
@@ -98,7 +109,15 @@ export function ChatDemo() {
           borderRadius: "0.5rem",
           cursor: isEditing ? "text" : "pointer",
         }}
-        onClick={() => !isEditing && setIsEditing(true)}
+        onClick={() => {
+          if (!isEditing) {
+            shouldAnimateRef.current = false;
+            // Clear all pending timeouts
+            timeoutRefsRef.current.forEach((id) => clearTimeout(id));
+            timeoutRefsRef.current = [];
+            setIsEditing(true);
+          }
+        }}
       >
         <textarea
           value={isEditing ? userInput : currentText}
