@@ -148,7 +148,7 @@ export function ChatDemo() {
             color: "var(--color-white)",
             border: "none",
             borderRadius: "0.375rem",
-            padding: "var(--space-sm) var(--space-base)",
+            padding: "var(--space-base) var(--space-lg)",
             fontSize: "var(--text-sm)",
             fontWeight: 500,
             textDecoration: "none",
