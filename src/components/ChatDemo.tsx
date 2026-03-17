@@ -89,12 +89,11 @@ export function ChatDemo() {
           width: "min(66.67vw, 600px)",
           minWidth: "320px",
           display: "flex",
-          flexDirection: "column",
+          alignItems: "flex-end",
           gap: "var(--space-sm)",
-          backgroundColor: "var(--color-white)",
+          padding: "var(--space-base) var(--space-lg)",
           border: "1px solid var(--color-gray-200)",
-          borderRadius: "0.375rem",
-          overflow: "hidden",
+          borderRadius: "0.5rem",
         }}
       >
         <textarea
@@ -103,61 +102,50 @@ export function ChatDemo() {
           disabled
           style={{
             flex: 1,
-            backgroundColor: "var(--color-white)",
+            padding: "var(--space-sm) 0",
             border: "none",
-            padding: "var(--space-lg)",
+            fontFamily: "var(--font-body)",
             fontSize: "var(--text-sm)",
             color: "var(--color-navy)",
-            outline: "none",
-            cursor: "not-allowed",
-            boxSizing: "border-box",
-            fontFamily: "var(--font-body)",
-            minHeight: "120px",
             resize: "none",
-            lineHeight: 1.5,
+            transition: "all 0.2s ease",
+            minHeight: "44px",
+            maxHeight: "120px",
+            outline: "none",
+            backgroundColor: "transparent",
+            cursor: "not-allowed",
           }}
         />
-        <div
+        <Link
+          href="/waitlist"
           style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            padding: "0 var(--space-lg) var(--space-lg) var(--space-lg)",
-            borderTop: "1px solid var(--color-gray-200)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "var(--color-teal)",
+            color: "var(--color-white)",
+            border: "none",
+            borderRadius: "0.375rem",
+            padding: "var(--space-sm) var(--space-base)",
+            fontSize: "var(--text-sm)",
+            fontWeight: 500,
+            textDecoration: "none",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            const target = e.currentTarget as HTMLAnchorElement;
+            target.style.backgroundColor = "var(--color-teal-light)";
+          }}
+          onMouseLeave={(e) => {
+            const target = e.currentTarget as HTMLAnchorElement;
+            target.style.backgroundColor = "var(--color-teal)";
           }}
         >
-          <Link
-            href="/waitlist"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "var(--color-teal)",
-              color: "var(--color-white)",
-              border: "none",
-              borderRadius: "0.375rem",
-              padding: "var(--space-base) var(--space-lg)",
-              fontSize: "var(--text-sm)",
-              fontWeight: 500,
-              textDecoration: "none",
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              minWidth: "80px",
-              textAlign: "center",
-            }}
-            onMouseEnter={(e) => {
-              const target = e.currentTarget as HTMLAnchorElement;
-              target.style.backgroundColor = "var(--color-teal-light)";
-              target.style.transform = "scale(1.05)";
-            }}
-            onMouseLeave={(e) => {
-              const target = e.currentTarget as HTMLAnchorElement;
-              target.style.backgroundColor = "var(--color-teal)";
-              target.style.transform = "scale(1)";
-            }}
-          >
-            Send
-          </Link>
-        </div>
+          Send
+        </Link>
       </div>
 
       <style>{`
