@@ -95,46 +95,7 @@ export function ChatDemo() {
         position: "relative",
       }}
     >
-      {/* Typed Text Display */}
-      {currentText && (
-        <div
-          style={{
-            maxWidth: "min(66.67vw, 600px)",
-            minHeight: "60px",
-            padding: "var(--space-lg)",
-            backgroundColor: "var(--color-gray-50)",
-            borderRadius: "0.5rem",
-            borderLeft: "3px solid var(--color-teal)",
-            animation: "fadeIn 0.3s ease-in",
-          }}
-        >
-          <p
-            style={{
-              fontSize: "var(--text-sm)",
-              color: "var(--color-navy)",
-              margin: 0,
-              lineHeight: 1.6,
-              wordWrap: "break-word",
-              overflowWrap: "break-word",
-              fontFamily: "var(--font-body)",
-            }}
-          >
-            {currentText}
-            <span
-              style={{
-                display: "inline-block",
-                width: "2px",
-                height: "1em",
-                backgroundColor: "var(--color-teal)",
-                marginLeft: "2px",
-                animation: "blink 1s infinite",
-              }}
-            />
-          </p>
-        </div>
-      )}
-
-      {/* Input Demo */}
+      {/* Input Demo - Text appears IN the input */}
       <div
         style={{
           width: "min(66.67vw, 600px)",
@@ -146,6 +107,7 @@ export function ChatDemo() {
       >
         <input
           type="text"
+          value={currentText}
           placeholder="Type your use case..."
           disabled
           style={{
@@ -158,6 +120,7 @@ export function ChatDemo() {
             color: "var(--color-navy)",
             outline: "none",
             cursor: "not-allowed",
+            boxSizing: "border-box",
           }}
         />
         <button
