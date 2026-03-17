@@ -79,10 +79,7 @@ export function ChatDemo() {
 
     runCycle();
 
-    return () => {
-      shouldAnimateRef.current = false;
-      clearTimeouts();
-    };
+    return clearTimeouts;
   }, []);
 
   return (
