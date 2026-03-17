@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TypingHero } from "@/components/TypingHero";
+import { ChatDemo } from "@/components/ChatDemo";
 import { LandingCompetitiveAnalysis } from "@/components/LandingCompetitiveAnalysis";
 
 export default function Home() {
@@ -27,7 +28,7 @@ export default function Home() {
               lineHeight: "var(--line-tight)",
             }}
           >
-            Talk to AI Personas
+            Recruit ICP-aligned AI Personas in Seconds
             <br />
             <TypingHero />
           </h1>
@@ -44,14 +45,6 @@ export default function Home() {
             Recruit army of high-fidelity personas aligned with your Ideal Customer Profile.
             Run surveys, validate ideas, and get brutally honest feedback, in seconds.
           </p>
-
-          <Link
-            href="/waitlist"
-            className="btn btn-primary"
-            style={{ marginTop: "var(--space-lg)" }}
-          >
-            Get Early Access Now
-          </Link>
 
           <p
             style={{
@@ -79,34 +72,9 @@ export default function Home() {
             .
           </p>
 
-          <div
-            style={{
-              marginTop: "var(--space-4xl)",
-              width: "100vw",
-              position: "relative",
-              left: "50%",
-              right: "50%",
-              marginLeft: "-50vw",
-              marginRight: "-50vw",
-              display: "flex",
-              justifyContent: "center",
-            }}
-          >
-            <video
-              src="/video/landing_video.mp4"
-              autoPlay
-              muted
-              loop
-              playsInline
-              controls
-              style={{
-                width: "min(66.67vw, 1100px)",
-                minWidth: "320px",
-                borderRadius: "0.75rem",
-                boxShadow: "var(--shadow-lg)",
-              }}
-            />
-          </div>
+          <ChatDemo />
+
+          <div style={{ marginTop: "var(--space-4xl)" }} />
         </div>
       </section>
 
@@ -182,7 +150,7 @@ export default function Home() {
                       fontSize: "var(--text-sm)",
                     }}
                   >
-                    Get Early Access Now
+                    Start Recruiting Now!
                   </Link>
                 </li>
                 <li>
