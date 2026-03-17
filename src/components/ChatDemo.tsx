@@ -16,6 +16,8 @@ const PAUSE_BETWEEN_CYCLES = 1500;
 
 export function ChatDemo() {
   const [currentText, setCurrentText] = useState("");
+  const [userInput, setUserInput] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
   const timeoutRefsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
@@ -94,12 +96,15 @@ export function ChatDemo() {
           padding: "var(--space-base) var(--space-lg)",
           border: "1px solid var(--color-gray-200)",
           borderRadius: "0.5rem",
+          cursor: isEditing ? "text" : "pointer",
         }}
+        onClick={() => !isEditing && setIsEditing(true)}
       >
         <textarea
-          value={currentText}
+          value={isEditing ? userInput : currentText}
+          onChange={(e) => isEditing && setUserInput(e.target.value)}
           placeholder="Type your use case..."
-          disabled
+          disabled={!isEditing}
           style={{
             flex: 1,
             padding: "var(--space-sm) 0",
@@ -113,7 +118,7 @@ export function ChatDemo() {
             maxHeight: "120px",
             outline: "none",
             backgroundColor: "transparent",
-            cursor: "not-allowed",
+            cursor: isEditing ? "text" : "pointer",
           }}
         />
         <Link
@@ -122,7 +127,10 @@ export function ChatDemo() {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "var(--color-teal)",
+            backgroundColor:
+              !isEditing || !userInput.trim()
+                ? "var(--color-gray-300)"
+                : "var(--color-teal)",
             color: "var(--color-white)",
             border: "none",
             borderRadius: "0.375rem",
@@ -130,18 +138,26 @@ export function ChatDemo() {
             fontSize: "var(--text-sm)",
             fontWeight: 500,
             textDecoration: "none",
-            cursor: "pointer",
+            cursor:
+              !isEditing || !userInput.trim() ? "not-allowed" : "pointer",
             transition: "all 0.2s ease",
             whiteSpace: "nowrap",
             flexShrink: 0,
+            opacity: !isEditing || !userInput.trim() ? 0.6 : 1,
+            pointerEvents:
+              !isEditing || !userInput.trim() ? "none" : "auto",
           }}
           onMouseEnter={(e) => {
-            const target = e.currentTarget as HTMLAnchorElement;
-            target.style.backgroundColor = "var(--color-teal-light)";
+            if (isEditing && userInput.trim()) {
+              const target = e.currentTarget as HTMLAnchorElement;
+              target.style.backgroundColor = "var(--color-teal-light)";
+            }
           }}
           onMouseLeave={(e) => {
-            const target = e.currentTarget as HTMLAnchorElement;
-            target.style.backgroundColor = "var(--color-teal)";
+            if (isEditing && userInput.trim()) {
+              const target = e.currentTarget as HTMLAnchorElement;
+              target.style.backgroundColor = "var(--color-teal)";
+            }
           }}
         >
           Send
