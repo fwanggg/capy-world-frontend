@@ -1,28 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
-const STATIC_PREFIX = "Get ";
-const TYPING_PART = "Honest, Actionable";
-const STATIC_SUFFIX = "Feedback in Seconds.";
+const STATIC_PREFIX = "Run ";
+const TYPING_OPTIONS = ["Survey", "Customer Interview", "A/B Test"];
 const TYPING_DELAY = 80;
+const DELETE_DELAY = 50;
+const PAUSE_AFTER_TYPE_MS = 1500;
+const PAUSE_AFTER_DELETE_MS = 500;
 const CURSOR_BLINK_MS = 530;
 
 export function TypingHero() {
-  const [typedPrefix, setTypedPrefix] = useState("");
+  const [typedPart, setTypedPart] = useState("");
   const [cursorVisible, setCursorVisible] = useState(true);
+  const optionIndexRef = useRef(0);
 
   useEffect(() => {
-    let charIndex = 0;
-    const typeNext = () => {
-      if (charIndex < TYPING_PART.length) {
-        setTypedPrefix(TYPING_PART.slice(0, charIndex + 1));
-        charIndex++;
-        setTimeout(typeNext, TYPING_DELAY);
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const currentOption = () =>
+      TYPING_OPTIONS[optionIndexRef.current % TYPING_OPTIONS.length];
+
+    const typeNext = (charIndex: number) => {
+      const option = currentOption();
+      if (charIndex < option.length) {
+        setTypedPart(option.slice(0, charIndex + 1));
+        timeoutId = setTimeout(() => typeNext(charIndex + 1), TYPING_DELAY);
+      } else {
+        timeoutId = setTimeout(() => removeNext(option.length), PAUSE_AFTER_TYPE_MS);
       }
     };
-    const startDelay = setTimeout(typeNext, 1500);
-    return () => clearTimeout(startDelay);
+
+    const removeNext = (remaining: number) => {
+      if (remaining > 0) {
+        setTypedPart((prev) => prev.slice(0, -1));
+        timeoutId = setTimeout(() => removeNext(remaining - 1), DELETE_DELAY);
+      } else {
+        optionIndexRef.current++;
+        timeoutId = setTimeout(() => typeNext(0), PAUSE_AFTER_DELETE_MS);
+      }
+    };
+
+    const startDelay = setTimeout(() => typeNext(0), 1500);
+
+    return () => {
+      clearTimeout(startDelay);
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
@@ -33,7 +56,7 @@ export function TypingHero() {
   return (
     <span style={{ color: "var(--color-teal)" }}>
       {STATIC_PREFIX}
-      {typedPrefix}
+      {typedPart}
       <span
         style={{
           opacity: cursorVisible ? 1 : 0,
@@ -42,7 +65,6 @@ export function TypingHero() {
       >
         |
       </span>
-      {STATIC_SUFFIX}
     </span>
   );
 }

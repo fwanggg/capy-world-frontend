@@ -109,25 +109,39 @@ export async function POST(req: Request) {
                   onReasoningStep(step) {
                     writeSSE({ type: "reasoning", step });
                   },
+                  onRelayMessages(messages) {
+                    writeSSE({ type: "relay", messages });
+                  },
                 }
               );
               sessionTransition = capybaraResult.session_transition;
               capybaraReasoning = capybaraResult.reasoning;
-              responses = [
-                {
-                  role: "capybara",
-                  sender_id: "capybara-ai",
-                  content: capybaraResult.response,
-                },
-              ];
-              for (const r of responses) {
-                await supabase.from("chat_messages").insert({
-                  session_id,
-                  role: r.role,
-                  sender_id: r.sender_id,
-                  content: r.content,
-                });
-              }
+
+              const finalResponse = {
+                role: "capybara",
+                sender_id: "capybara-ai",
+                content: capybaraResult.response,
+              };
+              await supabase.from("chat_messages").insert({
+                session_id,
+                role: finalResponse.role,
+                sender_id: finalResponse.sender_id,
+                content: finalResponse.content,
+              });
+
+              // Refetch relay (ask + clone responses) so conversation appears in chat
+              const { data: relayData } = await supabase
+                .from("chat_messages")
+                .select("role, sender_id, content")
+                .eq("session_id", session_id)
+                .gt("created_at", userMessage.created_at)
+                .order("created_at", { ascending: true });
+              responses = (relayData || []).map((m) => ({
+                role: m.role,
+                sender_id: m.sender_id,
+                content: m.content,
+              }));
+
               const donePayload: Record<string, unknown> = {
                 type: "done",
                 user_message: userMessage,
@@ -148,8 +162,9 @@ export async function POST(req: Request) {
         return new Response(stream, {
           headers: {
             "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             Connection: "keep-alive",
+            "X-Accel-Buffering": "no",
           },
         });
       }
@@ -162,13 +177,25 @@ export async function POST(req: Request) {
         labeledHistory,
         { authToken: authHeader ?? undefined }
       );
-      responses = [
-        {
-          role: "capybara",
-          sender_id: "capybara-ai",
-          content: capybaraResult.response,
-        },
-      ];
+      // Refetch relay messages (ask + clone responses) persisted by send_message tool
+      const { data: relayData } = await supabase
+        .from("chat_messages")
+        .select("role, sender_id, content")
+        .eq("session_id", session_id)
+        .gt("created_at", userMessage.created_at)
+        .order("created_at", { ascending: true });
+      const relayResponses = (relayData || []).map((m) => ({
+        role: m.role,
+        sender_id: m.sender_id,
+        content: m.content,
+      }));
+
+      const finalResponse = {
+        role: "capybara",
+        sender_id: "capybara-ai",
+        content: capybaraResult.response,
+      };
+      responses = [...relayResponses, finalResponse];
       sessionTransition = capybaraResult.session_transition;
       capybaraReasoning = capybaraResult.reasoning;
     } else {
@@ -192,13 +219,16 @@ export async function POST(req: Request) {
       }));
     }
 
-    for (const r of responses) {
-      await supabase.from("chat_messages").insert({
-        session_id,
-        role: r.role,
-        sender_id: r.sender_id,
-        content: r.content,
-      });
+    // Persist responses (Capysan path already persisted relay + final above)
+    if (!routeToCapybara) {
+      for (const r of responses) {
+        await supabase.from("chat_messages").insert({
+          session_id,
+          role: r.role,
+          sender_id: r.sender_id,
+          content: r.content,
+        });
+      }
     }
 
     const responseBody: Record<string, unknown> = {

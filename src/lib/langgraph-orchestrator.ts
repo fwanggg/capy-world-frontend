@@ -1,10 +1,11 @@
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage, BaseMessage } from '@langchain/core/messages'
-import { createDeepSeekLLM } from './llm'
+import { createDeepSeekLLM, createCloneLLM } from './llm'
 import { supabase, supabaseForFunctions } from './supabase'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import { log } from './logging'
 import { wouldExceedPersonaLimit } from './persona-limit'
+import { extractGoogleForm, submitGoogleForm } from './google-forms'
 
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
   return `You are Capysan. Your job is to intelligently manage personas and facilitate group conversations.
@@ -12,7 +13,8 @@ export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: stri
 AVAILABLE TOOLS & WORKFLOWS:
 
 1. RECRUITING PERSONAS (Initial or Adding More):
-   - When user asks to find/recruit personas:
+   - ONLY recruit when the user explicitly asks to find/recruit personas (e.g. "recruit 20 engineers", "find me 10 personas that..."). Do NOT recruit proactively for surveys or other tasks.
+   - When user explicitly asks to find/recruit personas:
      a. ALWAYS combine semantic query + demographics:
         - Call get_demographic_segments(), then get_demographic_values({segments: [...]}) for any fields user specifies.
         - Translate user intent into a keyword-rich query.
@@ -51,6 +53,24 @@ AVAILABLE TOOLS & WORKFLOWS:
    - You decide the right question to ask based on what the customer needs
    - You can call send_message multiple times with different questions
 
+5. GOOGLE FORM SURVEY:
+   - When user asks to complete a Google Form survey (provides form URL):
+     a. Get clone_ids: Call list_clones({session_id}). Only if the user explicitly asked to recruit (e.g. "recruit 20 X and complete this survey") should you call recruit_clones or create_conversation_session first. Otherwise use whoever is already in the study room.
+     b. If no personas are active, tell the user: "No personas in this study room. Recruit some first, or ask me to recruit specific personas and then complete the survey."
+     c. Call extract_google_form(form_url) to get questions, entry IDs, and valid options
+     d. CRITICAL MAPPING: Store the valid options for each question (from form.questions[].options). You will use these to normalize persona responses.
+     e. Build ONE combined prompt with ALL questions. Ask naturally, WITHOUT specifying exact format. For example:
+        - Q1: "What's your gender?" (ask naturally, don't list options)
+        - Q2: "What age range?" (ask naturally, don't list options)
+        - For grid questions, ask naturally: "Rate each ski run type from 1-5"
+     f. Call send_message ONCE with the full survey prompt and all clone_ids. Do NOT call send_message per question.
+     g. CONVERT RESPONSES: Parse each persona's response and normalize to exact form option values:
+        - If form option is "Male" and persona says "I'm a male" or "M" or "man" → convert to "Male"
+        - If form option is "45 - 54" and persona says "45 to 54" or "45-54" → convert to "45 - 54"
+        - Use your understanding to map natural responses to the valid options from extract
+     h. For each persona: call submit_google_form(form_url, responses, form_questions) with the CONVERTED responses. Pass form_questions from extract so missing grid rows are auto-filled. Use formResponseUrl from extract if present.
+     i. Summarize responses and respond: summary + "I've submitted N responses to the form.", and survey link.
+
 TOOLS (Use based on user intent):
 - get_demographic_segments(): List available demographic fields
 - get_demographic_values(segments): Get unique values for fields
@@ -60,6 +80,8 @@ TOOLS (Use based on user intent):
 - release_clones(clone_ids | release_all, session_id): Remove personas from session
 - list_clones(session_id): Show current active personas with details
 - send_message(prompt, clone_ids): Send a prompt to specific personas and collect responses
+- extract_google_form(form_url): Extract questions and entry IDs from a Google Form URL
+- submit_google_form(form_url, responses): Submit responses to a Google Form (responses: { entryId: value } or { entryId: [value1, value2] } for checkbox)
 
 Session ID: ${sessionId}
 - Always include session_id when calling recruit_clones, release_clones, or list_clones
@@ -74,6 +96,8 @@ FORMATTING:
 - Keep responses conversational but well-structured — markdown should enhance readability, not clutter it.
 
 IMPORTANT TIPS:
+- Stay strictly on topic. Only respond to what the user asked. Do not introduce unrelated topics, speculate beyond the conversation context, or hallucinate information. Use tool results as the source of truth.
+- Do NOT recruit unless the user explicitly asks to find/recruit personas. For surveys, use existing personas in the study room.
 - recruit_clones automatically deduplicates (won't add already-active clones)
 - After any recruit/release operation, consider calling list_clones() to confirm changes
 - When releasing specific clones, you need their IDs - ask user if unclear
@@ -734,6 +758,32 @@ async function sendMessage(input: {
   const successCount = results.filter((r) => r.response !== null).length
   console.log(`[TOOL] send_message: ${successCount}/${results.length} personas responded`)
 
+  // Persist to chat so relay Q&A appears in the chat window (like user sending to clones)
+  if (input.session_id && !input.session_id.startsWith('send_message_')) {
+    const relayContent = `**Asking participants:** ${input.prompt}`
+    const { error: capyErr } = await supabase.from('chat_messages').insert({
+      session_id: input.session_id,
+      role: 'capybara',
+      sender_id: 'capybara-ai',
+      content: relayContent,
+    })
+    if (capyErr) console.error('[TOOL] send_message: Failed to persist relay prompt:', capyErr.message)
+    else {
+      const cloneInserts = results
+        .filter((r) => r.response !== null)
+        .map((r) => ({
+          session_id: input.session_id,
+          role: 'clone',
+          sender_id: String(r.clone_id),
+          content: String(r.response),
+        }))
+      if (cloneInserts.length > 0) {
+        const { error: cloneErr } = await supabase.from('chat_messages').insert(cloneInserts)
+        if (cloneErr) console.error('[TOOL] send_message: Failed to persist clone responses:', cloneErr.message)
+      }
+    }
+  }
+
   return JSON.stringify({
     prompt: input.prompt,
     total_sent: input.clone_ids.length,
@@ -841,6 +891,59 @@ const sendMessageTool = tool(sendMessage, {
   }),
 })
 
+const extractGoogleFormTool = tool(
+  async (input: { form_url: string }) => {
+    const form = await extractGoogleForm(input.form_url)
+    return JSON.stringify({
+      formId: form.formId,
+      formUrl: form.formUrl,
+      formResponseUrl: form.formResponseUrl,
+      title: form.title,
+      description: form.description,
+      questions: form.questions.map((q) => ({
+        entryId: q.entryId,
+        prompt: q.prompt,
+        type: q.typeName,
+        options: q.options,
+        gridRows: q.gridRows,
+      })),
+    })
+  },
+  {
+    name: 'extract_google_form',
+    description: 'Extract questions and entry IDs from a Google Form URL. Use when the user provides a Google Form link to complete as a survey. Returns form structure with questions, entry IDs (for submission), and options for multiple choice/checkbox.',
+    schema: z.object({
+      form_url: z.string().url().describe('The Google Form URL. Prefer the shareable link from the Send button (format: .../d/e/1FAIpQL.../viewform). /d/ edit URLs may fail to submit.'),
+    }),
+  }
+)
+
+const submitGoogleFormTool = tool(
+  async (input: {
+    form_url: string
+    form_response_url?: string
+    form_questions?: { entryId: string; gridRows?: { entryId: string }[] }[]
+    responses: Record<string, string | string[]>
+  }) => {
+    const urlToUse = input.form_response_url ?? input.form_url
+    const result = await submitGoogleForm(urlToUse, input.responses, input.form_questions)
+    return JSON.stringify(result)
+  },
+  {
+    name: 'submit_google_form',
+    description: 'Submit responses to a Google Form using headless browser. Handles CAPTCHA, JavaScript validation, and all form types. Call once per persona. Pass form_questions from extract result to auto-fill missing grid rows.',
+    schema: z.object({
+      form_url: z.string().url().describe('The Google Form URL'),
+      form_response_url: z.string().url().optional().describe('Submission URL from extract_google_form.formResponseUrl (optional)'),
+      form_questions: z
+        .array(z.object({ entryId: z.string(), gridRows: z.array(z.object({ entryId: z.string() })).optional() }))
+        .optional()
+        .describe('Questions from extract_google_form - pass to auto-fill missing grid rows'),
+      responses: z.record(z.string(), z.union([z.string(), z.array(z.string())])).describe('Map of entry ID to value(s)'),
+    }),
+  }
+)
+
 export interface ReasoningStep {
   iteration: number
   action: string
@@ -868,7 +971,11 @@ export async function callCapybaraAI(
   userMessage: string,
   messageHistory?: BaseMessage[],
   labeledHistory?: string,
-  options?: { onReasoningStep?: (step: ReasoningStep) => void; authToken?: string }
+  options?: {
+    onReasoningStep?: (step: ReasoningStep) => void
+    onRelayMessages?: (messages: { role: string; sender_id: string; content: string }[]) => void
+    authToken?: string
+  }
 ): Promise<CallCapybaraAIResponse> {
   log.info('orchestrator.capybara_start', 'Starting Capybara AI agentic loop', {
     sourceFile: 'langgraph-orchestrator.ts',
@@ -893,6 +1000,8 @@ export async function callCapybaraAI(
     releaseClonesTool,
     listClonesTool,
     sendMessageTool,
+    extractGoogleFormTool,
+    submitGoogleFormTool,
   ])
 
   // Build messages with system prompt (including session ID and conversation history) and message history
@@ -908,6 +1017,7 @@ export async function callCapybaraAI(
   let finalResponse: string | null = null
   let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
   const reasoning: ReasoningStep[] = []
+  let lastExtractedFormQuestions: { entryId: string; gridRows?: { entryId: string }[] }[] | undefined
   const pushReasoning = (step: ReasoningStep) => {
     reasoning.push(step)
     options?.onReasoningStep?.(step)
@@ -1130,12 +1240,111 @@ export async function callCapybaraAI(
                 summary: `${responded}/${total} personas responded`
               })
               console.log(`[ORCHESTRATOR] send_message: ${responded}/${total} responded`)
+
+              // Stream relay messages to client so chat updates in real-time
+              const relayMessages: { role: string; sender_id: string; content: string }[] = [
+                { role: 'capybara', sender_id: 'capybara-ai', content: `**Asking participants:** ${args.prompt}` },
+                ...(toolOutput.responses || [])
+                  .filter((r: any) => r.response != null)
+                  .map((r: any) => ({ role: 'clone', sender_id: String(r.clone_id), content: String(r.response) })),
+              ]
+              options?.onRelayMessages?.(relayMessages)
             } else {
               pushReasoning({
                 iteration: iterations,
                 action: `Sending prompt to personas`,
                 toolName: toolCall.name,
                 summary: `Error: ${toolOutput.error}`
+              })
+            }
+          } else if (toolCall.name === 'extract_google_form') {
+            const args = toolCall.args as { form_url: string }
+            try {
+              const form = await extractGoogleForm(args.form_url)
+              toolResult = JSON.stringify({
+                formId: form.formId,
+                formUrl: form.formUrl,
+                formResponseUrl: form.formResponseUrl,
+                title: form.title,
+                description: form.description,
+                questions: form.questions.map((q) => ({
+                  entryId: q.entryId,
+                  prompt: q.prompt,
+                  type: q.typeName,
+                  options: q.options,
+                  gridRows: q.gridRows,
+                })),
+              })
+              toolOutput = JSON.parse(toolResult)
+              lastExtractedFormQuestions = toolOutput.questions
+              pushReasoning({
+                iteration: iterations,
+                action: 'Extracting Google Form structure',
+                toolName: toolCall.name,
+                output: { questionCount: toolOutput.questions?.length || 0 },
+                summary: `Found ${toolOutput.questions?.length || 0} questions`,
+              })
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResult = JSON.stringify({ error: msg })
+              pushReasoning({
+                iteration: iterations,
+                action: 'Extracting Google Form',
+                toolName: toolCall.name,
+                summary: `Error: ${msg}`,
+              })
+            }
+          } else if (toolCall.name === 'submit_google_form') {
+            const args = toolCall.args as {
+              form_url: string
+              form_response_url?: string
+              form_questions?: { entryId: string; gridRows?: { entryId: string }[] }[]
+              responses: Record<string, string | string[]>
+            }
+            const urlToUse = args.form_response_url ?? args.form_url
+            const formQuestions = args.form_questions ?? lastExtractedFormQuestions
+            if (formQuestions && !args.form_questions) {
+              log.info('orchestrator.form_questions_auto', 'Using last extracted form questions for grid fill', {
+                sourceFile: 'langgraph-orchestrator.ts',
+                sourceLine: 1298,
+                metadata: { questionCount: formQuestions.length, hasGridRows: formQuestions.some((q: any) => q.gridRows?.length) }
+              })
+            }
+            try {
+              const result = await submitGoogleForm(urlToUse, args.responses, formQuestions)
+              toolResult = JSON.stringify(result)
+              toolOutput = result
+              const success = result.success
+              const summary = success
+                ? `Submitted ${result.submitted} form questions successfully`
+                : `Submission failed: ${result.error ?? 'unknown'}`
+              pushReasoning({
+                iteration: iterations,
+                action: 'Submitting to Google Form for 1 User',
+                toolName: toolCall.name,
+                output: toolOutput,
+                summary,
+              })
+              if (!success) {
+                log.warn('orchestrator.google_form_submit_failed', summary, {
+                  sourceFile: 'langgraph-orchestrator.ts',
+                  sourceLine: 1305,
+                  metadata: { sessionId, formUrl: args.form_url?.slice(0, 50), error: result.error }
+                })
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResult = JSON.stringify({ error: msg })
+              pushReasoning({
+                iteration: iterations,
+                action: 'Submitting to Google Form for 1 User',
+                toolName: toolCall.name,
+                summary: `Error: ${msg}`,
+              })
+              log.error('orchestrator.google_form_submit_error', msg, {
+                sourceFile: 'langgraph-orchestrator.ts',
+                sourceLine: 1318,
+                metadata: { sessionId, formUrl: args.form_url?.slice(0, 50) }
               })
             }
           } else {
@@ -1356,6 +1565,7 @@ CRITICAL CONSTRAINTS:
 ✗ DON'T: Sound more polished/confident than the evidence supports
 ✗ DON'T: Invent preferences or beliefs not in the history
 ✗ DON'T: Use generic/assistant-like language
+✗ DON'T: Drift off-topic or introduce unrelated subjects — only answer what was asked
 
 
 RESPONSE FORMAT:
@@ -1457,8 +1667,7 @@ export async function callClone(
     }
   }
 
-  const llm = createDeepSeekLLM()
-
+  const llm = createCloneLLM()
 
   // TODO: Add history messages
   const messages: BaseMessage[] = [

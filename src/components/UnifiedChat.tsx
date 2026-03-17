@@ -76,6 +76,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
     signal: AbortSignal,
   ) => {
     setResponding({ type: 'capybara', reasoning: [] })
+    const relayReceivedRef = { current: false }
 
     const response = await fetch('/chat/message', {
       method: 'POST',
@@ -114,8 +115,30 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
               if (!prev || prev.type !== 'capybara') return prev
               return { ...prev, reasoning: [...prev.reasoning, event.step] }
             })
+          } else if (event.type === 'relay') {
+            const relayMessages = (event as { messages?: { role: string; sender_id: string; content: string }[] }).messages || []
+            if (relayMessages.length > 0) {
+              relayReceivedRef.current = true
+              setMessages((prev) => [
+                ...prev,
+                ...relayMessages.map((m) => ({
+                  id: `relay_${Date.now()}_${m.sender_id}_${Math.random().toString(36).slice(2)}`,
+                  content: m.content,
+                  sender: 'ai' as const,
+                  timestamp: Date.now(),
+                  role: m.role as 'capybara' | 'clone',
+                  sender_id: m.sender_id,
+                })),
+              ])
+            }
           } else if (event.type === 'done') {
-            handleDonePayload(event as ChatResponse)
+            const payload = event as ChatResponse
+            if (relayReceivedRef.current && payload.ai_responses && payload.ai_responses.length > 1) {
+              const lastOnly = payload.ai_responses.slice(-1)
+              handleDonePayload({ ...payload, ai_responses: lastOnly })
+            } else {
+              handleDonePayload(payload)
+            }
           } else if (event.type === 'error') {
             throw new Error(event.error)
           }
@@ -311,7 +334,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
       <ChatInput
         onSend={handleSendMessage}
         disabled={loading}
-        placeholder={activeClones.length > 0 ? "Ask your clones a question..." : "Describe your research goal..."}
+        placeholder={activeClones.length > 0 ? "Ask Capy to recruit and carry out research..." : "Describe your research goal..."}
         activeClones={activeClones.map(c => c.id)}
       />
     </div>

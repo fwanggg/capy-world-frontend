@@ -130,7 +130,7 @@ export default function WaitlistClient() {
             marginBottom: "var(--space-lg)",
           }}
         >
-          Get Early Access Now
+          Start Now (Limited Early Access for Free)
         </h1>
 
         <p

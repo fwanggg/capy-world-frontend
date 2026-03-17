@@ -179,6 +179,39 @@ export async function GET(req: Request) {
 4. Handle execution in tool_calls loop with reasoning capture
 5. Return plain data — let LLM interpret results
 
+### Google Forms Survey Workflow
+
+**Tools:** `extract_google_form` + `send_message` + `submit_google_form`
+
+**How it works:**
+1. User provides Google Form URL → Capybara calls `extract_google_form(url)`
+2. Extract returns: questions, entry IDs, **valid option values for each field**
+3. Capybara calls `send_message(prompt, clone_ids)` with natural questions (no format constraints)
+4. Personas respond naturally (e.g., "I'm a male", "45 to 54", "intermediate skier")
+5. **Capybara converts responses** to exact form format using the valid options from extraction
+   - "I'm a male" → "Male"
+   - "45 to 54" → "45 - 54"
+   - Uses LLM intelligence to map natural responses to exact form values
+6. Capybara calls `submit_google_form(url, responses)` with **converted** responses
+7. HTTP POST to Google Forms formResponse endpoint
+
+**Response Conversion (Critical):**
+- Extract valid options: `{ entryId: string, options: string[] }[]`
+- Store these for reference when parsing persona responses
+- Convert all persona responses to exact form format before submission
+- This ensures HTTP 200/302 success (no 400 format mismatch errors)
+
+**Limitations:**
+- ✅ Works for forms without CAPTCHA/email verification
+- ❌ Fails on forms with "Send responders a copy" enabled (requires email)
+- ❌ Cannot bypass CAPTCHA (neither HTTP nor browser can)
+- ⚠️ HTTP POST only (no JavaScript automation, but simpler & faster)
+
+**Error Handling:**
+- HTTP 400 → Likely invalid response format or CAPTCHA. Check form settings.
+- HTTP 302/200 → Success (redirect or direct response)
+- Atomic submission: All fields converted successfully or entire submission fails (no partial/empty submissions)
+
 ## File Organization Principles
 
 - **One responsibility per file** — split files larger than ~300 lines
