@@ -89,8 +89,12 @@ export function ChatDemo() {
           width: "min(66.67vw, 600px)",
           minWidth: "320px",
           display: "flex",
+          flexDirection: "column",
           gap: "var(--space-sm)",
-          alignItems: "flex-end",
+          backgroundColor: "var(--color-white)",
+          border: "1px solid var(--color-gray-200)",
+          borderRadius: "0.375rem",
+          overflow: "hidden",
         }}
       >
         <textarea
@@ -100,9 +104,8 @@ export function ChatDemo() {
           style={{
             flex: 1,
             backgroundColor: "var(--color-white)",
-            border: "1px solid var(--color-gray-200)",
-            borderRadius: "0.375rem",
-            padding: "var(--space-base) var(--space-lg)",
+            border: "none",
+            padding: "var(--space-lg)",
             fontSize: "var(--text-sm)",
             color: "var(--color-navy)",
             outline: "none",
@@ -114,37 +117,47 @@ export function ChatDemo() {
             lineHeight: 1.5,
           }}
         />
-        <Link
-          href="/waitlist"
+        <div
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "var(--color-teal)",
-            color: "var(--color-white)",
-            border: "none",
-            borderRadius: "0.375rem",
-            padding: "var(--space-base) var(--space-lg)",
-            fontSize: "var(--text-sm)",
-            fontWeight: 500,
-            textDecoration: "none",
-            cursor: "pointer",
-            transition: "all 0.2s ease",
-            height: "fit-content",
-          }}
-          onMouseEnter={(e) => {
-            const target = e.currentTarget as HTMLAnchorElement;
-            target.style.backgroundColor = "var(--color-teal-light)";
-            target.style.transform = "scale(1.05)";
-          }}
-          onMouseLeave={(e) => {
-            const target = e.currentTarget as HTMLAnchorElement;
-            target.style.backgroundColor = "var(--color-teal)";
-            target.style.transform = "scale(1)";
+            display: "flex",
+            justifyContent: "flex-end",
+            padding: "0 var(--space-lg) var(--space-lg) var(--space-lg)",
+            borderTop: "1px solid var(--color-gray-200)",
           }}
         >
-          Send
-        </Link>
+          <Link
+            href="/waitlist"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "var(--color-teal)",
+              color: "var(--color-white)",
+              border: "none",
+              borderRadius: "0.375rem",
+              padding: "var(--space-base) var(--space-lg)",
+              fontSize: "var(--text-sm)",
+              fontWeight: 500,
+              textDecoration: "none",
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              minWidth: "80px",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              const target = e.currentTarget as HTMLAnchorElement;
+              target.style.backgroundColor = "var(--color-teal-light)";
+              target.style.transform = "scale(1.05)";
+            }}
+            onMouseLeave={(e) => {
+              const target = e.currentTarget as HTMLAnchorElement;
+              target.style.backgroundColor = "var(--color-teal)";
+              target.style.transform = "scale(1)";
+            }}
+          >
+            Send
+          </Link>
+        </div>
       </div>
 
       <style>{`

@@ -133,8 +133,8 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      gap: 'var(--space-sm)',
-      padding: 'var(--space-lg) var(--space-xl)',
+      gap: 0,
+      padding: 0,
       borderTop: '1px solid var(--color-gray-200)',
       backgroundColor: 'var(--color-white)',
       flexShrink: 0,
@@ -182,11 +182,7 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
         </div>
       )}
 
-      <div style={{
-        display: 'flex',
-        gap: 'var(--space-base)',
-      }}>
-        <textarea
+      <textarea
           ref={textareaRef}
           value={input}
           onChange={handleInputChange}
@@ -195,63 +191,72 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
           disabled={disabled}
           style={{
             flex: 1,
-            padding: 'var(--space-base)',
-            borderRadius: '0.375rem',
-            border: '1px solid var(--color-gray-200)',
+            padding: 'var(--space-lg)',
+            borderRadius: 0,
+            border: 'none',
             fontFamily: 'var(--font-body)',
             fontSize: 'var(--text-base)',
             color: 'var(--color-navy)',
-            resize: 'vertical',
+            resize: 'none',
             transition: 'all var(--transition-fast)',
-            minHeight: '3rem',
-            maxHeight: '120px',
+            minHeight: '100px',
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = 'var(--color-teal)'
-            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(13, 148, 136, 0.1)'
+            e.currentTarget.style.outline = '2px solid var(--color-teal)'
+            e.currentTarget.style.outlineOffset = '-2px'
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = 'var(--color-gray-200)'
+            e.currentTarget.style.outline = 'none'
+          }}
+          rows={3}
+        />
+
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-end',
+        padding: 'var(--space-lg)',
+        borderTop: '1px solid var(--color-gray-200)',
+        gap: 'var(--space-base)',
+      }}>
+        <button
+          onClick={handleSend}
+          disabled={disabled || !input.trim()}
+          style={{
+            padding: 'var(--space-base) var(--space-lg)',
+            backgroundColor: disabled || !input.trim() ? 'var(--color-gray-300)' : 'var(--color-teal)',
+            color: 'var(--color-white)',
+            border: 'none',
+            borderRadius: '0.375rem',
+            cursor: disabled || !input.trim() ? 'not-allowed' : 'pointer',
+            opacity: disabled || !input.trim() ? 0.6 : 1,
+            fontWeight: '600',
+            fontSize: 'var(--text-base)',
+            transition: 'all var(--transition-fast)',
+            whiteSpace: 'nowrap',
+            minWidth: '80px',
+          }}
+          onMouseOver={(e) => {
+            if (!disabled && input.trim()) {
+              e.currentTarget.style.backgroundColor = 'var(--color-teal-light)'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+            }
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--color-teal)'
+            e.currentTarget.style.transform = 'translateY(0)'
             e.currentTarget.style.boxShadow = 'none'
           }}
-          rows={2}
-        />
-        <button
-        onClick={handleSend}
-        disabled={disabled || !input.trim()}
-        style={{
-          padding: 'var(--space-base) var(--space-lg)',
-          backgroundColor: disabled || !input.trim() ? 'var(--color-gray-300)' : 'var(--color-teal)',
-          color: 'var(--color-white)',
-          border: 'none',
-          borderRadius: '0.375rem',
-          cursor: disabled || !input.trim() ? 'not-allowed' : 'pointer',
-          opacity: disabled || !input.trim() ? 0.6 : 1,
-          fontWeight: '600',
-          fontSize: 'var(--text-base)',
-          transition: 'all var(--transition-fast)',
-          whiteSpace: 'nowrap',
-        }}
-        onMouseOver={(e) => {
-          if (!disabled && input.trim()) {
-            e.currentTarget.style.backgroundColor = 'var(--color-teal-light)'
-            e.currentTarget.style.transform = 'translateY(-2px)'
-            e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-          }
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.backgroundColor = 'var(--color-teal)'
-          e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = 'none'
-        }}
         >
           Send
         </button>
       </div>
+
       <p style={{
         fontSize: 'var(--text-xs)',
         color: 'var(--color-gray-400)',
         margin: 0,
+        padding: '0 var(--space-lg) var(--space-sm)',
         fontStyle: 'italic',
       }}>
         Tip: Type @ to mention (↑↓ to navigate, Enter to select)
