@@ -105,28 +105,23 @@ export function ChatDemo() {
           padding: "var(--space-base) var(--space-lg)",
           border: "1px solid var(--color-gray-200)",
           borderRadius: "0.5rem",
-          cursor: isEditing ? "text" : "pointer",
-        }}
-        onClick={() => {
-          if (!isEditing) {
-            shouldAnimateRef.current = false;
-            // Clear all pending timeouts
-            timeoutRefsRef.current.forEach((id) => clearTimeout(id));
-            timeoutRefsRef.current = [];
-            setIsEditing(true);
-            // Focus textarea after a brief delay to ensure it's enabled
-            setTimeout(() => {
-              textareaRef.current?.focus();
-            }, 0);
-          }
+          cursor: "text",
         }}
       >
         <textarea
           ref={textareaRef}
           value={isEditing ? userInput : currentText}
-          onChange={(e) => isEditing && setUserInput(e.target.value)}
+          onChange={(e) => setUserInput(e.target.value)}
+          onFocus={() => {
+            if (!isEditing) {
+              shouldAnimateRef.current = false;
+              timeoutRefsRef.current.forEach((id) => clearTimeout(id));
+              timeoutRefsRef.current = [];
+              setIsEditing(true);
+            }
+          }}
           placeholder="Type your use case..."
-          disabled={!isEditing}
+          disabled={false}
           style={{
             flex: 1,
             padding: "var(--space-sm) 0",
@@ -140,7 +135,7 @@ export function ChatDemo() {
             maxHeight: "120px",
             outline: "none",
             backgroundColor: "transparent",
-            cursor: isEditing ? "text" : "pointer",
+            cursor: "text",
           }}
         />
         <Link
