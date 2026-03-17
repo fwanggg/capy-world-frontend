@@ -64,12 +64,12 @@ export function Navigation() {
         </Link>
         {!user && (
           <Link href="/waitlist" style={{ textDecoration: "none" }}>
-            Get Early Access Now
+            Start Recruiting Now!
           </Link>
         )}
         {user && (
           <Link href="/chat" style={{ textDecoration: "none" }}>
-            Chat
+            Try for free
           </Link>
         )}
       </div>
