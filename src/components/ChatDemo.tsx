@@ -16,9 +16,7 @@ const PAUSE_BETWEEN_CYCLES = 1500;
 
 export function ChatDemo() {
   const [currentText, setCurrentText] = useState("");
-  const [showCTA, setShowCTA] = useState(false);
   const timeoutRefsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const currentIndexRef = useRef(0);
 
   useEffect(() => {
     const clearTimeouts = () => {
@@ -49,7 +47,6 @@ export function ChatDemo() {
     const runCycle = async () => {
       // Type out each message sequentially
       for (let i = 0; i < USE_CASES.length; i++) {
-        currentIndexRef.current = i;
         await typeMessage(USE_CASES[i]);
         if (i < USE_CASES.length - 1) {
           await delay(PAUSE_BETWEEN_MESSAGES);
@@ -75,15 +72,6 @@ export function ChatDemo() {
     return clearTimeouts;
   }, []);
 
-  // Show CTA after initial delay
-  useEffect(() => {
-    const ctaTimer = setTimeout(() => {
-      setShowCTA(true);
-    }, 6500);
-
-    return () => clearTimeout(ctaTimer);
-  }, []);
-
   return (
     <div
       style={{
@@ -95,18 +83,17 @@ export function ChatDemo() {
         position: "relative",
       }}
     >
-      {/* Input Demo - Text appears IN the input */}
+      {/* Input Demo - Text appears IN the textarea */}
       <div
         style={{
           width: "min(66.67vw, 600px)",
           minWidth: "320px",
           display: "flex",
           gap: "var(--space-sm)",
-          alignItems: "center",
+          alignItems: "flex-end",
         }}
       >
-        <input
-          type="text"
+        <textarea
           value={currentText}
           placeholder="Type your use case..."
           disabled
@@ -121,49 +108,44 @@ export function ChatDemo() {
             outline: "none",
             cursor: "not-allowed",
             boxSizing: "border-box",
+            fontFamily: "var(--font-body)",
+            minHeight: "120px",
+            resize: "none",
+            lineHeight: 1.5,
           }}
         />
-        <button
-          disabled
+        <Link
+          href="/waitlist"
           style={{
-            backgroundColor: "var(--color-gray-300)",
-            color: "var(--color-gray-500)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "var(--color-teal)",
+            color: "var(--color-white)",
             border: "none",
             borderRadius: "0.375rem",
             padding: "var(--space-base) var(--space-lg)",
-            cursor: "not-allowed",
             fontSize: "var(--text-sm)",
             fontWeight: 500,
+            textDecoration: "none",
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+            height: "fit-content",
+          }}
+          onMouseEnter={(e) => {
+            const target = e.currentTarget as HTMLAnchorElement;
+            target.style.backgroundColor = "var(--color-teal-light)";
+            target.style.transform = "scale(1.05)";
+          }}
+          onMouseLeave={(e) => {
+            const target = e.currentTarget as HTMLAnchorElement;
+            target.style.backgroundColor = "var(--color-teal)";
+            target.style.transform = "scale(1)";
           }}
         >
           Send
-        </button>
+        </Link>
       </div>
-
-      {/* CTA Button */}
-      {showCTA && (
-        <div style={{ animation: "fadeInUp 0.4s ease-out" }}>
-          <Link
-            href="/waitlist"
-            className="btn btn-primary"
-            style={{
-              transition: "all 0.2s ease",
-            }}
-            onMouseEnter={(e) => {
-              const target = e.currentTarget as HTMLAnchorElement;
-              target.style.backgroundColor = "var(--color-teal-light)";
-              target.style.transform = "scale(1.05)";
-            }}
-            onMouseLeave={(e) => {
-              const target = e.currentTarget as HTMLAnchorElement;
-              target.style.backgroundColor = "var(--color-teal)";
-              target.style.transform = "scale(1)";
-            }}
-          >
-            Start Now
-          </Link>
-        </div>
-      )}
 
       <style>{`
         @keyframes fadeIn {
