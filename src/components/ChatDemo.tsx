@@ -149,10 +149,7 @@ export function ChatDemo() {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor:
-              !isEditing || !userInput.trim()
-                ? "var(--color-gray-300)"
-                : "var(--color-teal)",
+            backgroundColor: "var(--color-teal)",
             color: "var(--color-white)",
             border: "none",
             borderRadius: "0.375rem",
@@ -160,26 +157,18 @@ export function ChatDemo() {
             fontSize: "var(--text-sm)",
             fontWeight: 500,
             textDecoration: "none",
-            cursor:
-              !isEditing || !userInput.trim() ? "not-allowed" : "pointer",
+            cursor: "pointer",
             transition: "all 0.2s ease",
             whiteSpace: "nowrap",
             flexShrink: 0,
-            opacity: !isEditing || !userInput.trim() ? 0.6 : 1,
-            pointerEvents:
-              !isEditing || !userInput.trim() ? "none" : "auto",
           }}
           onMouseEnter={(e) => {
-            if (isEditing && userInput.trim()) {
-              const target = e.currentTarget as HTMLAnchorElement;
-              target.style.backgroundColor = "var(--color-teal-light)";
-            }
+            const target = e.currentTarget as HTMLAnchorElement;
+            target.style.backgroundColor = "var(--color-teal-light)";
           }}
           onMouseLeave={(e) => {
-            if (isEditing && userInput.trim()) {
-              const target = e.currentTarget as HTMLAnchorElement;
-              target.style.backgroundColor = "var(--color-teal)";
-            }
+            const target = e.currentTarget as HTMLAnchorElement;
+            target.style.backgroundColor = "var(--color-teal)";
           }}
         >
           Send
