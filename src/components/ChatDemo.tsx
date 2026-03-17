@@ -20,6 +20,7 @@ export function ChatDemo() {
   const [isEditing, setIsEditing] = useState(false);
   const timeoutRefsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const shouldAnimateRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const clearTimeouts = () => {
@@ -113,10 +114,15 @@ export function ChatDemo() {
             timeoutRefsRef.current.forEach((id) => clearTimeout(id));
             timeoutRefsRef.current = [];
             setIsEditing(true);
+            // Focus textarea after a brief delay to ensure it's enabled
+            setTimeout(() => {
+              textareaRef.current?.focus();
+            }, 0);
           }
         }}
       >
         <textarea
+          ref={textareaRef}
           value={isEditing ? userInput : currentText}
           onChange={(e) => isEditing && setUserInput(e.target.value)}
           placeholder="Type your use case..."
