@@ -61,16 +61,22 @@ function extractFormIdFromUrl(url: string): string | null {
 /**
  * Resolve shortened URL (forms.gle) to full URL by following redirect.
  * Returns the resolved URL after following redirects.
+ * Uses curl subprocess for reliable redirect handling.
  */
 async function resolveShortUrl(url: string): Promise<string> {
   try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      },
-    });
-    return res.url;
+    // Dynamically import for Node.js server-side only
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execPromise = promisify(exec);
+
+    // Use curl to follow redirects reliably
+    const { stdout } = await execPromise(
+      `curl -sL "${url.replace(/"/g, '\\"')}" -w "%{url_effective}" -o /dev/null`,
+      { timeout: 10000 } // 10 second timeout
+    );
+
+    return stdout.trim();
   } catch (err) {
     throw new Error(`Failed to resolve shortened URL: ${err}`);
   }
