@@ -47,11 +47,11 @@ export async function PUT(req: Request) {
     if (ids.length > 0) {
       const { data: clones, error: clonesError } = await supabase
         .from("personas")
-        .select("anonymous_id")
+        .select("id")
         .in("id", ids);
 
       if (!clonesError && clones) {
-        clone_names = clones.map((c: { anonymous_id: string }) => c.anonymous_id);
+        clone_names = clones.map((c: { id: number }) => String(c.id));
       }
     }
 

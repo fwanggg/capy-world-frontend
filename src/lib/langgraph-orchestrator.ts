@@ -522,7 +522,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
   }
   const clones = result.data
 
-  const clone_names = clones.map((c: any) => c.anonymous_id)
+  const clone_names = clones.map((c: any) => String(c.id))
 
   // Update session to set active clones and mode
   // Always update database regardless of TEST_MODE - we need the session state to persist
@@ -648,7 +648,7 @@ async function recruitClones(input: {
 
   const addedClones = (recruitedData || []).map((c: any) => ({
     id: c.id,
-    name: c.anonymous_id,
+    name: String(c.id),
   }))
 
   const response = {
@@ -700,7 +700,7 @@ async function releaseClones(input: {
 
   const releasedClones = (releasedData || []).map((c: any) => ({
     id: c.id,
-    name: c.anonymous_id,
+    name: String(c.id),
   }))
 
   // Update session
@@ -817,7 +817,7 @@ async function sendMessage(input: {
     callClone(cloneId, effectiveSessionId, input.prompt, null)
       .then((content) => ({
         clone_id: cloneId,
-        username: personaMap.get(String(cloneId))?.anonymous_id || `persona_${cloneId}`,
+        username: String(cloneId),
         demographics: (() => {
           const p = personaMap.get(String(cloneId))
           if (!p) return undefined
@@ -833,7 +833,7 @@ async function sendMessage(input: {
       }))
       .catch((err) => ({
         clone_id: cloneId,
-        username: personaMap.get(String(cloneId))?.anonymous_id || `persona_${cloneId}`,
+        username: String(cloneId),
         demographics: undefined,
         response: null,
         error: err instanceof Error ? err.message : String(err),
