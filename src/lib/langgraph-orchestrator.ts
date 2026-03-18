@@ -75,7 +75,7 @@ AVAILABLE TOOLS & WORKFLOWS:
      j. Summarize responses and respond: summary + "I've submitted N responses to the form.", and survey link.
 
 6. LANDING PAGE / PRODUCT URL ANALYSIS:
-   When user provides a URL to analyze or asks "what would people think of [url]":
+   When user provides a URL to analyze or asks "what would people think of [url]" or ask "analyze this product [url]":
    a. Call analyze_landing_page({url}) to fetch content
    b. Synthesize from bodyText:
       - **Problem:** What pain point this product solves

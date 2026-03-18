@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ReasoningStep } from '@/types/chat'
 
 interface RespondingBubbleProps {
@@ -14,9 +14,22 @@ export function RespondingBubble({
   reasoning = [],
   isStreaming = false,
 }: RespondingBubbleProps) {
-  const [reasoningExpanded, setReasoningExpanded] = useState(true)
+  // Auto-expand reasoning during streaming
+  const [reasoningExpanded, setReasoningExpanded] = useState(isStreaming)
   const isCapybara = entityType === 'capybara'
   const hasReasoning = reasoning.length > 0
+  const stepsEndRef = useRef<HTMLDivElement>(null)
+
+  // Keep expanded during streaming, auto-scroll to latest step
+  useEffect(() => {
+    if (isStreaming && hasReasoning) {
+      setReasoningExpanded(true)
+      // Auto-scroll to latest step
+      setTimeout(() => {
+        stepsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 0)
+    }
+  }, [reasoning.length, isStreaming, hasReasoning])
 
   return (
     <div style={{
@@ -54,10 +67,10 @@ export function RespondingBubble({
           flexDirection: 'column',
           gap: 'var(--space-sm)',
         }}>
-          {/* Status line */}
+          {/* Status line with current action */}
           <div style={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             gap: 'var(--space-sm)',
             fontSize: 'var(--text-sm)',
             color: isCapybara ? 'var(--color-teal)' : 'var(--color-gray-500)',
@@ -70,12 +83,28 @@ export function RespondingBubble({
               borderRadius: '50%',
               backgroundColor: isCapybara ? 'var(--color-teal)' : 'var(--color-gray-400)',
               animation: 'respondingDot 1.4s ease-in-out infinite',
+              flexShrink: 0,
+              marginTop: '3px',
             }} />
-            {isCapybara
-              ? (isStreaming && hasReasoning
-                ? `Thinking... (${reasoning.length} step${reasoning.length !== 1 ? 's' : ''})`
-                : 'Thinking...')
-              : 'Responding...'}
+            <div style={{ flex: 1 }}>
+              {isCapybara && isStreaming && hasReasoning && reasoning.length > 0 ? (
+                <div>
+                  <div>Iteration {reasoning[reasoning.length - 1].iteration || reasoning.length}/30</div>
+                  <div style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-gray-600)',
+                    marginTop: '2px',
+                    fontWeight: '400',
+                  }}>
+                    {reasoning[reasoning.length - 1].action}
+                  </div>
+                </div>
+              ) : isCapybara ? (
+                'Thinking...'
+              ) : (
+                'Responding...'
+              )}
+            </div>
           </div>
 
           {/* Reasoning steps (Capybara only) */}
@@ -107,11 +136,17 @@ export function RespondingBubble({
                   {reasoning.map((step, idx) => (
                     <div
                       key={idx}
+                      ref={idx === reasoning.length - 1 ? stepsEndRef : null}
                       style={{
                         paddingLeft: 'var(--space-base)',
                         fontSize: 'var(--text-xs)',
                         color: 'var(--color-gray-600)',
                         lineHeight: '1.4',
+                        opacity: isStreaming && idx === reasoning.length - 1 ? 1 : 0.8,
+                        backgroundColor: isStreaming && idx === reasoning.length - 1 ? 'rgba(13, 148, 136, 0.05)' : 'transparent',
+                        paddingRight: '4px',
+                        borderRadius: '2px',
+                        transition: 'opacity 0.2s ease',
                       }}
                     >
                       {step.iteration}. {step.action} → {step.summary}
