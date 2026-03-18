@@ -1013,7 +1013,7 @@ export async function callCapybaraAI(
   ]
 
   let iterations = 0
-  const maxIterations = 15  // Allow for: segments → values → search(es) → create_session → response
+  const maxIterations = 30  // Allow for: segments → values → search(es) → create_session → response
   let finalResponse: string | null = null
   let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
   const reasoning: ReasoningStep[] = []
