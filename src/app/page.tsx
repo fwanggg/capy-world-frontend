@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { TypingHero } from "@/components/TypingHero";
 import { ChatDemo } from "@/components/ChatDemo";
-import { LandingCompetitiveAnalysis } from "@/components/LandingCompetitiveAnalysis";
+import { HowItWorks } from "@/components/HowItWorks";
 
 export default function Home() {
   return (
@@ -54,7 +54,7 @@ export default function Home() {
         </div>
       </section>
 
-      <LandingCompetitiveAnalysis />
+      <HowItWorks />
 
       <footer
         style={{

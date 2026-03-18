@@ -86,16 +86,24 @@ export async function POST(req: Request) {
     let responses: { role: string; sender_id: string; content: string }[] = [];
     let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined;
     let capybaraReasoning: unknown[] | undefined;
+    let visualization: unknown | undefined;
 
     if (routeToCapybara) {
       if (wantsStream) {
         const encoder = new TextEncoder();
+        let streamClosed = false;
         const stream = new ReadableStream({
           async start(controller) {
             const writeSSE = (obj: unknown) => {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
-              );
+              if (streamClosed) return; // Don't write if stream is closed
+              try {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
+                );
+              } catch (err) {
+                // Stream might be closed, silently ignore
+                streamClosed = true;
+              }
             };
             try {
               const authHeader = req.headers.get("authorization");
@@ -116,18 +124,20 @@ export async function POST(req: Request) {
               );
               sessionTransition = capybaraResult.session_transition;
               capybaraReasoning = capybaraResult.reasoning;
+              visualization = capybaraResult.visualization;
 
               const finalResponse = {
                 role: "capybara",
                 sender_id: "capybara-ai",
                 content: capybaraResult.response,
               };
-              await supabase.from("chat_messages").insert({
+              const msgResult = await supabase.from("chat_messages").insert({
                 session_id,
                 role: finalResponse.role,
                 sender_id: finalResponse.sender_id,
                 content: finalResponse.content,
-              });
+                visualization: visualization || null,
+              }).select().single();
 
               // Refetch relay (ask + clone responses) so conversation appears in chat
               const { data: relayData } = await supabase
@@ -149,13 +159,19 @@ export async function POST(req: Request) {
                 capybara_reasoning: capybaraReasoning,
               };
               if (sessionTransition) donePayload.session_transition = sessionTransition;
+              if (visualization) donePayload.visualization = visualization;
               writeSSE(donePayload);
             } catch (streamErr) {
               const msg =
                 streamErr instanceof Error ? streamErr.message : String(streamErr);
               writeSSE({ type: "error", error: msg });
+            } finally {
+              try {
+                controller.close();
+              } catch (err) {
+                // Controller might already be closed, ignore
+              }
             }
-            controller.close();
           },
         });
 
@@ -198,6 +214,7 @@ export async function POST(req: Request) {
       responses = [...relayResponses, finalResponse];
       sessionTransition = capybaraResult.session_transition;
       capybaraReasoning = capybaraResult.reasoning;
+      visualization = capybaraResult.visualization;
     } else {
       const clonesInScope = target_clones || session.active_clones;
       if (!clonesInScope || (clonesInScope as unknown[]).length === 0) {
@@ -219,14 +236,27 @@ export async function POST(req: Request) {
       }));
     }
 
-    // Persist responses (Capysan path already persisted relay + final above)
+    // Persist responses
     if (!routeToCapybara) {
+      // Clone messages
       for (const r of responses) {
         await supabase.from("chat_messages").insert({
           session_id,
           role: r.role,
           sender_id: r.sender_id,
           content: r.content,
+        });
+      }
+    } else {
+      // Capybara message (in non-streaming path)
+      const capybaraMsg = responses.find(r => r.role === 'capybara');
+      if (capybaraMsg) {
+        await supabase.from("chat_messages").insert({
+          session_id,
+          role: capybaraMsg.role,
+          sender_id: capybaraMsg.sender_id,
+          content: capybaraMsg.content,
+          visualization: visualization || null,
         });
       }
     }
@@ -237,6 +267,7 @@ export async function POST(req: Request) {
     };
     if (sessionTransition) responseBody.session_transition = sessionTransition;
     if (capybaraReasoning) responseBody.capybara_reasoning = capybaraReasoning;
+    if (visualization) responseBody.visualization = visualization;
 
     return NextResponse.json(responseBody);
   } catch (error) {

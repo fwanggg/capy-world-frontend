@@ -7,6 +7,38 @@ export interface ReasoningStep {
   summary: string
 }
 
+export interface ChartDataPoint {
+  name: string
+  value?: number
+  color?: string
+  label?: string    // text badge for horizontal_bar (e.g. "YES")
+  note?: string     // expandable tooltip/footnote
+  [key: string]: unknown  // for grouped_bar series keys
+}
+
+export interface BarSeriesConfig {
+  key: string
+  color: string
+}
+
+export interface ChartSpec {
+  type: 'pie' | 'grouped_bar' | 'horizontal_bar' | 'top_concerns' | 'top_benefits'
+  title: string
+  subtitle?: string
+  data: ChartDataPoint[]
+  // grouped_bar only:
+  xKey?: string
+  bars?: BarSeriesConfig[]
+  // pie only:
+  innerRadius?: number
+}
+
+export interface VisualizationPayload {
+  title: string         // top-level card title e.g. "Landing Page Analysis — vercel.com"
+  charts: ChartSpec[]
+  generatedAt: string
+}
+
 export interface ChatMessageData {
   id: string
   content: string
@@ -16,6 +48,7 @@ export interface ChatMessageData {
   sender_id: string
   reasoning?: ReasoningStep[]
   recipient?: string
+  visualization?: VisualizationPayload
 }
 
 export interface ChatResponse {
@@ -26,6 +59,7 @@ export interface ChatResponse {
     clone_ids: (number | string)[]
     clone_names: string[]
   }
+  visualization?: VisualizationPayload
 }
 
 export type RespondingState =

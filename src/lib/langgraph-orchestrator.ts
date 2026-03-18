@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { log } from './logging'
 import { wouldExceedPersonaLimit } from './persona-limit'
 import { extractGoogleForm, submitGoogleForm } from './google-forms'
+import { scrapeLandingPage } from './scrape-url'
+import type { VisualizationPayload, ChartSpec } from '@/types/chat'
 
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
   return `You are Capysan. Your job is to intelligently manage personas and facilitate group conversations.
@@ -55,21 +57,104 @@ AVAILABLE TOOLS & WORKFLOWS:
 
 5. GOOGLE FORM SURVEY:
    - When user asks to complete a Google Form survey (provides form URL):
-     a. Get clone_ids: Call list_clones({session_id}). Only if the user explicitly asked to recruit (e.g. "recruit 20 X and complete this survey") should you call recruit_clones or create_conversation_session first. Otherwise use whoever is already in the study room.
-     b. If no personas are active, tell the user: "No personas in this study room. Recruit some first, or ask me to recruit specific personas and then complete the survey."
-     c. Call extract_google_form(form_url) to get questions, entry IDs, and valid options
-     d. CRITICAL MAPPING: Store the valid options for each question (from form.questions[].options). You will use these to normalize persona responses.
-     e. Build ONE combined prompt with ALL questions. Ask naturally, WITHOUT specifying exact format. For example:
+     a. Call list_clones({session_id}) to get active persona IDs.
+     b. Call extract_google_form(form_url) to get questions, entry IDs, and valid options.
+     c. If no personas are active: Use the form questions to infer who should complete the survey (e.g. skiing survey → recruit ski enthusiasts). Call recruit_clones or create_conversation_session to recruit appropriate personas based on the form context. Then call list_clones again to get clone_ids.
+     d. If personas ARE active: Use them directly. Proceed with steps e-j.
+     e. CRITICAL MAPPING: Store the valid options for each question (from form.questions[].options). You will use these to normalize persona responses.
+     f. Build ONE combined prompt with ALL questions. Ask naturally, WITHOUT specifying exact format. For example:
         - Q1: "What's your gender?" (ask naturally, don't list options)
         - Q2: "What age range?" (ask naturally, don't list options)
         - For grid questions, ask naturally: "Rate each ski run type from 1-5"
-     f. Call send_message ONCE with the full survey prompt and all clone_ids. Do NOT call send_message per question.
-     g. CONVERT RESPONSES: Parse each persona's response and normalize to exact form option values:
+     g. Call send_message ONCE with the full survey prompt and all clone_ids. Do NOT call send_message per question.
+     h. CONVERT RESPONSES: Parse each persona's response and normalize to exact form option values:
         - If form option is "Male" and persona says "I'm a male" or "M" or "man" → convert to "Male"
         - If form option is "45 - 54" and persona says "45 to 54" or "45-54" → convert to "45 - 54"
         - Use your understanding to map natural responses to the valid options from extract
-     h. For each persona: call submit_google_form(form_url, responses, form_questions) with the CONVERTED responses. Pass form_questions from extract so missing grid rows are auto-filled. Use formResponseUrl from extract if present.
-     i. Summarize responses and respond: summary + "I've submitted N responses to the form.", and survey link.
+     i. For each persona: call submit_google_form(form_url, responses, form_questions) with the CONVERTED responses. Pass form_questions from extract so missing grid rows are auto-filled. Use formResponseUrl from extract if present.
+     j. Summarize responses and respond: summary + "I've submitted N responses to the form.", and survey link.
+
+6. LANDING PAGE / PRODUCT URL ANALYSIS:
+   When user provides a URL to analyze or asks "what would people think of [url]":
+   a. Call analyze_landing_page({url}) to fetch content
+   b. Synthesize from bodyText:
+      - **Problem:** What pain point this product solves
+      - **Solution:** The core value proposition
+      - **Ideal Customer Profile:** Who's the proposed user for this product
+   c. Recruit relevant personas (default 10 unless user specifies):
+      - Call get_demographic_segments() → get_demographic_values() → search_clones()
+      - Use product audience characteristics as filter (e.g. fitness app → health/fitness interests)
+   d. Call create_conversation_session to activate personas
+   e. Call send_message with ALL clone_ids and this exact prompt format:
+      "You are evaluating a product based on your personal background and experiences.
+
+       Product: [TITLE FROM PAGE]
+       What it does: [2-sentence problem+solution synthesis you derived]
+
+       Would you use this product? Start your response with exactly: YES, NO, or MAYBE
+       Then on the next line, explain your reasoning in 1-2 sentences. For YES: how it solves your problem. For NO: why it's off-topic, problem doesn't exist, or why you wouldn't use it."
+   f. After receiving responses, parse each response to extract:
+      - Vote (first line: YES/NO/MAYBE)
+      - Reason (second line: explanation)
+   g. Parse all NO/MAYBE responses to extract and aggregate top concerns (e.g. "too expensive", "overkill", "solves non-problem"):
+      - Extract 3-5 unique concerns with count of personas who mentioned each
+      - Include a summary reasoning for each (e.g. "Too expensive for SMBs" with backing like "Simpler alternatives exist")
+   h. Parse all YES responses to extract and aggregate top benefits (e.g. "saves time", "beautiful UX", "easy setup"):
+      - Extract 3-5 unique benefits with count of personas who mentioned each
+      - Include a summary reasoning for each (e.g. "Saves time" with backing like "Streamlines workflow")
+   i. Call create_visualization with EXACTLY this data structure:
+
+      CHART 1 — Pie (vote breakdown):
+      {
+        "type": "pie",
+        "title": "Would you use this product?",
+        "innerRadius": 0.5,
+        "data": [
+          { "name": "YES", "value": 5, "color": "#10b981" },
+          { "name": "NO", "value": 3, "color": "#f87171" },
+          { "name": "MAYBE", "value": 2, "color": "#fbbf24" }
+        ]
+      }
+
+      CHART 2 — Individual votes (each persona's vote + reason):
+      {
+        "type": "horizontal_bar",
+        "title": "Individual Feedback",
+        "data": [
+          { "name": "PersonaName1", "label": "YES", "color": "#10b981", "note": "Their exact reason from response" },
+          { "name": "PersonaName2", "label": "NO", "color": "#f87171", "note": "Their exact reason from response" }
+        ]
+      }
+
+      CHART 3 — Top concerns (aggregated reasons NOT to use):
+      {
+        "type": "top_concerns",
+        "title": "Top Concerns for NOT Using",
+        "data": [
+          { "name": "Price too high", "value": 4, "color": "#f87171", "note": "Too expensive for SMB segment" },
+          { "name": "Overkill for use case", "value": 2, "color": "#f87171", "note": "Simpler solutions exist" }
+        ]
+      }
+
+      CHART 4 — Top benefits (aggregated reasons to use):
+      {
+        "type": "top_benefits",
+        "title": "Top Reasons to Use",
+        "data": [
+          { "name": "Saves time significantly", "value": 4, "color": "#10b981", "note": "Streamlines daily workflow" },
+          { "name": "Beautiful UX", "value": 3, "color": "#10b981", "note": "Easy to learn and use" }
+        ]
+      }
+   j. After calling create_visualization, write your summary response:
+      - **Problem:** ...
+      - **Solution:** ...
+      - **Competitive angle:** ...
+      - Vote breakdown (e.g. "50% YES, 30% NO, 20% MAYBE")
+      - **Top reasons to buy:** [1st concern] (X people), [2nd concern], etc.
+      - **Top concerns:** [1st concern] (X people), [2nd concern], etc.
+      - Invite follow-up questions
+
+   IMPORTANT: Always call create_visualization BEFORE writing your final summary. Act immediately without asking for confirmation.
 
 TOOLS (Use based on user intent):
 - get_demographic_segments(): List available demographic fields
@@ -82,6 +167,8 @@ TOOLS (Use based on user intent):
 - send_message(prompt, clone_ids): Send a prompt to specific personas and collect responses
 - extract_google_form(form_url): Extract questions and entry IDs from a Google Form URL
 - submit_google_form(form_url, responses): Submit responses to a Google Form (responses: { entryId: value } or { entryId: [value1, value2] } for checkbox)
+- analyze_landing_page(url): Fetch and extract text content from a landing page URL. Returns title, description, and cleaned body text.
+- create_visualization(title, charts): Render charts and diagrams inline in chat (pie, grouped_bar, horizontal_bar)
 
 Session ID: ${sessionId}
 - Always include session_id when calling recruit_clones, release_clones, or list_clones
@@ -944,6 +1031,51 @@ const submitGoogleFormTool = tool(
   }
 )
 
+const analyzeLandingPageTool = tool(
+  async (input: { url: string }) => {
+    const page = await scrapeLandingPage(input.url)
+    return JSON.stringify(page.error ? { error: page.error, url: input.url } : page)
+  },
+  {
+    name: 'analyze_landing_page',
+    description: 'Fetch and extract text content from a landing page URL. Returns title, description, and cleaned body text. Call when user provides a product URL for analysis. After calling this, synthesize the Problem/Solution/Competitive angle from the bodyText.',
+    schema: z.object({
+      url: z.string().describe('Full URL starting with https:// or http://'),
+    }),
+  }
+)
+
+const createVisualizationTool = tool(
+  async (input: { title: string; charts: ChartSpec[]; generatedAt?: string }) => {
+    // No side effects — just validates and echoes back the spec
+    const payload: VisualizationPayload = {
+      title: input.title,
+      charts: input.charts,
+      generatedAt: input.generatedAt || new Date().toISOString(),
+    }
+    return JSON.stringify({ success: true, chartCount: payload.charts.length })
+  },
+  {
+    name: 'create_visualization',
+    description: 'Render charts and diagrams inline in the chat. Capysan calls this to visualize analysis results. Supports: pie/donut (vote breakdown), horizontal_bar (individual votes), top_concerns (aggregated reasons NOT to use), top_benefits (aggregated reasons to use). Call after completing an analysis to present results visually.',
+    schema: z.object({
+      title: z.string().describe('Overall visualization title, e.g. "Landing Page Analysis — myapp.com"'),
+      charts: z.array(
+        z.object({
+          type: z.enum(['pie', 'grouped_bar', 'horizontal_bar', 'top_concerns', 'top_benefits']),
+          title: z.string().describe('Chart title'),
+          subtitle: z.string().optional().describe('Optional subtitle'),
+          data: z.array(z.record(z.string(), z.unknown())).describe('Chart data points. For top_concerns/top_benefits: { name: concern/benefit, value: count, note: reasoning, color: hex }'),
+          xKey: z.string().optional().describe('Category axis key for grouped_bar'),
+          bars: z.array(z.object({ key: z.string(), color: z.string() })).optional().describe('Bar series config for grouped_bar'),
+          innerRadius: z.number().optional().describe('Inner radius for pie/donut (0-1, e.g. 0.5 for donut)'),
+        })
+      ).describe('Array of chart specs to render'),
+      generatedAt: z.string().optional().describe('ISO timestamp of generation'),
+    }),
+  }
+)
+
 export interface ReasoningStep {
   iteration: number
   action: string
@@ -960,6 +1092,7 @@ export interface CallCapybaraAIResponse {
     clone_ids: string[]
     clone_names: string[]
   }
+  visualization?: VisualizationPayload
 }
 
 /**
@@ -1002,6 +1135,8 @@ export async function callCapybaraAI(
     sendMessageTool,
     extractGoogleFormTool,
     submitGoogleFormTool,
+    analyzeLandingPageTool,
+    createVisualizationTool,
   ])
 
   // Build messages with system prompt (including session ID and conversation history) and message history
@@ -1018,6 +1153,7 @@ export async function callCapybaraAI(
   let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
   const reasoning: ReasoningStep[] = []
   let lastExtractedFormQuestions: { entryId: string; gridRows?: { entryId: string }[] }[] | undefined
+  let lastVisualization: VisualizationPayload | undefined
   const pushReasoning = (step: ReasoningStep) => {
     reasoning.push(step)
     options?.onReasoningStep?.(step)
@@ -1347,6 +1483,59 @@ export async function callCapybaraAI(
                 metadata: { sessionId, formUrl: args.form_url?.slice(0, 50) }
               })
             }
+          } else if (toolCall.name === 'analyze_landing_page') {
+            const args = toolCall.args as { url: string }
+            try {
+              const page = await scrapeLandingPage(args.url)
+              toolResult = JSON.stringify(page)
+              toolOutput = page.error ? { error: page.error } : { title: page.title, chars: page.bodyText?.length }
+              pushReasoning({
+                iteration: iterations,
+                action: `Fetching landing page: ${args.url}`,
+                toolName: toolCall.name,
+                input: args,
+                output: toolOutput,
+                summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars`,
+              })
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResult = JSON.stringify({ error: msg, url: args.url })
+              pushReasoning({
+                iteration: iterations,
+                action: `Fetching landing page: ${args.url}`,
+                toolName: toolCall.name,
+                input: args,
+                summary: `Error: ${msg}`,
+              })
+            }
+          } else if (toolCall.name === 'create_visualization') {
+            const args = toolCall.args as { title: string; charts: ChartSpec[]; generatedAt?: string }
+            try {
+              lastVisualization = {
+                title: args.title,
+                charts: args.charts,
+                generatedAt: args.generatedAt || new Date().toISOString(),
+              }
+              toolResult = JSON.stringify({ success: true, chartCount: args.charts.length })
+              toolOutput = { success: true, chartCount: args.charts.length }
+              pushReasoning({
+                iteration: iterations,
+                action: 'Creating visualization',
+                toolName: toolCall.name,
+                input: { title: args.title, chartCount: args.charts.length },
+                output: toolOutput,
+                summary: `Rendering ${args.charts.length} chart(s): ${args.charts.map(c => c.title).join(', ')}`,
+              })
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResult = JSON.stringify({ error: msg })
+              pushReasoning({
+                iteration: iterations,
+                action: 'Creating visualization',
+                toolName: toolCall.name,
+                summary: `Error: ${msg}`,
+              })
+            }
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
             pushReasoning({
@@ -1402,11 +1591,12 @@ export async function callCapybaraAI(
     }
   }
 
-  console.log('[ORCHESTRATOR] Returning response with session_transition:', !!sessionTransition)
+  console.log('[ORCHESTRATOR] Returning response with session_transition:', !!sessionTransition, 'visualization:', !!lastVisualization)
   return {
     response: finalResponse || 'Unable to generate response',
     reasoning,
     session_transition: sessionTransition,
+    visualization: lastVisualization,
   }
 }
 

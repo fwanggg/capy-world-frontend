@@ -34,6 +34,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
         timestamp: new Date(msg.created_at).getTime(),
         role: msg.role,
         sender_id: msg.sender_id || msg.role,
+        ...(msg.visualization && { visualization: msg.visualization }),
       }))
       setMessages(hydrated)
     } else {
@@ -57,6 +58,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
       const responsesWithReasoning = data.ai_responses.map((r) => ({
         ...r,
         reasoning: r.role === 'capybara' ? data.capybara_reasoning : undefined,
+        visualization: r.role === 'capybara' ? data.visualization : undefined,
       }))
       setMessages((prev) => [...prev, ...responsesWithReasoning])
     }
@@ -294,6 +296,7 @@ export function UnifiedChat({ sessionId, activeClones, onActiveClonesChange, ini
             reasoning={msg.reasoning}
             recipient={msg.recipient}
             activeClones={activeClones}
+            visualization={msg.visualization}
           />
         ))}
 

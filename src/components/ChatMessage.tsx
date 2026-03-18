@@ -2,7 +2,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { anonymizeUsername } from '@/utils/anonymize'
 import { ThinkingSteps } from './ThinkingSteps'
-import type { ReasoningStep } from '@/types/chat'
+import { VisualizationCard } from './VisualizationCard'
+import type { ReasoningStep, VisualizationPayload } from '@/types/chat'
 import type { CloneEntry } from '@/components/UnifiedChat'
 
 interface ChatMessageProps {
@@ -12,9 +13,10 @@ interface ChatMessageProps {
   reasoning?: ReasoningStep[]
   recipient?: string
   activeClones?: CloneEntry[]
+  visualization?: VisualizationPayload
 }
 
-export function ChatMessage({ role, sender_id, content, reasoning, recipient, activeClones }: ChatMessageProps) {
+export function ChatMessage({ role, sender_id, content, reasoning, recipient, activeClones, visualization }: ChatMessageProps) {
   const isUser = role === 'user'
   const isCapybara = role === 'capybara'
 
@@ -89,6 +91,13 @@ export function ChatMessage({ role, sender_id, content, reasoning, recipient, ac
               isLoading={false}
               defaultCollapsed={true}
             />
+          </div>
+        )}
+
+        {/* Visualization for Capybara messages */}
+        {role === 'capybara' && visualization && (
+          <div style={{ marginTop: 'var(--space-lg)' }}>
+            <VisualizationCard payload={visualization} />
           </div>
         )}
       </div>
