@@ -58,10 +58,34 @@ function extractFormIdFromUrl(url: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-function getViewformUrl(url: string): string {
+/**
+ * Resolve shortened URL (forms.gle) to full URL by following redirect.
+ * Returns the resolved URL after following redirects.
+ */
+async function resolveShortUrl(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      },
+    });
+    return res.url;
+  } catch (err) {
+    throw new Error(`Failed to resolve shortened URL: ${err}`);
+  }
+}
+
+async function getViewformUrl(url: string): Promise<string> {
   let toCheck = url.trim();
   const urlMatch = toCheck.match(/https?:\/\/[^\s<>"']+/);
   if (urlMatch) toCheck = urlMatch[0];
+
+  // Handle shortened URLs (forms.gle)
+  if (/forms\.gle/.test(toCheck)) {
+    toCheck = await resolveShortUrl(toCheck);
+  }
+
   const formId = extractFormIdFromUrl(toCheck);
   if (!formId) throw new Error("Invalid Google Form URL: could not extract form ID");
   const hasShortFormat = /\/forms\/d\/e\//.test(toCheck);
@@ -106,7 +130,7 @@ async function resolveFormResponseUrl(formUrl: string): Promise<string> {
   if (cached) return cached;
 
   // /d/ format - fetch HTML and extract formResponse URL from FB_PUBLIC_LOAD_DATA_[14]
-  const viewformUrl = getViewformUrl(formUrl);
+  const viewformUrl = await getViewformUrl(formUrl);
   const res = await fetch(viewformUrl, {
     headers: {
       "User-Agent":
@@ -279,12 +303,18 @@ function extractQuestionsFromData(data: unknown): FormQuestion[] {
  * Fetches the HTML and parses FB_PUBLIC_LOAD_DATA_.
  */
 export async function extractGoogleForm(formUrl: string): Promise<ExtractedForm> {
-  const formId = extractFormIdFromUrl(formUrl);
+  // Resolve shortened URLs first
+  let resolvedUrl = formUrl;
+  if (/forms\.gle/.test(formUrl)) {
+    resolvedUrl = await resolveShortUrl(formUrl);
+  }
+
+  const formId = extractFormIdFromUrl(resolvedUrl);
   if (!formId) {
     throw new Error("Invalid Google Form URL: could not extract form ID");
   }
 
-  const fetchUrl = getViewformUrl(formUrl);
+  const fetchUrl = await getViewformUrl(formUrl);
   const res = await fetch(fetchUrl, {
     headers: {
       "User-Agent":
