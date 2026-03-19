@@ -43,28 +43,26 @@ export default function Home() {
           </p>
 
           {/* CTA Input */}
-          <form onSubmit={handleAnalyze} className="w-full max-w-3xl mx-auto mb-12">
-            <div className="bg-[#1d2026]/80 backdrop-blur-sm rounded-2xl flex flex-col md:flex-row gap-0 shadow-2xl border border-[#3a4a46]/10 overflow-hidden">
-              <div className="flex-1 flex items-center px-6 py-4 gap-3">
-                <span className="text-[#00f5d4] text-xl">🔗</span>
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="Paste your landing page URL..."
-                  className="bg-transparent border-none focus:ring-0 focus:outline-none text-[#e1e2eb] w-full placeholder:text-[#b9cac4]/50 font-base"
-                  disabled={loading}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading || !url.trim()}
-                className="bg-[#00f5d4] text-[#003d33] font-bold px-8 py-4 flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              >
-                {loading ? 'Analyzing...' : 'Analyze'}
-                <span className="text-lg">→</span>
-              </button>
+          <form onSubmit={handleAnalyze} className="max-w-2xl mx-auto bg-[#1d2026]/80 backdrop-blur-sm p-2 rounded-2xl flex flex-col md:flex-row gap-2 shadow-2xl border border-[#3a4a46]/10 mb-12">
+            <div className="flex-1 flex items-center px-4 py-3 gap-3">
+              <span className="text-[#00f5d4]">🔗</span>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="Paste your landing page URL..."
+                className="bg-transparent border-none focus:ring-0 focus:outline-none text-[#e1e2eb] w-full placeholder:text-[#b9cac4]/50 text-sm"
+                disabled={loading}
+              />
             </div>
+            <button
+              type="submit"
+              disabled={loading || !url.trim()}
+              className="bg-[#00f5d4] text-[#003d33] font-bold px-8 py-4 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            >
+              {loading ? 'Analyzing...' : 'Analyze'}
+              <span>→</span>
+            </button>
           </form>
 
           {/* Social Proof */}
