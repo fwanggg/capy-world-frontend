@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Navigation } from "@/components/Navigation";
 
 export const metadata: Metadata = {
   title: "Capysan",
@@ -14,6 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ background: '#0f172a' }}>
       <body>
+        <Navigation />
         {children}
       </body>
     </html>
