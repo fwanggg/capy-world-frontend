@@ -24,28 +24,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#10131a] text-[#e1e2eb]">
-      {/* Top Navigation */}
-      <nav className="fixed top-0 w-full z-50 bg-[#10131a]/60 backdrop-blur-xl border-b border-[#3a4a46]/15">
-        <div className="flex justify-between items-center px-8 h-20 max-w-7xl mx-auto">
-          <Link href="/" className="text-2xl font-bold tracking-tight text-[#e1e2eb]">
-            Capysan
-          </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <a className="text-[#00f5d4] font-semibold transition-colors duration-200" href="#how">
-              How It Works
-            </a>
-            <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors duration-200" href="#features">
-              Features
-            </a>
-            <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors duration-200" href="#pricing">
-              Pricing
-            </a>
-          </div>
-        </div>
-      </nav>
-
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center px-8 pt-32 pb-16 overflow-hidden bg-gradient-to-br from-[#10131a] via-[#10131a] to-[#1a1f2e]">
+      <section className="relative min-h-screen flex items-center justify-center px-8 pt-20 pb-16 overflow-hidden bg-gradient-to-br from-[#10131a] via-[#10131a] to-[#1a1f2e]">
         <div className="w-full max-w-4xl mx-auto text-center z-10">
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0b5347]/30 border border-[#3a4a46]/15 mb-8">
