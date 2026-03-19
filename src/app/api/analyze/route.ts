@@ -321,16 +321,64 @@ export async function POST(req: Request) {
                 if (msg.role === 'clone') {
                   // Extract persona ID from sender_id (format: clone-{id})
                   const personaId = msg.sender_id.replace('clone-', '')
+
+                  // Parse Q1-Q4 from response text
+                  const content = msg.content || ''
+                  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+
+                  // Extract individual question answers
+                  let q1 = '', q2 = '', q3 = '', vote = 'MAYBE', voteReason = ''
+                  let currentQuestion = ''
+
+                  for (const line of lines) {
+                    if (line.toLowerCase().startsWith('q1:') || line.match(/^q1[\s:]/i)) {
+                      currentQuestion = 'q1'
+                      q1 = line.replace(/^q1[\s:]*/i, '').trim()
+                    } else if (line.toLowerCase().startsWith('q2:') || line.match(/^q2[\s:]/i)) {
+                      currentQuestion = 'q2'
+                      q2 = line.replace(/^q2[\s:]*/i, '').trim()
+                    } else if (line.toLowerCase().startsWith('q3:') || line.match(/^q3[\s:]/i)) {
+                      currentQuestion = 'q3'
+                      q3 = line.replace(/^q3[\s:]*/i, '').trim()
+                    } else if (line.toLowerCase().startsWith('q4:') || line.match(/^q4[\s:]/i)) {
+                      currentQuestion = 'q4'
+                      const q4Text = line.replace(/^q4[\s:]*/i, '').trim()
+                      // First line of Q4 should be YES/NO/MAYBE
+                      const voteMatch = q4Text.match(/^(YES|NO|MAYBE)/i)
+                      if (voteMatch) {
+                        vote = voteMatch[1].toUpperCase() as 'YES' | 'NO' | 'MAYBE'
+                        voteReason = q4Text.replace(/^(YES|NO|MAYBE)\s*/i, '').trim()
+                      } else {
+                        voteReason = q4Text
+                      }
+                    } else if (currentQuestion && line) {
+                      // Append multi-line answers
+                      const sep = (currentQuestion === 'q1' && q1) || (currentQuestion === 'q2' && q2) || (currentQuestion === 'q3' && q3) ? ' ' : ''
+                      if (currentQuestion === 'q1') q1 += sep + line
+                      else if (currentQuestion === 'q2') q2 += sep + line
+                      else if (currentQuestion === 'q3') q3 += sep + line
+                      else if (currentQuestion === 'q4') voteReason += sep + line
+                    }
+
+                    // Detect YES/NO/MAYBE at start of line for Q4 without label
+                    const voteMatch = line.match(/^(YES|NO|MAYBE)\b/i)
+                    if (voteMatch && currentQuestion !== 'q4') {
+                      vote = voteMatch[1].toUpperCase() as 'YES' | 'NO' | 'MAYBE'
+                      voteReason = line.replace(/^(YES|NO|MAYBE)\s*/i, '').trim()
+                      currentQuestion = 'q4'
+                    }
+                  }
+
                   cloneResponses.push({
                     personaId,
                     anonymousId: personaId,
                     demographics: {},
                     answers: {
-                      q1: msg.content,
-                      q2: '',
-                      q3: '',
-                      vote: 'MAYBE',
-                      voteReason: '',
+                      q1: q1 || 'No response',
+                      q2: q2 || 'No response',
+                      q3: q3 || 'No response',
+                      vote: vote as 'YES' | 'NO' | 'MAYBE',
+                      voteReason: voteReason || 'No reasoning provided',
                     },
                   })
                 }
@@ -345,6 +393,29 @@ export async function POST(req: Request) {
           }
 
           allReasoning = result.reasoning
+
+          // Fetch demographics for each clone response
+          for (const clone of cloneResponses) {
+            try {
+              const { data: persona } = await supabase
+                .from('personas')
+                .select('profession, location, age, gender')
+                .eq('id', clone.personaId)
+                .single()
+
+              if (persona) {
+                clone.demographics = {
+                  age: persona.age,
+                  gender: persona.gender,
+                  profession: persona.profession,
+                  location: persona.location,
+                }
+              }
+            } catch (err) {
+              // Persona not found or error fetching, continue with empty demographics
+              console.error(`[ANALYZE] Failed to fetch demographics for persona ${clone.personaId}:`, err)
+            }
+          }
 
           // Build final result
           const finalResult = buildAnalysisResult(
