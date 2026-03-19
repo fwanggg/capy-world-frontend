@@ -257,47 +257,6 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
         </div>
       </div>
 
-      {/* Actionable Items */}
-      <div>
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-1 h-4 bg-gradient-to-b from-teal-500 to-teal-600 rounded" />
-          <h2 className="text-xl font-bold text-slate-100">Actionable Items</h2>
-        </div>
-        <div className="space-y-3">
-          {result.actionItems.map((item, i) => {
-            const impactStyles = {
-              High: 'bg-teal-500/10 border-teal-600/30 text-teal-300',
-              Medium: 'bg-amber-500/10 border-amber-600/30 text-amber-300',
-              Low: 'bg-slate-500/10 border-slate-600/30 text-slate-300',
-            }
-            const badgeStyles = {
-              High: 'bg-teal-600 text-teal-100 border border-teal-500/50',
-              Medium: 'bg-amber-600 text-amber-100 border border-amber-500/50',
-              Low: 'bg-slate-700 text-slate-100 border border-slate-600/50',
-            }
-            return (
-              <div
-                key={i}
-                className={`rounded-lg border p-4 flex gap-4 backdrop-blur-sm transition-all hover:border-teal-600/20 ${
-                  impactStyles[item.impact]
-                }`}
-              >
-                <div
-                  className={`px-3 py-1.5 rounded text-xs font-bold whitespace-nowrap ${
-                    badgeStyles[item.impact]
-                  }`}
-                >
-                  {item.impact}
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-100 text-sm">{item.action}</p>
-                  <p className="text-xs text-slate-400 mt-2">{item.rationale}</p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
     </div>
   )
 }
