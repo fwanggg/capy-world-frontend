@@ -1713,6 +1713,7 @@ export async function callAnalysisAI(
   let finalResponse: string | null = null
   const reasoning: ReasoningStep[] = []
   let lastVisualization: VisualizationPayload | undefined
+  const toolsAlreadyCalled = new Set<string>() // Track called tools to prevent duplicates
 
   const pushReasoning = (step: ReasoningStep) => {
     reasoning.push(step)
@@ -1730,6 +1731,13 @@ export async function callAnalysisAI(
       messages.push(response)
 
       for (const toolCall of response.tool_calls) {
+        // Skip duplicate tool calls (same tool called more than once)
+        if (toolsAlreadyCalled.has(toolCall.name)) {
+          console.log(`[ORCHESTRATOR] Skipping duplicate tool call: ${toolCall.name}`)
+          continue
+        }
+        toolsAlreadyCalled.add(toolCall.name)
+
         let toolResult: string
         let toolOutput: any = null
         console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
