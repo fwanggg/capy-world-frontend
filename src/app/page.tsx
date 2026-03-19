@@ -78,55 +78,6 @@ export default function Home() {
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#0b5347]/10 rounded-full blur-[120px]"></div>
       </section>
 
-
-      {/* CTA Feature Section */}
-      <section id="features" className="py-24 px-8">
-        <div className="max-w-7xl mx-auto bg-[#1d2026]/50 backdrop-blur-sm rounded-[2rem] p-12 md:p-20 overflow-hidden relative border border-[#3a4a46]/10">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <h2 className="text-4xl font-bold text-[#e1e2eb] mb-6 leading-tight">
-                Stop guessing, start <span className="text-[#00f5d4]">validating</span>.
-              </h2>
-              <p className="text-[#b9cac4] mb-8 text-lg">
-                Join 2,000+ founders using synthetic intelligence to build products that people actually want.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button onClick={handleAnalyze} className="bg-[#00f5d4] text-[#003d33] font-bold px-8 py-4 rounded-xl hover:opacity-90 transition-all">
-                  Start Free Analysis
-                </button>
-                <button className="bg-[#272a31] text-[#e1e2eb] font-bold px-8 py-4 rounded-xl hover:bg-[#32353c] transition-all border border-[#3a4a46]/10">
-                  View Sample Report
-                </button>
-              </div>
-            </div>
-            <div className="relative">
-              <div className="bg-[#272a31] rounded-2xl p-6 shadow-2xl border border-[#3a4a46]/10 relative z-10">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-12 h-12 rounded-full bg-[#32353c] flex items-center justify-center">
-                    <span className="text-xl">👤</span>
-                  </div>
-                  <div>
-                    <div className="text-[#e1e2eb] font-bold">Marketing Manager Mike</div>
-                    <div className="text-xs text-[#b9cac4] uppercase tracking-widest font-bold">Synthetic Profile</div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="p-4 bg-[#1d2026] rounded-xl border border-[#3a4a46]/10">
-                    <div className="text-xs font-bold text-[#94d3c3] mb-1">Objection</div>
-                    <div className="text-sm text-[#b9cac4]">"The integration seems complex for our current stack..."</div>
-                  </div>
-                  <div className="p-4 bg-[#1d2026] rounded-xl border border-[#3a4a46]/10">
-                    <div className="text-xs font-bold text-[#00f5d4] mb-1">Motivation</div>
-                    <div className="text-sm text-[#b9cac4]">"Solving our attribution problem would save us 10h/week."</div>
-                  </div>
-                </div>
-              </div>
-              <div className="absolute inset-0 bg-[#00f5d4]/10 blur-[100px] -z-0"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-[#0b0e14] mt-20 border-t border-[#3a4a46]/15">
         <div className="max-w-7xl mx-auto w-full py-16 px-8">
