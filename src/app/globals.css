@@ -128,8 +128,8 @@ nav a:hover {
 }
 
 .card {
-  background-color: var(--color-white);
-  border: 1px solid var(--color-gray-100);
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   padding: var(--space-xl);
   box-shadow: var(--shadow-sm);
