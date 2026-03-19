@@ -1600,6 +1600,272 @@ export async function callCapybaraAI(
   }
 }
 
+/**
+ * System prompt for analysis mode (product-market fit evaluation)
+ * Focused on Mom Test methodology: 10 personas answer 4 key questions
+ */
+function getAnalysisSystemPrompt(): string {
+  return `You are Capysan, a product-market fit analyst. You run structured product-solution fit analysis using the Mom Test methodology.
+
+Follow these 5 steps in order EXACTLY ONCE. Do not repeat steps. Do not ask for clarification. Execute immediately.
+
+STEP 1 — analyze_landing_page({url}):
+  Call ONCE with the provided URL. Extract:
+  - Problem: What pain point this solves (1 sentence)
+  - Solution: Core value proposition (1 sentence)
+  - ICP: Who specifically would benefit most (1 sentence)
+
+STEP 2 — search_clones({ count: 10 }):
+  Call ONCE with count=10 (no query param). Returns 10 representative personas.
+  IMPORTANT: Each persona has 'id' (integer) and 'anonymous_id' (hash). Save the integer IDs for step 3.
+
+STEP 3 — create_conversation_session({ clone_ids: [integer IDs from step 2], session_id: SESSION_ID }):
+  Call ONCE with the 10 integer persona IDs from step 2.
+
+STEP 4 — send_message({ prompt: "...", clone_ids: [same 10 integer IDs] }):
+  Call ONCE with this EXACT prompt (substitute [PROBLEM], [SOLUTION], [PRODUCT TITLE]):
+  "You are evaluating a product based on your own personal experiences.
+   Product: [PRODUCT TITLE]
+   What it does: [PROBLEM] — [SOLUTION]
+
+   Answer all 4 questions:
+   Q1: Tell me about the last time you experienced [THE PROBLEM]. Do you actually have this problem?
+   Q2: How do you currently solve this today? What tools or methods do you use?
+   Q3: How much would you pay per month for a perfect solution? Give a specific USD amount or range.
+   Q4: Would you use [PRODUCT TITLE]? Write YES, NO, or MAYBE on its own line, then explain why in 2-3 sentences."
+
+STEP 5 — Write final markdown response:
+  ## Product Analysis
+  **Problem:** [from Step 1]
+  **Solution:** [from Step 1]
+  **Target Customer:** [ICP from Step 1]
+
+  ## Vote Summary
+  [Count]: X YES, Y NO, Z MAYBE — [1-sentence verdict on product-market fit]
+
+  ## Mom Test Highlights
+  **Do they have the problem?** [Synthesize Q1 answers - key patterns and quotes]
+  **Current alternatives:** [Synthesize Q2 answers - how people currently solve this]
+  **Willingness to pay:** [Synthesize Q3 answers - price sensitivity, include median/average]
+
+  ## Top Concerns (from NO/MAYBE votes)
+  - [Concern 1] (X personas) — Brief rationale
+  - [Concern 2] (Y personas) — Brief rationale
+  (List 3-5 top concerns)
+
+  ## Top Reasons to Buy (from YES votes)
+  - [Benefit 1] (X personas) — Brief rationale
+  - [Benefit 2] (Y personas) — Brief rationale
+  (List 3-5 top benefits)
+
+  ## Actionable Items
+  - [HIGH] [specific action] — [rationale from feedback]
+  - [MEDIUM] [action] — [rationale]
+  - [LOW] [action] — [rationale]
+  (List exactly 3 actions)
+
+TOOLS (use ONLY these, in order, ONE TIME EACH):
+1. analyze_landing_page(url)
+2. search_clones(count)
+3. create_conversation_session(clone_ids, session_id)
+4. send_message(prompt, clone_ids)
+
+CRITICAL REMINDERS:
+- Call each tool exactly once, in order
+- Do NOT loop, retry, or re-call any tool
+- Do NOT ask clarifying questions
+- After step 4 (send_message), immediately write step 5 (final markdown)
+- Stop after step 5. Do not attempt to create visualizations.`
+}
+
+/**
+ * Call analysis AI for product-market fit evaluation
+ * Runs agentic loop with 5 specialized tools (no recruitment, no Google Forms)
+ */
+export async function callAnalysisAI(
+  sessionId: string,
+  userMessage: string,
+  options?: {
+    onReasoningStep?: (step: ReasoningStep) => void
+    onRelayMessages?: (messages: { role: string; sender_id: string; content: string }[]) => void
+  }
+): Promise<CallCapybaraAIResponse> {
+  console.log('[ORCHESTRATOR] Starting analysis AI agentic loop for session:', sessionId)
+
+  const llm = createDeepSeekLLM()
+
+  // Bind only 4 tools for analysis mode (visualization handled in backend)
+  const llmWithTools = llm.bindTools([
+    analyzeLandingPageTool,
+    createSearchClonesTool(undefined), // No auth token - demographic-only search
+    createConversationSessionTool,
+    sendMessageTool,
+  ])
+
+  const systemPrompt = getAnalysisSystemPrompt()
+  const messages: BaseMessage[] = [
+    new SystemMessage(systemPrompt),
+    new HumanMessage(userMessage),
+  ]
+
+  let iterations = 0
+  const maxIterations = 15 // Allow for: analyze → search → create_session → send_message → final response
+  let finalResponse: string | null = null
+  const reasoning: ReasoningStep[] = []
+  let lastVisualization: VisualizationPayload | undefined
+
+  const pushReasoning = (step: ReasoningStep) => {
+    reasoning.push(step)
+    options?.onReasoningStep?.(step)
+  }
+
+  while (iterations < maxIterations) {
+    iterations++
+    console.log(`[ORCHESTRATOR] Analysis iteration ${iterations}/${maxIterations}`)
+
+    const response = await llmWithTools.invoke(messages)
+    console.log('[ORCHESTRATOR] LLM response received, tool_calls:', response.tool_calls?.length || 0)
+
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      messages.push(response)
+
+      for (const toolCall of response.tool_calls) {
+        let toolResult: string
+        let toolOutput: any = null
+        console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
+
+        try {
+          if (toolCall.name === 'analyze_landing_page') {
+            const args = toolCall.args as { url: string }
+            try {
+              const page = await scrapeLandingPage(args.url)
+              toolResult = JSON.stringify(page)
+              toolOutput = page.error ? { error: page.error } : { title: page.title, chars: page.bodyText?.length }
+              pushReasoning({
+                iteration: iterations,
+                action: `Fetching landing page: ${args.url}`,
+                toolName: toolCall.name,
+                input: args,
+                output: toolOutput,
+                summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars`,
+              })
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResult = JSON.stringify({ error: msg, url: args.url })
+              pushReasoning({
+                iteration: iterations,
+                action: `Fetching landing page: ${args.url}`,
+                toolName: toolCall.name,
+                input: args,
+                summary: `Error: ${msg}`,
+              })
+            }
+          } else if (toolCall.name === 'search_clones') {
+            const args = toolCall.args as any
+            toolResult = await searchClones(args)
+            toolOutput = JSON.parse(toolResult)
+            const filterDesc = Object.entries(args)
+              .filter(([k, v]) => v !== undefined && k !== 'count')
+              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+              .join(', ') || 'no filters'
+            pushReasoning({
+              iteration: iterations,
+              action: `Searching personas: ${filterDesc}`,
+              toolName: toolCall.name,
+              input: args,
+              output: { count: toolOutput.personas?.length || 0 },
+              summary: `Found ${toolOutput.personas?.length || 0} persona(s)`,
+            })
+          } else if (toolCall.name === 'create_conversation_session') {
+            const toolArgs = {
+              ...(toolCall.args as any),
+              session_id: sessionId,
+            }
+            toolResult = await createConversationSession(toolArgs as { clone_ids: string[]; session_id: string })
+            toolOutput = JSON.parse(toolResult)
+
+            if (toolOutput.success) {
+              pushReasoning({
+                iteration: iterations,
+                action: `Activating personas in session`,
+                toolName: toolCall.name,
+                input: { clone_ids: toolArgs.clone_ids },
+                output: { count: toolOutput.clone_names?.length || 0 },
+                summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s)`,
+              })
+              console.log('[ORCHESTRATOR] Analysis session activated:', toolOutput.clone_names?.length, 'personas')
+            }
+          } else if (toolCall.name === 'send_message') {
+            const args = toolCall.args as { prompt: string; clone_ids: string[] }
+            console.log('[ORCHESTRATOR] Sending message to', args.clone_ids?.length || 0, 'clones')
+            try {
+              const responses = await callMultipleClones(args.clone_ids, sessionId, args.prompt, null)
+              toolResult = JSON.stringify({ success: true, responses })
+              pushReasoning({
+                iteration: iterations,
+                action: `Asking personas questions`,
+                toolName: toolCall.name,
+                input: { clone_count: args.clone_ids?.length },
+                output: { responses: responses?.length || 0 },
+                summary: `Received responses from ${responses?.length || 0} persona(s)`,
+              })
+              if (options?.onRelayMessages && responses) {
+                options.onRelayMessages(responses.map(r => ({
+                  role: 'clone',
+                  sender_id: `clone-${r.clone_id}`,
+                  content: String(r.content),
+                })))
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              toolResult = JSON.stringify({ error: msg })
+              pushReasoning({
+                iteration: iterations,
+                action: `Asking personas questions`,
+                toolName: toolCall.name,
+                summary: `Error: ${msg}`,
+              })
+            }
+          } else {
+            toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
+          }
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          console.error('[ORCHESTRATOR] Tool execution error:', errorMsg)
+          toolResult = JSON.stringify({ error: `Tool execution failed: ${errorMsg}` })
+        }
+
+        messages.push(
+          new ToolMessage({
+            tool_call_id: toolCall.id || `${toolCall.name}_${Date.now()}`,
+            content: toolResult,
+            name: toolCall.name,
+          })
+        )
+      }
+    } else {
+      // No tool calls - extract final response and exit
+      console.log('[ORCHESTRATOR] No tool calls, extracting final response')
+      const content = response.content
+      if (typeof content === 'string') {
+        finalResponse = content
+      } else if (Array.isArray(content)) {
+        finalResponse = content.map((c: any) => c.text || c).join('')
+      } else {
+        finalResponse = String(content)
+      }
+      break
+    }
+  }
+
+  console.log('[ORCHESTRATOR] Analysis complete, returning results')
+  return {
+    response: finalResponse || 'Unable to generate response',
+    reasoning,
+    visualization: lastVisualization,
+  }
+}
+
 /** Keys to redact from interaction_history to prevent username leakage to LLM */
 const USERNAME_KEYS = ['author', 'username', 'reddit_username', 'user', 'author_name', 'op']
 

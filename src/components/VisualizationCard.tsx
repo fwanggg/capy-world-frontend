@@ -22,7 +22,7 @@ function PieRenderer({ spec }: { spec: ChartSpec }) {
 
   return (
     <div style={{ width: '100%', height: 320, display: 'flex', flexDirection: 'column' }}>
-      <h4 style={{ margin: '0 0 var(--space-sm) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-navy)' }}>
+      <h4 style={{ margin: '0 0 var(--space-sm) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-text-primary)' }}>
         {spec.title}
       </h4>
       <ResponsiveContainer width="100%" height="100%">
@@ -49,6 +49,7 @@ function PieRenderer({ spec }: { spec: ChartSpec }) {
               return `${numValue} (${percent}%)`
             }}
             labelFormatter={(label: any) => label || 'Vote'}
+            contentStyle={{ background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9' }}
           />
           <Legend
             verticalAlign="bottom"
@@ -72,11 +73,11 @@ function HorizontalBarRenderer({ spec }: { spec: ChartSpec }) {
       display: 'flex',
       flexDirection: 'column',
     }}>
-      <h4 style={{ margin: '0 0 var(--space-base) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-navy)' }}>
+      <h4 style={{ margin: '0 0 var(--space-base) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-text-primary)' }}>
         {spec.title}
       </h4>
       {data.length === 0 ? (
-        <div style={{ color: 'var(--color-gray-500)', fontSize: 'var(--text-xs)' }}>
+        <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)' }}>
           No data available
         </div>
       ) : (
@@ -86,7 +87,7 @@ function HorizontalBarRenderer({ spec }: { spec: ChartSpec }) {
               key={idx}
               style={{
                 paddingBottom: 'var(--space-base)',
-                borderBottom: idx < data.length - 1 ? '1px solid var(--color-gray-200)' : 'none',
+                borderBottom: idx < data.length - 1 ? '1px solid var(--color-surface-3)' : 'none',
               }}
             >
               {/* Vote badge + persona name */}
@@ -116,7 +117,7 @@ function HorizontalBarRenderer({ spec }: { spec: ChartSpec }) {
                 <div style={{
                   fontSize: 'var(--text-xs)',
                   fontWeight: '500',
-                  color: 'var(--color-navy)',
+                  color: 'var(--color-text-primary)',
                   flex: 1,
                   minWidth: 0,
                   wordBreak: 'break-word',
@@ -131,10 +132,10 @@ function HorizontalBarRenderer({ spec }: { spec: ChartSpec }) {
                   style={{
                     marginLeft: '60px',
                     padding: 'var(--space-sm)',
-                    backgroundColor: 'var(--color-gray-50)',
+                    backgroundColor: 'var(--color-surface-2)',
                     borderRadius: '4px',
                     borderLeft: '3px solid ' + (item.color || '#8884d8'),
-                    color: 'var(--color-gray-700)',
+                    color: 'var(--color-text-secondary)',
                     fontSize: 'var(--text-xs)',
                     lineHeight: 'var(--line-relaxed)',
                     wordBreak: 'break-word',
@@ -159,12 +160,12 @@ function TopConcernsRenderer({ spec }: { spec: ChartSpec }) {
   const maxValue = Math.max(...sorted.map(item => item.value || 0), 1)
 
   if (sorted.length === 0) {
-    return <div style={{ color: 'var(--color-gray-500)', fontSize: 'var(--text-xs)' }}>No concerns data</div>
+    return <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)' }}>No concerns data</div>
   }
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
-      <h4 style={{ margin: '0 0 var(--space-base) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-navy)' }}>
+      <h4 style={{ margin: '0 0 var(--space-base) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-text-primary)' }}>
         {spec.title}
       </h4>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-base)' }}>
@@ -209,7 +210,7 @@ function TopConcernsRenderer({ spec }: { spec: ChartSpec }) {
                 <div style={{
                   width: '100%',
                   height: '6px',
-                  backgroundColor: 'var(--color-gray-200)',
+                  backgroundColor: 'var(--color-surface-3)',
                   borderRadius: '3px',
                   overflow: 'hidden',
                 }}>
@@ -230,7 +231,7 @@ function TopConcernsRenderer({ spec }: { spec: ChartSpec }) {
                 paddingRight: 'var(--space-sm)',
                 paddingTop: 'var(--space-xs)',
                 paddingBottom: 'var(--space-xs)',
-                backgroundColor: 'var(--color-red-50)',
+                backgroundColor: 'var(--color-surface-2)',
                 borderLeft: '3px solid ' + (item.color || '#f87171'),
                 borderRadius: '2px',
                 color: 'var(--color-gray-700)',
@@ -256,12 +257,12 @@ function TopBenefitsRenderer({ spec }: { spec: ChartSpec }) {
   const maxValue = Math.max(...sorted.map(item => item.value || 0), 1)
 
   if (sorted.length === 0) {
-    return <div style={{ color: 'var(--color-gray-500)', fontSize: 'var(--text-xs)' }}>No benefits data</div>
+    return <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)' }}>No benefits data</div>
   }
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
-      <h4 style={{ margin: '0 0 var(--space-base) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-navy)' }}>
+      <h4 style={{ margin: '0 0 var(--space-base) 0', fontSize: 'var(--text-sm)', fontWeight: '600', color: 'var(--color-text-primary)' }}>
         {spec.title}
       </h4>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-base)' }}>
@@ -306,7 +307,7 @@ function TopBenefitsRenderer({ spec }: { spec: ChartSpec }) {
                 <div style={{
                   width: '100%',
                   height: '6px',
-                  backgroundColor: 'var(--color-gray-200)',
+                  backgroundColor: 'var(--color-surface-3)',
                   borderRadius: '3px',
                   overflow: 'hidden',
                 }}>
@@ -327,7 +328,7 @@ function TopBenefitsRenderer({ spec }: { spec: ChartSpec }) {
                 paddingRight: 'var(--space-sm)',
                 paddingTop: 'var(--space-xs)',
                 paddingBottom: 'var(--space-xs)',
-                backgroundColor: 'var(--color-green-50)',
+                backgroundColor: 'var(--color-surface-2)',
                 borderLeft: '3px solid ' + (item.color || '#10b981'),
                 borderRadius: '2px',
                 color: 'var(--color-gray-700)',
@@ -365,8 +366,8 @@ export function VisualizationCard({ payload }: VisualizationCardProps) {
   return (
     <div
       style={{
-        backgroundColor: 'var(--color-white)',
-        border: '1px solid var(--color-gray-200)',
+        backgroundColor: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border)',
         borderRadius: '0.5rem',
         overflow: 'hidden',
         boxShadow: 'var(--shadow-xs)',
