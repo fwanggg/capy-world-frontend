@@ -1176,12 +1176,13 @@ export async function callCapybaraAI(
         id: tc.id || tc.tool_call_id || `${tc.name}_${iterations}_${Math.random().toString(36).slice(2, 9)}`,
       }))
 
-      // Create a new AIMessage with normalized tool_calls
-      const normalizedResponse = {
-        ...response,
-        tool_calls: normalizedToolCalls,
-      }
-      messages.push(normalizedResponse)
+      // Create a new AIMessage with normalized tool_calls (required for LangChain message chain)
+      messages.push(
+        new AIMessage({
+          content: response.content ?? '',
+          tool_calls: normalizedToolCalls,
+        })
+      )
 
       // Process tool calls
       for (const toolCall of normalizedToolCalls) {
@@ -1745,17 +1746,25 @@ export async function callAnalysisAI(
         id: tc.id || tc.tool_call_id || `${tc.name}_${iterations}_${Math.random().toString(36).slice(2, 9)}`,
       }))
 
-      // Create a new AIMessage with normalized tool_calls
-      const normalizedResponse = {
-        ...response,
-        tool_calls: normalizedToolCalls,
-      }
-      messages.push(normalizedResponse)
+      // Create a new AIMessage with normalized tool_calls (required for LangChain message chain)
+      messages.push(
+        new AIMessage({
+          content: response.content ?? '',
+          tool_calls: normalizedToolCalls,
+        })
+      )
 
       for (const toolCall of normalizedToolCalls) {
-        // Skip duplicate tool calls (same tool called more than once)
+        // Skip duplicate tool calls (same tool called more than once) — must still push ToolMessage for LangChain
         if (toolsAlreadyCalled.has(toolCall.name)) {
           console.log(`[ORCHESTRATOR] Skipping duplicate tool call: ${toolCall.name}`)
+          messages.push(
+            new ToolMessage({
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ skipped: true, reason: 'duplicate_tool_call', tool: toolCall.name }),
+              name: toolCall.name,
+            })
+          )
           continue
         }
         toolsAlreadyCalled.add(toolCall.name)

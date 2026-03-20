@@ -88,11 +88,13 @@ export async function GET(): Promise<Response> {
         percent: Math.round((count / totalActive) * 100),
       }))
 
-    // Profession breakdown
+    // Profession breakdown (normalize by converting to lowercase and replacing hyphens/spaces with underscores)
     const professionCounts: Record<string, number> = {}
     personas.forEach((p) => {
       if (p.profession) {
-        professionCounts[p.profession] = (professionCounts[p.profession] || 0) + 1
+        // Normalize: lowercase and replace both spaces and hyphens with spaces for consistent matching
+        const normalized = p.profession.toLowerCase().replace(/[-_]/g, ' ').trim()
+        professionCounts[normalized] = (professionCounts[normalized] || 0) + 1
       }
     })
 
@@ -100,7 +102,10 @@ export async function GET(): Promise<Response> {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([label, count]) => ({
-        label: label.charAt(0).toUpperCase() + label.slice(1),
+        label: label
+          .split(/[\s-]+/)
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' '),
         count: count > 999 ? `${(count / 1000).toFixed(1)}k` : String(count),
       }))
 

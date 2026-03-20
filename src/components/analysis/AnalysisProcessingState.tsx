@@ -25,6 +25,15 @@ function inferStepFromReasoning(steps: readonly ReasoningStep[]): number {
   return Math.min(steps.length, 3)
 }
 
+/** Progress % from reasoning steps: ~25% per major step, cap at 95% until complete */
+function progressFromSteps(steps: readonly ReasoningStep[]): number {
+  if (steps.length === 0) return 5
+  const step = inferStepFromReasoning(steps)
+  const base = (step / 3) * 75
+  const fine = Math.min(steps.length * 3, 20)
+  return Math.min(base + fine, 95)
+}
+
 export function AnalysisProcessingState({
   currentStep: propStep,
   progress: propProgress,
@@ -33,7 +42,8 @@ export function AnalysisProcessingState({
 }: Readonly<AnalysisProcessingStateProps>) {
   const stepFromReasoning = inferStepFromReasoning(reasoningSteps)
   const currentStep = propStep ?? stepFromReasoning
-  const progress = propProgress ?? (currentStep / 3) * 100
+  const progress = propProgress ?? progressFromSteps(reasoningSteps)
+  const hasSteps = reasoningSteps.length > 0
 
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center px-8">
@@ -50,9 +60,26 @@ export function AnalysisProcessingState({
         <h2 className="text-3xl md:text-4xl font-headline font-black text-on-surface mb-4">
           Synthesizing Insights
         </h2>
-        <p className="text-on-surface-variant font-body leading-relaxed mb-12">
+        <p className="text-on-surface-variant font-body leading-relaxed mb-8">
           Our LLM engine is processing telemetry data to build your competitive advantage.
         </p>
+
+        {/* Live activity — streamed reasoning steps */}
+        {hasSteps && (
+          <div className="text-left mb-6 p-4 rounded-xl bg-surface-container/50 border border-outline-variant/10 max-h-32 overflow-y-auto">
+            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-2">
+              Live activity
+            </p>
+            <ul className="space-y-1.5 text-xs text-on-surface-variant">
+              {reasoningSteps.slice(-5).map((s, i) => (
+                <li key={i} className="flex gap-2 items-start">
+                  <span className="text-primary-container font-mono shrink-0">#{s.iteration}</span>
+                  <span>{s.summary || s.action}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Pipeline steps */}
         <div className="flex flex-col gap-0 text-left mb-4">
@@ -100,7 +127,7 @@ export function AnalysisProcessingState({
             />
           </div>
           <p className="text-xs text-on-surface-variant">
-            Estimated completion: {estimatedSeconds} seconds
+            {hasSteps ? `${reasoningSteps.length} step${reasoningSteps.length === 1 ? '' : 's'} completed` : 'Starting...'}
           </p>
         </div>
       </div>
