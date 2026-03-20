@@ -25,7 +25,7 @@ export const demographics = [
   { label: 'Other', percent: 1 },
 ]
 
-export const demographicsFootnote = 'Based on 4.8M synthetic samples.'
+export const demographicsFootnote = ''
 
 export const navLinks = [
   { label: 'About', href: '#' },

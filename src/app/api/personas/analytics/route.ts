@@ -12,15 +12,35 @@ interface PersonasAnalytics {
 
 export async function GET(): Promise<Response> {
   try {
-    // Fetch all personas with demographics
-    const { data: personas, error } = await supabase
-      .from('personas')
-      .select('age, gender, profession, interests, spending_power')
+    // Fetch personas in batches to get all records (Supabase has a 1000-row limit per query)
+    let allPersonas = []
+    let offset = 0
+    const pageSize = 1000
+    let hasMore = true
 
-    if (error) {
-      console.error('[API] Personas fetch error:', error)
-      return Response.json({ error: 'Failed to fetch personas' }, { status: 500 })
+    while (hasMore) {
+      const { data: batch, error } = await supabase
+        .from('personas')
+        .select('age, gender, profession, interests, spending_power')
+        .range(offset, offset + pageSize - 1)
+
+      if (error) {
+        console.error('[API] Personas fetch error:', error)
+        return Response.json({ error: 'Failed to fetch personas' }, { status: 500 })
+      }
+
+      if (!batch || batch.length === 0) {
+        hasMore = false
+      } else {
+        allPersonas = allPersonas.concat(batch)
+        if (batch.length < pageSize) {
+          hasMore = false
+        }
+        offset += pageSize
+      }
     }
+
+    const personas = allPersonas
 
     if (!personas || personas.length === 0) {
       return Response.json({
@@ -42,8 +62,12 @@ export async function GET(): Promise<Response> {
     const interestCounts: Record<string, number> = {}
     personas.forEach((p) => {
       if (Array.isArray(p.interests)) {
-        p.interests.forEach((interest: string) => {
-          interestCounts[interest] = (interestCounts[interest] || 0) + 1
+        p.interests.forEach((interest: any) => {
+          // Handle both string format and object format { name, confidence }
+          const interestName = typeof interest === 'string' ? interest : interest?.name
+          if (interestName) {
+            interestCounts[interestName] = (interestCounts[interestName] || 0) + 1
+          }
         })
       }
     })
