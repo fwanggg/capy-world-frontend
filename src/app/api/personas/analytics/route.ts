@@ -15,7 +15,7 @@ interface PersonasAnalytics {
 export async function GET(): Promise<Response> {
   try {
     // Fetch personas in batches to get all records (Supabase has a 1000-row limit per query)
-    let allPersonas = []
+    let allPersonas: Array<{ age?: number; gender?: string; profession?: string; interests?: any; spending_power?: string }> = []
     let offset = 0
     const pageSize = 1000
     let hasMore = true

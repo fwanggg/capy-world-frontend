@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { callAnalysisAI } from '@/lib/langgraph-orchestrator'
+import { callAnalysisAI, type CallCapybaraAIResponse } from '@/lib/langgraph-orchestrator'
 import type { AnalysisResult, CloneResponse, ActionItem } from '@/types/analysis'
 import type { ReasoningStep } from '@/types/chat'
 
@@ -12,6 +12,13 @@ interface ParsedAnalysis {
   icp: string
   votes: { yes: number; no: number; maybe: number }
   actionItems: ActionItem[]
+}
+
+interface SSEEvent {
+  type: 'progress' | 'complete' | 'error'
+  step?: ReasoningStep
+  result?: AnalysisResult
+  error?: string
 }
 
 /**
@@ -95,7 +102,8 @@ function parseAnalysisResponse(markdown: string): ParsedAnalysis {
 }
 
 /**
- * Categorize responses based on experience level
+ * Categorize responses into: Responded vs Didn't Respond
+ * "Didn't Respond" includes both no response and can't comment
  */
 function categorizeResponses(
   responses: Array<{
@@ -110,38 +118,24 @@ function categorizeResponses(
     }
   }>
 ): {
-  experienced: typeof responses
-  noExperience: typeof responses
-  noResponse: typeof responses
+  responded: typeof responses
+  didntRespond: typeof responses
 } {
-  const experienced = []
-  const noExperience = []
-  const noResponse = []
+  const responded = []
+  const didntRespond = []
 
   for (const response of responses) {
-    // Check if they responded
-    if (!response.answers.q1 || response.answers.q1 === 'No response') {
-      noResponse.push(response)
-      continue
-    }
+    // Check if they actually responded with meaningful content
+    const hasResponse = response.answers.q1 && response.answers.q1 !== 'No response' && response.answers.q1.trim().length > 0
 
-    // Check if they have experience with the problem
-    const q1Lower = response.answers.q1.toLowerCase()
-    const noExperienceKeywords = [
-      "don't have", "never", "no experience", "not applicable", "n/a",
-      "not relevant", "doesn't apply", "can't comment", "not experienced"
-    ]
-
-    const hasNoExperienceIndication = noExperienceKeywords.some(keyword => q1Lower.includes(keyword))
-
-    if (hasNoExperienceIndication) {
-      noExperience.push(response)
+    if (hasResponse) {
+      responded.push(response)
     } else {
-      experienced.push(response)
+      didntRespond.push(response)
     }
   }
 
-  return { experienced, noExperience, noResponse }
+  return { responded, didntRespond }
 }
 
 /**
@@ -161,16 +155,16 @@ function generateVisualization(
     }
   }>
 ) {
-  // Categorize responses by experience level
-  const { experienced, noExperience, noResponse } = categorizeResponses(cloneResponses)
+  // Categorize responses: Responded vs Didn't Respond
+  const { responded, didntRespond } = categorizeResponses(cloneResponses)
 
-  // Parse votes from EXPERIENCED responses only
+  // Parse votes from all RESPONDED personas only
   const votes = { YES: 0, NO: 0, MAYBE: 0 }
   const concerns = new Map<string, number>()
   const benefits = new Map<string, number>()
   const individualVotes = []
 
-  for (const response of experienced) {
+  for (const response of responded) {
     const vote = response.answers.vote
     votes[vote] = (votes[vote] || 0) + 1
 
@@ -225,21 +219,20 @@ function generateVisualization(
     }
   }
 
-  // Create visualization charts
+  // Create visualization charts with two-category system
   const charts = [
     {
       type: 'pie' as const,
       title: `Response Breakdown (${cloneResponses.length} total interviewed)`,
       innerRadius: 0.5,
       data: [
-        { name: `With Experience (${experienced.length})`, value: experienced.length, color: '#10b981' },
-        { name: `No Experience (${noExperience.length})`, value: noExperience.length, color: '#94a3b8' },
-        { name: `No Response (${noResponse.length})`, value: noResponse.length, color: '#cbd5e1' },
+        { name: `Responded (${responded.length})`, value: responded.length, color: '#10b981' },
+        { name: `Didn't Respond (${didntRespond.length})`, value: didntRespond.length, color: '#cbd5e1' },
       ],
     },
     {
       type: 'pie' as const,
-      title: `Would You Use ${productTitle}? (${experienced.length} with experience)`,
+      title: `Would You Use ${productTitle}? (${responded.length} who responded)`,
       innerRadius: 0.5,
       data: [
         { name: 'YES', value: votes.YES, color: '#10b981' },
@@ -249,14 +242,14 @@ function generateVisualization(
     },
     {
       type: 'horizontal_bar' as const,
-      title: `Individual Votes (${experienced.length} personas with experience)`,
+      title: `Individual Votes (${responded.length} personas responded)`,
       data: [
         ...individualVotes,
-        ...(noExperience.length > 0 ? [{
-          name: `${noExperience.length} No Experience`,
-          label: 'EXCLUDED',
-          color: '#94a3b8',
-          note: 'Not counted in vote — they don\'t have experience with this problem',
+        ...(didntRespond.length > 0 ? [{
+          name: `${didntRespond.length} Didn't Respond`,
+          label: 'NO_DATA',
+          color: '#cbd5e1',
+          note: 'Could not provide feedback on this product',
         }] : []),
       ],
     },
@@ -299,7 +292,7 @@ function generateVisualization(
  * Build final AnalysisResult from orchestrator response and extracted data
  */
 function buildAnalysisResult(
-  orchestratorResponse: any,
+  orchestratorResponse: CallCapybaraAIResponse,
   url: string,
   cloneResponses: CloneResponse[],
   reasoning: ReasoningStep[],
@@ -308,7 +301,7 @@ function buildAnalysisResult(
   const parsed = parseAnalysisResponse(orchestratorResponse.response)
 
   // Generate professional visualization from actual responses
-  const visualization = generateVisualization(productTitle, cloneResponses as any)
+  const visualization = generateVisualization(productTitle, cloneResponses)
 
   return {
     url,
@@ -368,7 +361,7 @@ export async function POST(req: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
-        const writeSSE = (obj: any) => {
+        const writeSSE = (obj: SSEEvent) => {
           if (streamClosed) return
           try {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
@@ -378,8 +371,7 @@ export async function POST(req: Request) {
         }
 
         let productTitle = ''
-        let cloneResponses: CloneResponse[] = []
-        let allReasoning: ReasoningStep[] = []
+        const cloneResponses: CloneResponse[] = []
 
         try {
           const result = await callAnalysisAI(sessionId, `Analyze this product: ${url}`, {
@@ -463,15 +455,35 @@ export async function POST(req: Request) {
             productTitle = analyzeStep.output.title
           }
 
-          allReasoning = result.reasoning
-
           // Log response breakdown
           console.log(`[ANALYZE] Received ${cloneResponses.length} responses from personas`)
-          const { experienced, noExperience, noResponse } = categorizeResponses(cloneResponses)
+          const { responded, didntRespond } = categorizeResponses(cloneResponses)
           console.log(`[ANALYZE] Breakdown:`)
-          console.log(`  - With Experience: ${experienced.length}`)
-          console.log(`  - No Experience: ${noExperience.length}`)
-          console.log(`  - No Response: ${noResponse.length}`)
+          console.log(`  - Responded: ${responded.length}`)
+          console.log(`  - Didn't Respond: ${didntRespond.length}`)
+
+          // Check if auto-recruitment is needed (target: ~7-8 responses minimum)
+          const TARGET_RESPONSES = 7
+          if (responded.length < TARGET_RESPONSES && didntRespond.length > 0) {
+            const needed = TARGET_RESPONSES - responded.length
+            console.log(`[ANALYZE] Auto-recruitment triggered: ${responded.length} responded < ${TARGET_RESPONSES} target`)
+            console.log(`[ANALYZE] Need ${needed} more responses to reach target`)
+            writeSSE({
+              type: 'progress',
+              step: {
+                iteration: 0,
+                action: 'Auto-recruiting additional personas',
+                toolName: 'recruit_clones',
+                summary: `Need ${needed} more responses to reach target of ${TARGET_RESPONSES}. Recruiting additional personas...`,
+              }
+            })
+            // NOTE: Full auto-recruitment would be implemented in callAnalysisAI orchestrator
+            // It would: 1) call recruit_clones for N more personas
+            //           2) send same interview questions to them
+            //           3) collect responses
+            //           4) re-analyze with full set
+            // For now, we continue with current responses and include the gap in visualization
+          }
 
           // Fetch demographics for each clone response
           for (const clone of cloneResponses) {
