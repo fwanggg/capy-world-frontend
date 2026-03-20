@@ -1,5 +1,10 @@
 import { supabase } from '@/lib/supabase'
 
+interface Interest {
+  name: string
+  confidence?: number
+}
+
 interface PersonasAnalytics {
   totalActive: number
   liveClusters: number
@@ -15,7 +20,7 @@ interface PersonasAnalytics {
 export async function GET(): Promise<Response> {
   try {
     // Fetch personas in batches to get all records (Supabase has a 1000-row limit per query)
-    let allPersonas: Array<{ age?: number; gender?: string; profession?: string; interests?: any; spending_power?: string }> = []
+    let allPersonas: Array<{ age?: number; gender?: string; profession?: string; interests?: Interest[] | string[]; spending_power?: string }> = []
     let offset = 0
     const pageSize = 1000
     let hasMore = true
@@ -70,7 +75,7 @@ export async function GET(): Promise<Response> {
     const interestCounts: Record<string, number> = {}
     personas.forEach((p) => {
       if (Array.isArray(p.interests)) {
-        p.interests.forEach((interest: any) => {
+        p.interests.forEach((interest: Interest | string) => {
           // Handle both string format and object format { name, confidence }
           const interestName = typeof interest === 'string' ? interest : interest?.name
           if (interestName) {
