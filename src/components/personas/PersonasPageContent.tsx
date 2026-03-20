@@ -16,7 +16,9 @@ interface PersonasAnalytics {
   liveClusters: number
   totalDataPoints: number
   interests: Array<{ label: string; percent: number }>
+  totalUniqueInterests: number
   professions: Array<{ label: string; count: string }>
+  totalUniqueProfessions: number
   ageGroups: Record<string, number>
   demographics: Array<{ label: string; count: number }>
 }
@@ -39,8 +41,10 @@ async function fetchPersonasAnalytics(): Promise<PersonasAnalytics> {
       liveClusters: 0,
       totalDataPoints: 0,
       interests: [],
+      totalUniqueInterests: 0,
       professions: [],
-      ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0 },
+      totalUniqueProfessions: 0,
+      ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0, 'Not Specified': 0 },
       demographics: [
         { label: 'Male', count: 0 },
         { label: 'Female', count: 0 },
@@ -86,8 +90,8 @@ export async function PersonasPageContent({
 
           {/* Stats Grid - Stitch: Interests, Profession, Age Groups, Demographics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <InterestDistributionCard items={analytics.interests} />
-            <ProfessionBreakdownCard items={analytics.professions} />
+            <InterestDistributionCard items={analytics.interests} totalUnique={analytics.totalUniqueInterests} />
+            <ProfessionBreakdownCard items={analytics.professions} totalUnique={analytics.totalUniqueProfessions} />
             <AgeGroupsCard groups={Object.entries(analytics.ageGroups).map(([label, count]) => ({ label, count }))} />
             <DemographicsCard items={analytics.demographics} footnote={demographicsFootnote} />
           </div>

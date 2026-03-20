@@ -5,15 +5,21 @@ interface ProfessionItem {
 
 interface ProfessionBreakdownCardProps {
   readonly items: readonly ProfessionItem[]
+  readonly totalUnique?: number
 }
 
-export function ProfessionBreakdownCard({ items }: Readonly<ProfessionBreakdownCardProps>) {
+export function ProfessionBreakdownCard({ items, totalUnique }: Readonly<ProfessionBreakdownCardProps>) {
   return (
     <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/5">
-      <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-        <span className="material-symbols-outlined text-base">work</span>
-        Profession
-      </h3>
+      <div className="flex items-baseline justify-between gap-2 mb-4">
+        <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="material-symbols-outlined text-base">work</span>
+          Profession
+        </h3>
+        {totalUnique !== undefined && (
+          <span className="text-xs text-on-surface-variant font-body">Top 10 of {totalUnique}</span>
+        )}
+      </div>
       <div className="space-y-3">
         {items.map((item) => (
           <div key={item.label} className="flex items-center justify-between gap-4">

@@ -5,7 +5,9 @@ interface PersonasAnalytics {
   liveClusters: number
   totalDataPoints: number
   interests: Array<{ label: string; percent: number }>
+  totalUniqueInterests: number
   professions: Array<{ label: string; count: string }>
+  totalUniqueProfessions: number
   ageGroups: Record<string, number>
   demographics: Array<{ label: string; count: number }>
 }
@@ -48,8 +50,10 @@ export async function GET(): Promise<Response> {
         liveClusters: 0,
         totalDataPoints: 0,
         interests: [],
+        totalUniqueInterests: 0,
         professions: [],
-        ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0 },
+        totalUniqueProfessions: 0,
+        ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0, 'Not Specified': 0 },
         demographics: [
           { label: 'Male', count: 0 },
           { label: 'Female', count: 0 },
@@ -106,6 +110,7 @@ export async function GET(): Promise<Response> {
       '25-34': 0,
       '35-44': 0,
       '45+': 0,
+      'Not Specified': 0,
     }
 
     personas.forEach((p) => {
@@ -114,6 +119,8 @@ export async function GET(): Promise<Response> {
         else if (p.age < 35) ageGroupRanges['25-34']++
         else if (p.age < 45) ageGroupRanges['35-44']++
         else ageGroupRanges['45+']++
+      } else {
+        ageGroupRanges['Not Specified']++
       }
     })
 
@@ -135,7 +142,9 @@ export async function GET(): Promise<Response> {
       liveClusters,
       totalDataPoints: 4800000,
       interests,
+      totalUniqueInterests: Object.keys(interestCounts).length,
       professions,
+      totalUniqueProfessions: Object.keys(professionCounts).length,
       ageGroups: ageGroupRanges,
       demographics,
     }
