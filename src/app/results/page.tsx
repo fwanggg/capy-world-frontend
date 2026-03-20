@@ -1,99 +1,69 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
 import ReasoningTimeline from '@/components/ReasoningTimeline'
 import AnalysisDashboard from '@/components/AnalysisDashboard'
-import type { AnalysisResult, AnalysisSSEEvent } from '@/types/analysis'
+import type { AnalysisResult } from '@/types/analysis'
 import type { ReasoningStep } from '@/types/chat'
 
 function ResultsContent() {
   const searchParams = useSearchParams()
-  const url = searchParams.get('url')
-
+  const url = searchParams.get('url') || ''
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [reasoningSteps, setReasoningSteps] = useState<ReasoningStep[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!url) {
-      setError('Missing URL parameter')
-      setLoading(false)
-      return
-    }
+    if (!url) return
 
     const fetchAnalysis = async () => {
+      setLoading(true)
+      setError(null)
       try {
-        setLoading(true)
-        setError(null)
-        setResult(null)
-        setReasoningSteps([])
-
-        const response = await fetch('/api/analyze', {
+        const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url }),
         })
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
+        if (!res.ok) throw new Error(`API error: ${res.status}`)
 
-        if (!response.body) {
-          throw new Error('No response body')
-        }
+        const reader = res.body?.getReader()
+        if (!reader) throw new Error('No response body')
 
-        const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
 
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
 
           buffer += decoder.decode(value, { stream: true })
-          const events = buffer.split('\n\n')
-          buffer = events.pop() || ''
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
 
-          for (const event of events) {
-            if (event.startsWith('data: ')) {
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
               try {
-                const data = JSON.parse(event.slice(6)) as AnalysisSSEEvent
-                if (data.type === 'progress' && data.step) {
-                  setReasoningSteps((prev) => [...prev, data.step!])
-                } else if (data.type === 'complete' && data.result) {
+                const data = JSON.parse(line.slice(6))
+
+                if (data.type === 'progress') {
+                  setReasoningSteps((prev) => [...prev, data.step])
+                } else if (data.type === 'complete') {
                   setResult(data.result)
-                  setLoading(false)
                 } else if (data.type === 'error') {
-                  setError(data.error || 'Unknown error')
-                  setLoading(false)
+                  setError(data.error)
                 }
-              } catch (err) {
-                console.error('Failed to parse SSE event:', err)
+              } catch (e) {
+                console.error('Failed to parse SSE data:', e)
               }
             }
           }
         }
-
-        // Handle any remaining buffer data
-        if (buffer.trim().startsWith('data: ')) {
-          try {
-            const data = JSON.parse(buffer.slice(6)) as AnalysisSSEEvent
-            if (data.type === 'complete' && data.result) {
-              setResult(data.result)
-            } else if (data.type === 'error') {
-              setError(data.error || 'Unknown error')
-            }
-          } catch (err) {
-            console.error('Failed to parse final SSE event:', err)
-          }
-        }
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err)
-        setError(`Failed to analyze: ${errorMsg}`)
-        console.error('Analysis error:', err)
+        setError(err instanceof Error ? err.message : 'Analysis failed')
       } finally {
         setLoading(false)
       }
@@ -102,54 +72,64 @@ function ResultsContent() {
     fetchAnalysis()
   }, [url])
 
-  if (!url) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 font-semibold">Missing URL</p>
-          <p className="text-slate-400 mt-2">Please provide a URL parameter</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-slate-900">
-      {/* Top nav */}
-      <div className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800 px-6 py-4">
-        <button
-          onClick={() => window.location.href = '/'}
-          className="text-teal-400 hover:text-teal-300 transition-colors text-sm font-medium"
-        >
-          ← Back to analyzer
-        </button>
-      </div>
+    <ResultsLayout result={result} reasoningSteps={reasoningSteps} loading={loading} error={error} url={url} />
+  )
+}
 
-      {/* Error state */}
-      {error && (
-        <div className="border-b border-red-800 bg-red-900/20 px-6 py-4">
-          <p className="text-red-400 font-semibold">Analysis Error</p>
-          <p className="text-red-300 text-sm mt-1">{error}</p>
+function ResultsLayout({ result, reasoningSteps, loading, error, url }: { result: AnalysisResult | null; reasoningSteps: ReasoningStep[]; loading: boolean; error: string | null; url: string }) {
+  return (
+    <div className="dark bg-background text-on-surface font-body">
+      {/* Top Nav */}
+      <header className="fixed top-0 w-full z-50 bg-[#10131a]/80 backdrop-blur-xl border-b border-outline-variant/10">
+        <div className="flex items-center justify-between px-8 h-16 w-full max-w-screen-2xl mx-auto">
+          <div className="flex items-center gap-4">
+            <span className="text-xl font-bold tracking-tighter text-[#e1e2eb] font-headline">CAPYSAN</span>
+          </div>
+          <div className="hidden md:flex items-center gap-8">
+            <nav className="flex gap-8 items-center h-full font-manrope tracking-tight text-sm font-semibold">
+              <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors" href="#">About</a>
+              <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors" href="#">Personas</a>
+            </nav>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[#94d3c3] hover:text-[#e1e2eb] cursor-pointer active:scale-95 duration-200">settings</span>
+              <span className="material-symbols-outlined text-[#94d3c3] hover:text-[#e1e2eb] cursor-pointer active:scale-95 duration-200">notifications</span>
+            </div>
+            <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/20 active:scale-95 transition-transform bg-surface-container"></div>
+          </div>
         </div>
-      )}
+      </header>
 
-      {/* Main content: 2-column layout */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex gap-8">
-          {/* Left sidebar: Reasoning timeline */}
-          <ReasoningTimeline steps={reasoningSteps} loading={loading && !result} />
+      {/* Main Content */}
+      <main className="pt-24 pb-16 min-h-screen bg-surface">
+        <div className="max-w-screen-2xl mx-auto px-8 flex flex-col lg:flex-row gap-8">
+          {/* Left Sidebar - Reasoning Timeline */}
+          <div className="lg:w-80 flex-shrink-0">
+            <ReasoningTimeline steps={reasoningSteps} loading={loading} />
+          </div>
 
-          {/* Right content: Dashboard */}
-          <AnalysisDashboard result={result} loading={loading} url={url} />
+          {/* Right Content - Analysis Dashboard */}
+          <div className="flex-1">
+            {error ? (
+              <div className="p-8 bg-error-container/20 border border-error/30 rounded-xl text-error">
+                <p className="font-bold mb-2">Analysis Error</p>
+                <p className="text-sm">{error}</p>
+              </div>
+            ) : (
+              <AnalysisDashboard result={result} loading={loading} url={url} />
+            )}
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }
 
 export default function ResultsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-900 flex items-center justify-center"><p className="text-slate-400">Loading...</p></div>}>
+    <Suspense fallback={<div className="dark bg-background text-on-surface font-body min-h-screen flex items-center justify-center">Loading...</div>}>
       <ResultsContent />
     </Suspense>
   )

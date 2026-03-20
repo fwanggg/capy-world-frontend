@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Capysan - Test Product-Market Fit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-container": "#0b5347",
+              "primary-fixed-dim": "#00dfc1",
+              "on-error": "#690005",
+              "on-secondary-fixed": "#00201a",
+              "on-primary": "#00382f",
+              "tertiary-fixed-dim": "#eac33f",
+              "inverse-primary": "#006b5b",
+              "outline": "#83948f",
+              "on-primary-fixed": "#00201a",
+              "background": "#0a0c10",
+              "inverse-surface": "#e1e2eb",
+              "primary": "#d7fff3",
+              "on-primary-fixed-variant": "#005144",
+              "secondary-fixed-dim": "#94d3c3",
+              "on-tertiary": "#3c2f00",
+              "surface-container": "#12151c",
+              "inverse-on-surface": "#2e3037",
+              "secondary": "#94d3c3",
+              "on-background": "#e1e2eb",
+              "tertiary-fixed": "#ffe086",
+              "tertiary-container": "#ffd651",
+              "surface-bright": "#363940",
+              "surface-container-high": "#1a1d24",
+              "on-secondary-container": "#86c4b5",
+              "primary-fixed": "#26fedc",
+              "on-error-container": "#ffdad6",
+              "outline-variant": "#2a3a36",
+              "on-surface-variant": "#a2b1ad",
+              "on-tertiary-fixed": "#231b00",
+              "primary-container": "#00f5d4",
+              "surface-dim": "#0a0c10",
+              "on-tertiary-fixed-variant": "#574500",
+              "on-primary-container": "#006c5c",
+              "surface-tint": "#00dfc1",
+              "surface-variant": "#22262d",
+              "surface-container-lowest": "#06080b",
+              "secondary-fixed": "#afefdf",
+              "surface-container-highest": "#2c3038",
+              "on-tertiary-container": "#745c00",
+              "surface": "#0a0c10",
+              "error-container": "#93000a",
+              "surface-container-low": "#0f1218",
+              "tertiary": "#fff5e4",
+              "on-secondary-fixed-variant": "#065045",
+              "error": "#ffb4ab",
+              "on-secondary": "#00382f",
+              "on-surface": "#f1f2f8"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.4rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .bg-hero-gradient {
+            background: radial-gradient(circle at 50% 0%, rgba(0, 245, 212, 0.05), transparent 60%);
+        }
+        .text-glow {
+            text-shadow: 0 0 30px rgba(0, 245, 212, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary-container selection:text-on-primary-container antialiased">
+<nav class="fixed top-0 w-full z-50 bg-[#0a0c10]/80 backdrop-blur-xl border-b border-outline-variant/10">
+<div class="flex items-center justify-between px-8 h-20 w-full max-w-7xl mx-auto">
+<div class="text-xl font-bold tracking-[0.2em] text-[#e1e2eb] font-headline uppercase">CAPYSAN</div>
+<div class="flex items-center gap-10 font-['Manrope'] tracking-tight text-sm font-medium">
+<a class="text-[#94d3c3] hover:text-[#00f5d4] transition-colors" href="#">About</a>
+<a class="text-[#94d3c3] hover:text-[#00f5d4] transition-colors" href="#">Personas</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-[#94d3c3] hover:bg-[#1d2026] p-2 rounded-lg transition-all active:scale-95 duration-200">notifications</button>
+<button class="material-symbols-outlined text-[#94d3c3] hover:bg-[#1d2026] p-2 rounded-lg transition-all active:scale-95 duration-200">settings</button>
+</div>
+</div>
+</nav>
+<div class="flex flex-col pt-20">
+<main class="w-full">
+<!-- Hero Section -->
+<section class="relative min-h-[80vh] flex items-center justify-center px-8 bg-hero-gradient">
+<div class="max-w-4xl mx-auto text-center z-10">
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-primary-container/20 bg-primary-container/5 mb-10">
+<span class="material-symbols-outlined text-primary-container text-[18px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span class="text-[10px] font-bold font-label text-primary-container tracking-[0.2em] uppercase">Synthetic Market Intelligence</span>
+</div>
+<h1 class="text-6xl md:text-[84px] font-extrabold font-headline text-on-surface tracking-tight mb-8 leading-[1]">
+                    Test PMF with <span class="text-primary-container text-glow">10 AI Personas</span>
+</h1>
+<p class="text-xl text-on-surface-variant max-w-2xl mx-auto mb-16 font-body leading-relaxed opacity-80">
+                    Deploy a fleet of high-fidelity synthetic users to stress-test your value proposition before you spend a dime on ads.
+                </p>
+<!-- Action Input -->
+<div class="max-w-xl mx-auto bg-surface-container-low p-1.5 rounded-full flex flex-col md:flex-row gap-2 shadow-2xl border border-outline-variant/10">
+<div class="flex-1 flex items-center px-6 py-3 gap-3">
+<span class="material-symbols-outlined text-outline">link</span>
+<input class="bg-transparent border-none focus:ring-0 text-on-surface w-full placeholder:text-on-surface-variant/40 font-body text-sm" placeholder="Paste your landing page URL..." type="url"/>
+</div>
+<button class="bg-primary-container text-on-primary-container font-bold px-8 py-3.5 rounded-full flex items-center justify-center gap-2 hover:brightness-110 transition-all group text-sm">
+                        Analyze Now
+                        <span class="material-symbols-outlined text-sm group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+</button>
+</div>
+<div class="mt-20 flex justify-center items-center gap-12 opacity-30 grayscale hover:opacity-50 transition-opacity duration-500">
+<div class="font-headline font-bold text-lg tracking-widest">VENTURE</div>
+<div class="font-headline font-bold text-lg tracking-widest">SAAS.CO</div>
+<div class="font-headline font-bold text-lg tracking-widest">LUMINARY</div>
+</div>
+</div>
+</section>
+<!-- Footer -->
+<footer class="bg-[#0b0e14]">
+<div class="max-w-7xl mx-auto w-full py-16 px-8">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+<div class="col-span-1 md:col-span-1">
+<div class="text-lg font-bold text-[#e1e2eb] mb-6 font-headline tracking-widest uppercase">Capysan</div>
+<p class="text-[#94d3c3]/60 text-sm font-body leading-relaxed">
+                            The gold standard for synthetic market validation. Built for the next generation of data-driven founders.
+                        </p>
+</div>
+<div>
+<h5 class="text-on-surface font-bold mb-6 text-sm uppercase tracking-widest">Product</h5>
+<ul class="space-y-4">
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Features</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Persona Library</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Case Studies</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Pricing</a></li>
+</ul>
+</div>
+<div>
+<h5 class="text-on-surface font-bold mb-6 text-sm uppercase tracking-widest">Company</h5>
+<ul class="space-y-4">
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">About Us</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Careers</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Contact</a></li>
+</ul>
+</div>
+<div>
+<h5 class="text-on-surface font-bold mb-6 text-sm uppercase tracking-widest">Legal</h5>
+<ul class="space-y-4">
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Privacy Policy</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Terms of Service</a></li>
+<li><a class="text-[#94d3c3]/60 hover:text-[#00f5d4] text-xs font-medium transition-colors" href="#">Data Processing</a></li>
+</ul>
+</div>
+</div>
+<div class="pt-8 border-t border-[#3a4a46]/15 flex flex-col md:flex-row justify-between items-center gap-4">
+<div class="text-[#94d3c3]/40 text-xs font-medium font-label">© 2024 Capysan AI. All rights reserved.</div>
+<div class="flex gap-6">
+<a class="text-[#94d3c3]/40 hover:text-[#00f5d4] transition-colors" href="#"><span class="material-symbols-outlined text-sm">public</span></a>
+<a class="text-[#94d3c3]/40 hover:text-[#00f5d4] transition-colors" href="#"><span class="material-symbols-outlined text-sm">alternate_email</span></a>
+</div>
+</div>
+</div>
+</footer>
+</main>
+</div>
+</body></html>
