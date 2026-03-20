@@ -101,13 +101,13 @@ function ResultsLayout({
   reasoningSteps: ReasoningStep[]
 }) {
   return (
-    <div className="dark min-h-screen bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-fixed">
+    <div className="dark min-h-screen bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary">
       <AnalysisNav />
 
-      <main className="pt-24 pb-16 min-h-screen">
+      <main className="pt-24 pb-16 min-h-screen bg-surface">
         {error ? (
           <div className="max-w-screen-2xl mx-auto px-8">
-            <div className="p-8 bg-error-container/20 border border-error/30 rounded-xl text-error">
+            <div className="p-8 bg-error-container/20 border border-error/40 rounded-xl text-error">
               <p className="font-bold mb-2">Analysis Error</p>
               <p className="text-sm">{error}</p>
             </div>

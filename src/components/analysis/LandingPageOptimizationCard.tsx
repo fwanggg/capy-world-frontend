@@ -1,5 +1,6 @@
 import type { ActionItem } from '@/types/analysis'
 
+// Stitch Final Results: ads_click, verified, chat_bubble, terminal
 const ACTION_ICONS = ['ads_click', 'verified', 'chat_bubble', 'terminal'] as const
 
 function getPredictedConv(item: ActionItem): string {
@@ -31,10 +32,10 @@ export function LandingPageOptimizationCard({
         {actionItems.map((item, i) => (
           <div
             key={i}
-            className="group bg-surface-container p-6 rounded-xl border border-transparent hover:border-primary-container/20 transition-all flex justify-between items-center shadow-sm"
+            className="group bg-surface-container p-6 rounded-xl border border-outline-variant/10 hover:border-primary-container/30 transition-all flex justify-between items-center"
           >
             <div className="flex gap-6 items-center">
-              <div className="w-12 h-12 bg-surface-variant rounded-full flex items-center justify-center group-hover:bg-primary-container/10 transition-colors">
+              <div className="w-12 h-12 bg-surface-variant rounded-full flex items-center justify-center group-hover:bg-primary-container/20 transition-colors">
                 <span className="material-symbols-outlined text-primary-container">
                   {ACTION_ICONS[i % ACTION_ICONS.length]}
                 </span>

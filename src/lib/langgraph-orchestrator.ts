@@ -1786,7 +1786,7 @@ export async function callAnalysisAI(
                 toolName: toolCall.name,
                 input: args,
                 output: toolOutput,
-                summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars`,
+                summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars. Extracting problem, solution, ICP...`,
               })
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err)
@@ -1813,7 +1813,7 @@ export async function callAnalysisAI(
               toolName: toolCall.name,
               input: args,
               output: { count: toolOutput.personas?.length || 0 },
-              summary: `Found ${toolOutput.personas?.length || 0} persona(s)`,
+              summary: `Found ${toolOutput.personas?.length || 0} personas matching product audience`,
             })
           } else if (toolCall.name === 'create_conversation_session') {
             const toolArgs = {
@@ -1824,29 +1824,69 @@ export async function callAnalysisAI(
             toolOutput = JSON.parse(toolResult)
 
             if (toolOutput.success) {
+              const count = toolOutput.clone_names?.length || toolArgs.clone_ids?.length || 0
+              let summary = `Recruited ${count} personas (trial)`
+              try {
+                const { data: personas } = await supabase
+                  .from('personas')
+                  .select('profession, interests')
+                  .in('id', toolArgs.clone_ids || [])
+                if (personas && personas.length > 0) {
+                  const professions = personas.reduce<Record<string, number>>((acc, p) => {
+                    const prof = (p.profession as string) || 'unknown'
+                    acc[prof] = (acc[prof] || 0) + 1
+                    return acc
+                  }, {})
+                  const profStr = Object.entries(professions)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([p, n]) => `${n} ${n > 1 && !p.endsWith('s') ? p + 's' : p}`)
+                    .join(', ')
+                  const allInterests = personas.flatMap(p => (Array.isArray(p.interests) ? p.interests : []))
+                  const interestCounts = allInterests.reduce<Record<string, number>>((acc, i) => {
+                    acc[i] = (acc[i] || 0) + 1
+                    return acc
+                  }, {})
+                  const topInterests = Object.entries(interestCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 4)
+                    .map(([k]) => k)
+                  const interestsStr = topInterests.length ? topInterests.join(', ') : ''
+                  summary = `Recruited ${count} personas (trial). Demographics: ${profStr}${interestsStr ? `; interests: ${interestsStr}` : ''}`
+                }
+              } catch {
+                // Keep simple summary if demographics fetch fails
+              }
               pushReasoning({
                 iteration: iterations,
                 action: `Activating personas in session`,
                 toolName: toolCall.name,
                 input: { clone_ids: toolArgs.clone_ids },
-                output: { count: toolOutput.clone_names?.length || 0 },
-                summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s)`,
+                output: { count },
+                summary,
               })
-              console.log('[ORCHESTRATOR] Analysis session activated:', toolOutput.clone_names?.length, 'personas')
+              console.log('[ORCHESTRATOR] Analysis session activated:', count, 'personas')
             }
           } else if (toolCall.name === 'send_message') {
             const args = toolCall.args as { prompt: string; clone_ids: string[] }
             console.log('[ORCHESTRATOR] Sending message to', args.clone_ids?.length || 0, 'clones')
             try {
+              pushReasoning({
+                iteration: iterations,
+                action: `Interviewing AI Personas`,
+                toolName: toolCall.name,
+                input: { clone_count: args.clone_ids?.length },
+                summary: `Interviewing ${args.clone_ids?.length || 0} AI Personas...`,
+              })
               const responses = await callMultipleClones(args.clone_ids, sessionId, args.prompt, null)
               toolResult = JSON.stringify({ success: true, responses })
               pushReasoning({
                 iteration: iterations,
-                action: `Asking personas questions`,
+                action: `Interviewing AI Personas`,
                 toolName: toolCall.name,
                 input: { clone_count: args.clone_ids?.length },
                 output: { responses: responses?.length || 0 },
-                summary: `Received responses from ${responses?.length || 0} persona(s)`,
+                summary: `Received ${responses?.length || 0} responses from AI Personas`,
               })
               if (options?.onRelayMessages && responses) {
                 options.onRelayMessages(responses.map(r => ({
@@ -1860,7 +1900,7 @@ export async function callAnalysisAI(
               toolResult = JSON.stringify({ error: msg })
               pushReasoning({
                 iteration: iterations,
-                action: `Asking personas questions`,
+                action: `Interviewing AI Personas`,
                 toolName: toolCall.name,
                 summary: `Error: ${msg}`,
               })

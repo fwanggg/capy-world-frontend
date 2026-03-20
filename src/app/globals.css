@@ -74,6 +74,22 @@
   text-shadow: 0 0 30px rgba(0, 245, 212, 0.3);
 }
 
+/* Stitch: custom scrollbar for Mom's Test / Landing Page */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 245, 212, 0.2);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 245, 212, 0.4);
+}
+
 /* Avoid * reset - Tailwind v4 uses cascade layers; unlayered * overrides mx-auto and other utilities */
 html,
 body {

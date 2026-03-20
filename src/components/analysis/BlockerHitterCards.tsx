@@ -13,7 +13,7 @@ export function BlockerHitterCards({
 }: Readonly<BlockerHitterCardsProps>) {
   return (
     <>
-      <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/5">
+      <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/10">
         <div className="flex items-center gap-2 mb-4">
           <span className="material-symbols-outlined text-error">block</span>
           <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
@@ -23,7 +23,7 @@ export function BlockerHitterCards({
         <div className="text-xl font-headline font-bold text-on-surface mb-2">{mainBlocker}</div>
         <p className="text-sm text-on-surface-variant font-body">{mainBlockerDetail}</p>
       </div>
-      <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/5">
+      <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/10">
         <div className="flex items-center gap-2 mb-4">
           <span className="material-symbols-outlined text-primary-container">bolt</span>
           <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">

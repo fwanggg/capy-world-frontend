@@ -5,7 +5,6 @@ import type { AnalysisResult } from '@/types/analysis'
 import type { ChartSpec } from '@/types/chat'
 import { AnalysisStatsCards } from '@/components/analysis/AnalysisStatsCards'
 import { BlockerHitterCards } from '@/components/analysis/BlockerHitterCards'
-import { AnalysisPipelineCard } from '@/components/analysis/AnalysisPipelineCard'
 import { MomsTestCard } from '@/components/analysis/MomsTestCard'
 import { LandingPageOptimizationCard } from '@/components/analysis/LandingPageOptimizationCard'
 import { PersonaSentimentCard } from '@/components/analysis/PersonaSentimentCard'
@@ -20,12 +19,7 @@ function findChart(charts: ChartSpec[], type: string): ChartSpec | undefined {
   return charts.find((c) => c.type === type)
 }
 
-const pipelineSteps = [
-  { label: 'Step 1', title: 'Text Extraction', desc: 'Raw telemetry and user interview logs ingested.' },
-  { label: 'Step 2', title: 'Persona Synthesis', desc: 'Clustering behavioral patterns into 5 core archetypes.' },
-  { label: 'Step 3', title: 'Simulation Run', desc: 'Virtual stressors applied to predict churn risk.' },
-]
-
+// Stitch Final Results — Q1/Q2 only (Q3 optional)
 const momTestPairs = [
   { q: 'When did you last have this problem?', key: 'q1' as const },
   { q: 'What else have you tried?', key: 'q2' as const },
@@ -34,23 +28,7 @@ const momTestPairs = [
 
 export default function AnalysisDashboard({ result, loading, url }: Props) {
   if (loading && !result) {
-    return (
-      <div className="max-w-screen-2xl mx-auto px-8 flex flex-col gap-8 animate-pulse">
-        <div className="space-y-2">
-          <div className="h-10 bg-surface-container rounded w-80" />
-          <div className="h-4 bg-surface-container rounded w-96" />
-        </div>
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12 lg:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-surface-container rounded-xl" />
-            ))}
-          </div>
-          <div className="col-span-12 lg:col-span-4 h-64 bg-surface-container rounded-xl" />
-        </div>
-        <div className="h-96 bg-surface-container rounded-xl" />
-      </div>
-    )
+    return null
   }
 
   if (!result) {
@@ -83,15 +61,14 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
   const totalVotes = voteBreakdown.yes + voteBreakdown.no + voteBreakdown.maybe
   const yesPct = totalVotes > 0 ? Math.round((voteBreakdown.yes / totalVotes) * 100) : 70
 
-  const avgAge =
+  const avgAgeRaw =
     result.cloneResponses.length > 0
-      ? Math.round(
-          result.cloneResponses
-            .filter((r) => r.demographics.age != null)
-            .reduce((acc, r) => acc + (r.demographics.age ?? 0), 0) /
-            Math.max(result.cloneResponses.filter((r) => r.demographics.age != null).length, 1)
-        )
+      ? result.cloneResponses
+          .filter((r) => r.demographics.age != null)
+          .reduce((acc, r) => acc + (r.demographics.age ?? 0), 0) /
+        Math.max(result.cloneResponses.filter((r) => r.demographics.age != null).length, 1)
       : 32
+  const avgAge = Number.isInteger(avgAgeRaw) ? avgAgeRaw : Math.round(avgAgeRaw * 10) / 10
   const femaleCount = result.cloneResponses.filter(
     (r) => r.demographics.gender?.toLowerCase() === 'female' || r.demographics.gender === 'f'
   ).length
@@ -109,7 +86,6 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
     result.cloneResponses[0]?.demographics.location ??
     'Berlin, DE'
 
-  const sampleAnswers = result.cloneResponses[0]?.answers ?? {}
   const actionItems = result.actionItems.slice(0, 4)
 
   return (
@@ -124,29 +100,30 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
         </p>
       </div>
 
+      {/* Stitch: Demographics + Blocker/Hitter (Pipeline removed) */}
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6">
           <AnalysisStatsCards
             avgAge={avgAge}
             genderSplit={genderSplit}
             topHub={topHub}
             yesPct={yesPct}
           />
-          <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-            <BlockerHitterCards
-              mainBlocker={mainBlocker}
-              mainBlockerDetail={mainBlockerDetail}
-              mainHitter={mainHitter}
-              mainHitterDetail={mainHitterDetail}
-            />
-          </div>
         </div>
-        <AnalysisPipelineCard steps={pipelineSteps} />
+        <div className="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <BlockerHitterCards
+            mainBlocker={mainBlocker}
+            mainBlockerDetail={mainBlockerDetail}
+            mainHitter={mainHitter}
+            mainHitterDetail={mainHitterDetail}
+          />
+        </div>
       </div>
 
+      {/* Stitch: Mom's Test + Landing Page */}
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-5 flex flex-col gap-6">
-          <MomsTestCard pairs={momTestPairs} answers={sampleAnswers} />
+        <div className="col-span-12 lg:col-span-5 flex flex-col">
+          <MomsTestCard pairs={momTestPairs} cloneResponses={result.cloneResponses} />
         </div>
         <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
           <LandingPageOptimizationCard actionItems={actionItems} />

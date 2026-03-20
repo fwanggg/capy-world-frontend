@@ -5,6 +5,11 @@ interface AnalysisStatsCardsProps {
   readonly yesPct: number
 }
 
+/** Format avg age like Stitch: 32.4 */
+function formatAvgAge(n: number): string {
+  return n.toFixed(1)
+}
+
 export function AnalysisStatsCards({
   avgAge,
   genderSplit,
@@ -18,7 +23,7 @@ export function AnalysisStatsCards({
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-1 block">
             Avg Age
           </span>
-          <div className="text-3xl font-headline font-black text-primary-container">{avgAge}</div>
+          <div className="text-3xl font-headline font-black text-primary-container">{formatAvgAge(avgAge)}</div>
         </div>
         <div className="mt-4 flex items-center gap-2">
           <div className="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">

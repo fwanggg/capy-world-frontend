@@ -95,6 +95,56 @@ function parseAnalysisResponse(markdown: string): ParsedAnalysis {
 }
 
 /**
+ * Categorize responses based on experience level
+ */
+function categorizeResponses(
+  responses: Array<{
+    personaId: string
+    demographics: { age?: number; gender?: string; profession?: string; location?: string }
+    answers: {
+      q1: string
+      q2: string
+      q3: string
+      vote: 'YES' | 'NO' | 'MAYBE'
+      voteReason: string
+    }
+  }>
+): {
+  experienced: typeof responses
+  noExperience: typeof responses
+  noResponse: typeof responses
+} {
+  const experienced = []
+  const noExperience = []
+  const noResponse = []
+
+  for (const response of responses) {
+    // Check if they responded
+    if (!response.answers.q1 || response.answers.q1 === 'No response') {
+      noResponse.push(response)
+      continue
+    }
+
+    // Check if they have experience with the problem
+    const q1Lower = response.answers.q1.toLowerCase()
+    const noExperienceKeywords = [
+      "don't have", "never", "no experience", "not applicable", "n/a",
+      "not relevant", "doesn't apply", "can't comment", "not experienced"
+    ]
+
+    const hasNoExperienceIndication = noExperienceKeywords.some(keyword => q1Lower.includes(keyword))
+
+    if (hasNoExperienceIndication) {
+      noExperience.push(response)
+    } else {
+      experienced.push(response)
+    }
+  }
+
+  return { experienced, noExperience, noResponse }
+}
+
+/**
  * Generate professional visualizations based on clone responses
  */
 function generateVisualization(
@@ -111,13 +161,16 @@ function generateVisualization(
     }
   }>
 ) {
-  // Parse votes from responses
+  // Categorize responses by experience level
+  const { experienced, noExperience, noResponse } = categorizeResponses(cloneResponses)
+
+  // Parse votes from EXPERIENCED responses only
   const votes = { YES: 0, NO: 0, MAYBE: 0 }
   const concerns = new Map<string, number>()
   const benefits = new Map<string, number>()
   const individualVotes = []
 
-  for (const response of cloneResponses) {
+  for (const response of experienced) {
     const vote = response.answers.vote
     votes[vote] = (votes[vote] || 0) + 1
 
@@ -176,7 +229,17 @@ function generateVisualization(
   const charts = [
     {
       type: 'pie' as const,
-      title: `Would You Use ${productTitle}?`,
+      title: `Response Breakdown (${cloneResponses.length} total interviewed)`,
+      innerRadius: 0.5,
+      data: [
+        { name: `With Experience (${experienced.length})`, value: experienced.length, color: '#10b981' },
+        { name: `No Experience (${noExperience.length})`, value: noExperience.length, color: '#94a3b8' },
+        { name: `No Response (${noResponse.length})`, value: noResponse.length, color: '#cbd5e1' },
+      ],
+    },
+    {
+      type: 'pie' as const,
+      title: `Would You Use ${productTitle}? (${experienced.length} with experience)`,
       innerRadius: 0.5,
       data: [
         { name: 'YES', value: votes.YES, color: '#10b981' },
@@ -186,8 +249,16 @@ function generateVisualization(
     },
     {
       type: 'horizontal_bar' as const,
-      title: 'Individual Votes',
-      data: individualVotes,
+      title: `Individual Votes (${experienced.length} personas with experience)`,
+      data: [
+        ...individualVotes,
+        ...(noExperience.length > 0 ? [{
+          name: `${noExperience.length} No Experience`,
+          label: 'EXCLUDED',
+          color: '#94a3b8',
+          note: 'Not counted in vote — they don\'t have experience with this problem',
+        }] : []),
+      ],
     },
     {
       type: 'top_concerns' as const,
@@ -393,6 +464,14 @@ export async function POST(req: Request) {
           }
 
           allReasoning = result.reasoning
+
+          // Log response breakdown
+          console.log(`[ANALYZE] Received ${cloneResponses.length} responses from personas`)
+          const { experienced, noExperience, noResponse } = categorizeResponses(cloneResponses)
+          console.log(`[ANALYZE] Breakdown:`)
+          console.log(`  - With Experience: ${experienced.length}`)
+          console.log(`  - No Experience: ${noExperience.length}`)
+          console.log(`  - No Response: ${noResponse.length}`)
 
           // Fetch demographics for each clone response
           for (const clone of cloneResponses) {
