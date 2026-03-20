@@ -18,7 +18,7 @@ interface PersonasAnalytics {
   interests: Array<{ label: string; percent: number }>
   professions: Array<{ label: string; count: string }>
   ageGroups: Record<string, number>
-  demographics: Array<{ label: string; percent: number }>
+  demographics: Array<{ label: string; count: number }>
 }
 
 async function fetchPersonasAnalytics(): Promise<PersonasAnalytics> {
@@ -84,7 +84,7 @@ export async function PersonasPageContent({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <InterestDistributionCard items={analytics.interests} />
             <ProfessionBreakdownCard items={analytics.professions} />
-            <AgeGroupsCard groups={Object.keys(analytics.ageGroups).map(key => key)} />
+            <AgeGroupsCard groups={Object.entries(analytics.ageGroups).map(([label, count]) => ({ label, count }))} />
             <DemographicsCard items={analytics.demographics} footnote={demographicsFootnote} />
           </div>
         </div>

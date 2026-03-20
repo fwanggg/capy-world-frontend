@@ -110,7 +110,7 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
     'Berlin, DE'
 
   const sampleAnswers = result.cloneResponses[0]?.answers ?? {}
-  const actionItems = result.actionItems.slice(0, 3)
+  const actionItems = result.actionItems.slice(0, 4)
 
   return (
     <div className="max-w-screen-2xl mx-auto px-8 flex flex-col gap-8">

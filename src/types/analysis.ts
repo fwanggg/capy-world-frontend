@@ -22,6 +22,8 @@ export interface ActionItem {
   action: string
   impact: 'High' | 'Medium' | 'Low'
   rationale: string
+  /** Optional predicted conversion lift (e.g. 15.4 for +15.4%) — Stitch Final Results */
+  predictedConvPercent?: number
 }
 
 export interface AnalysisResult {

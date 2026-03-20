@@ -1,5 +1,10 @@
+interface AgeGroup {
+  readonly label: string
+  readonly count: number
+}
+
 interface AgeGroupsCardProps {
-  readonly groups: readonly string[]
+  readonly groups: readonly AgeGroup[]
 }
 
 export function AgeGroupsCard({ groups }: Readonly<AgeGroupsCardProps>) {
@@ -9,14 +14,14 @@ export function AgeGroupsCard({ groups }: Readonly<AgeGroupsCardProps>) {
         <span className="material-symbols-outlined text-base">calendar_month</span>
         Age Groups
       </h3>
-      <div className="flex flex-wrap gap-2">
+      <div className="space-y-3">
         {groups.map((group) => (
-          <span
-            key={group}
-            className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-body text-sm"
-          >
-            {group}
-          </span>
+          <div key={group.label} className="flex items-center justify-between gap-4">
+            <span className="text-on-surface font-body text-sm">{group.label}</span>
+            <span className="text-primary-container font-bold font-headline tabular-nums text-sm">
+              {group.count.toLocaleString()}
+            </span>
+          </div>
         ))}
       </div>
     </div>

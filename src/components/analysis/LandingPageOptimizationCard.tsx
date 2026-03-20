@@ -1,5 +1,15 @@
 import type { ActionItem } from '@/types/analysis'
 
+const ACTION_ICONS = ['ads_click', 'verified', 'chat_bubble', 'terminal'] as const
+
+function getPredictedConv(item: ActionItem): string {
+  if (item.predictedConvPercent != null) {
+    return `+${item.predictedConvPercent}%`
+  }
+  const fallback: Record<string, string> = { High: '+15%', Medium: '+8%', Low: '+5%' }
+  return fallback[item.impact] ?? '+5%'
+}
+
 interface LandingPageOptimizationCardProps {
   readonly actionItems: readonly ActionItem[]
 }
@@ -25,7 +35,9 @@ export function LandingPageOptimizationCard({
           >
             <div className="flex gap-6 items-center">
               <div className="w-12 h-12 bg-surface-variant rounded-full flex items-center justify-center group-hover:bg-primary-container/10 transition-colors">
-                <span className="material-symbols-outlined text-primary-container">ads_click</span>
+                <span className="material-symbols-outlined text-primary-container">
+                  {ACTION_ICONS[i % ACTION_ICONS.length]}
+                </span>
               </div>
               <div>
                 <h4 className="font-headline font-bold text-on-surface">{item.action}</h4>
@@ -33,8 +45,10 @@ export function LandingPageOptimizationCard({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-primary-container font-black text-lg">{item.impact}</div>
-              <div className="text-[10px] text-on-surface-variant uppercase font-bold">Impact</div>
+              <div className="text-primary-container font-black text-lg">{getPredictedConv(item)}</div>
+              <div className="text-[10px] text-on-surface-variant uppercase font-bold">
+                Predicted Conv.
+              </div>
             </div>
           </div>
         ))}

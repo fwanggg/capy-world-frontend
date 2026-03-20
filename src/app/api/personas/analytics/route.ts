@@ -7,7 +7,7 @@ interface PersonasAnalytics {
   interests: Array<{ label: string; percent: number }>
   professions: Array<{ label: string; count: string }>
   ageGroups: Record<string, number>
-  demographics: Array<{ label: string; percent: number }>
+  demographics: Array<{ label: string; count: number }>
 }
 
 export async function GET(): Promise<Response> {
@@ -49,8 +49,12 @@ export async function GET(): Promise<Response> {
         totalDataPoints: 0,
         interests: [],
         professions: [],
-        ageGroups: {},
-        demographics: [],
+        ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0 },
+        demographics: [
+          { label: 'Male', count: 0 },
+          { label: 'Female', count: 0 },
+          { label: 'Not Specified', count: 0 },
+        ],
       })
     }
 
@@ -74,7 +78,7 @@ export async function GET(): Promise<Response> {
 
     const interests = Object.entries(interestCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
+      .slice(0, 10)
       .map(([label, count]) => ({
         label,
         percent: Math.round((count / totalActive) * 100),
@@ -90,7 +94,7 @@ export async function GET(): Promise<Response> {
 
     const professions = Object.entries(professionCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
+      .slice(0, 10)
       .map(([label, count]) => ({
         label: label.charAt(0).toUpperCase() + label.slice(1),
         count: count > 999 ? `${(count / 1000).toFixed(1)}k` : String(count),
@@ -114,16 +118,16 @@ export async function GET(): Promise<Response> {
     })
 
     // Gender demographics
-    const genderCounts: Record<string, number> = { Male: 0, Female: 0, Other: 0 }
+    const genderCounts: Record<string, number> = { Male: 0, Female: 0, 'Not Specified': 0 }
     personas.forEach((p) => {
       if (p.gender === 'male') genderCounts['Male']++
       else if (p.gender === 'female') genderCounts['Female']++
-      else genderCounts['Other']++
+      else genderCounts['Not Specified']++
     })
 
     const demographics = Object.entries(genderCounts).map(([label, count]) => ({
       label,
-      percent: Math.round((count / totalActive) * 100),
+      count,
     }))
 
     const analytics: PersonasAnalytics = {
