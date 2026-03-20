@@ -2,21 +2,37 @@ interface PersonaArchetypeCardProps {
   readonly name: string
   readonly role: string
   readonly tags: readonly string[]
+  readonly cognitiveLoad?: number
 }
 
-export function PersonaArchetypeCard({ name, role, tags }: Readonly<PersonaArchetypeCardProps>) {
+export function PersonaArchetypeCard({
+  name,
+  role,
+  tags,
+  cognitiveLoad = 1,
+}: Readonly<PersonaArchetypeCardProps>) {
   const initials = name
     .split(' ')
     .map((w) => w[0])
     .join('')
 
   return (
-    <div className="p-6 bg-surface-container rounded-xl border border-outline-variant/5 hover:border-primary-container/20 transition-all shadow-sm">
-      <div className="w-12 h-12 rounded-xl bg-primary-container/20 flex items-center justify-center font-bold text-primary-container mb-4">
-        {initials}
+    <div className="p-6 bg-surface-container rounded-xl border border-outline-variant/5 hover:border-primary-container/20 transition-all shadow-sm relative">
+      <button
+        className="absolute top-4 right-4 material-symbols-outlined text-on-surface-variant hover:text-on-surface text-xl p-1 rounded"
+        aria-label="More options"
+      >
+        more_vert
+      </button>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 rounded-xl bg-primary-container/20 flex items-center justify-center font-bold text-primary-container flex-shrink-0">
+          {initials}
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-on-surface font-headline">{name}</h3>
+          <p className="text-sm text-on-surface-variant font-body">{role}</p>
+        </div>
       </div>
-      <h3 className="text-lg font-bold text-on-surface font-headline mb-1">{name}</h3>
-      <p className="text-sm text-on-surface-variant font-body mb-4">{role}</p>
       <div className="flex flex-wrap gap-2 mb-4">
         {tags.map((tag) => (
           <span
@@ -26,6 +42,21 @@ export function PersonaArchetypeCard({ name, role, tags }: Readonly<PersonaArche
             {tag}
           </span>
         ))}
+      </div>
+      <div className="mb-4">
+        <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] block mb-2">
+          Cognitive Load
+        </span>
+        <div className="flex gap-1">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className={`h-2 flex-1 rounded-sm ${
+                i <= cognitiveLoad ? 'bg-primary-container' : 'bg-surface-variant'
+              }`}
+            />
+          ))}
+        </div>
       </div>
       <button className="w-full py-2.5 rounded-lg text-sm font-medium text-primary-container hover:bg-primary-container/10 transition-colors border border-primary-container/20">
         View Responses

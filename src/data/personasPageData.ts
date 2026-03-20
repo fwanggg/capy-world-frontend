@@ -1,31 +1,31 @@
-// Stitch-sourced data for Personas page
+// Stitch-sourced data - pulled from MCP get_screen Capysan Personas - Focused Hero Stats
 
 export const metricsData = {
-  totalActive: { label: 'Total Active', value: '12,842' },
+  totalActiveEntities: { label: 'Total Active Entities', value: '12,842' },
   liveClusters: { label: 'Live Clusters', value: '38' },
-  avgAge: { label: 'Avg Age', value: '32.4' },
 }
 
-export const personaArchetypes = [
-  {
-    id: 'ethan-vance',
-    name: 'Ethan Vance',
-    role: 'Junior Developer',
-    tags: ['Web3', 'React', 'Privacy'],
-  },
-  {
-    id: 'sarah-chen',
-    name: 'Dr. Sarah Chen',
-    role: 'CTO at TechNext',
-    tags: ['AI Strategy', 'Security', 'Scaling'],
-  },
-  {
-    id: 'marcus-thorne',
-    name: 'Marcus Thorne',
-    role: 'Product Designer',
-    tags: ['Figma', 'A11y', 'Prototyping'],
-  },
+export const interestDistribution = [
+  { label: 'Data Privacy', percent: 42 },
+  { label: 'UX Design', percent: 31 },
+  { label: 'AI Ethics', percent: 18 },
 ]
+
+export const professionBreakdown = [
+  { label: 'Software Engineer', count: '4.2k' },
+  { label: 'Marketing Lead', count: '2.1k' },
+  { label: 'CTO / Founder', count: '842' },
+]
+
+export const ageGroups = ['18-24', '25-34', '35-44', '45+']
+
+export const demographics = [
+  { label: 'Male', percent: 48 },
+  { label: 'Female', percent: 51 },
+  { label: 'Other', percent: 1 },
+]
+
+export const demographicsFootnote = 'Based on 4.8M synthetic samples.'
 
 export const navLinks = [
   { label: 'About', href: '#' },

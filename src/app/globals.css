@@ -1,21 +1,20 @@
-/* Stitch design system */
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap");
+/* Stitch design system - fonts loaded via <link> in layout.tsx */
 @import "tailwindcss";
 
 @theme {
-  /* Stitch colors - exact from code.html */
-  --color-background: #0a0c10;
-  --color-surface: #0a0c10;
-  --color-surface-dim: #0a0c10;
-  --color-surface-container-lowest: #06080b;
-  --color-surface-container-low: #0f1218;
-  --color-surface-container: #12151c;
-  --color-surface-container-high: #1a1d24;
-  --color-surface-container-highest: #2c3038;
-  --color-surface-variant: #22262d;
+  /* Stitch colors - from MCP get_project projects/6878601031183939918 */
+  --color-background: #10131a;
+  --color-surface: #10131a;
+  --color-surface-dim: #10131a;
+  --color-surface-container-lowest: #0b0e14;
+  --color-surface-container-low: #191c22;
+  --color-surface-container: #1d2026;
+  --color-surface-container-high: #272a31;
+  --color-surface-container-highest: #32353c;
+  --color-surface-variant: #32353c;
   --color-surface-bright: #363940;
   --color-outline: #83948f;
-  --color-outline-variant: #2a3a36;
+  --color-outline-variant: #3a4a46;
   --color-primary: #d7fff3;
   --color-primary-container: #00f5d4;
   --color-primary-fixed: #26fedc;
@@ -93,22 +92,22 @@ html {
 
 /* Compatibility vars for markdown.css and other components - mapped to Stitch tokens */
 :root {
-  --color-navy: #0a0c10;
-  --color-navy-light: #12151c;
-  --color-navy-lighter: #1a1d24;
+  --color-navy: #10131a;
+  --color-navy-light: #1d2026;
+  --color-navy-lighter: #272a31;
   --color-teal: #00f5d4;
   --color-teal-light: #00dfc1;
   --color-white: #ffffff;
   --color-gray-200: #2a3a36;
-  --color-gray-500: #a2b1ad;
+  --color-gray-500: #b9cac4;
   --color-gray-700: #83948f;
-  --color-gray-100: #f1f2f8;
-  --color-surface-1: #0a0c10;
-  --color-surface-2: #12151c;
-  --color-surface-3: #1a1d24;
-  --color-border: #2a3a36;
-  --color-text-primary: #f1f2f8;
-  --color-text-secondary: #a2b1ad;
+  --color-gray-100: #e1e2eb;
+  --color-surface-1: #10131a;
+  --color-surface-2: #1d2026;
+  --color-surface-3: #272a31;
+  --color-border: #3a4a46;
+  --color-text-primary: #e1e2eb;
+  --color-text-secondary: #b9cac4;
   --font-body: "Inter", sans-serif;
   --font-headline: "Manrope", sans-serif;
   --line-relaxed: 1.75;

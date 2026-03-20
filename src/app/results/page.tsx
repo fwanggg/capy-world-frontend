@@ -87,10 +87,10 @@ function ResultsLayout({
   url: string
 }) {
   return (
-    <div className="bg-[#10131a] text-on-surface font-body selection:bg-primary-container selection:text-on-primary-fixed min-h-screen">
+    <div className="dark min-h-screen bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-fixed">
       <AnalysisNav />
 
-      <main className="pt-24 pb-16 min-h-screen bg-surface">
+      <main className="pt-24 pb-16 min-h-screen">
         {error ? (
           <div className="max-w-screen-2xl mx-auto px-8">
             <div className="p-8 bg-error-container/20 border border-error/30 rounded-xl text-error">
@@ -117,7 +117,7 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="bg-[#10131a] text-on-surface font-body min-h-screen flex items-center justify-center">
+        <div className="dark min-h-screen bg-surface text-on-surface font-body flex items-center justify-center">
           Loading...
         </div>
       }
