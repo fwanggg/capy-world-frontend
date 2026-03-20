@@ -243,6 +243,25 @@ async function getDemographicValues(input: {
     }
   }
 
+  // Interests: extract distinct names from JSONB array
+  if (input.segments.includes('interests')) {
+    const { data, error } = await supabase.from('personas').select('interests').not('interests', 'is', null)
+    if (!error && data) {
+      const names = new Set<string>()
+      for (const row of data) {
+        const arr = row.interests
+        if (Array.isArray(arr)) {
+          for (const item of arr) {
+            const name = typeof item === 'string' ? item : (item as { name?: string })?.name
+            if (name && typeof name === 'string') names.add(name)
+          }
+        }
+      }
+      result.interests = [...names].sort()
+      console.log(`[TOOL] interests values:`, result.interests)
+    }
+  }
+
   console.log('[TOOL] Returning demographic values:', JSON.stringify(result))
   return JSON.stringify(result)
 }
@@ -978,6 +997,50 @@ const sendMessageTool = tool(sendMessage, {
   }),
 })
 
+/** Schema for consolidate_analysis tool — analysis mode only */
+const consolidateAnalysisSchema = z.object({
+  consolidation: z.object({
+    product: z.object({
+      problem: z.string(),
+      solution: z.string(),
+      icp: z.string(),
+    }),
+    vote_summary: z.object({
+      yes: z.number(),
+      no: z.number(),
+      maybe: z.number(),
+      verdict: z.string(),
+    }),
+    moms_test: z.record(
+      z.string(),
+      z.array(z.object({ answer: z.string(), anonymous_id: z.string().optional() }))
+    ),
+    participants: z.array(z.object({
+      anonymous_id: z.string(),
+      profession: z.string().optional(),
+      age: z.number().optional(),
+      gender: z.string().optional(),
+      location: z.string().optional(),
+    })),
+    action_items: z.array(z.object({
+      action: z.string(),
+      impact: z.enum(['High', 'Medium', 'Low']),
+      rationale: z.string(),
+    })),
+  }),
+})
+
+const consolidateAnalysisTool = tool(
+  async (input: z.infer<typeof consolidateAnalysisSchema>) => {
+    return JSON.stringify({ success: true, consolidation: input.consolidation })
+  },
+  {
+    name: 'consolidate_analysis',
+    description: 'Consolidate all participant JSON responses into a single structured output. Call after send_message. Include every participant answer — no truncation.',
+    schema: consolidateAnalysisSchema,
+  }
+)
+
 const extractGoogleFormTool = tool(
   async (input: { form_url: string }) => {
     const form = await extractGoogleForm(input.form_url)
@@ -1093,6 +1156,14 @@ export interface CallCapybaraAIResponse {
     clone_names: string[]
   }
   visualization?: VisualizationPayload
+  /** Analysis mode: structured consolidation from consolidate_analysis tool */
+  consolidation?: {
+    product: { problem: string; solution: string; icp: string }
+    vote_summary: { yes: number; no: number; maybe: number; verdict: string }
+    moms_test: Record<string, Array<{ answer: string; anonymous_id?: string }>>
+    participants: Array<{ anonymous_id: string; profession?: string; age?: number; gender?: string; location?: string }>
+    action_items: Array<{ action: string; impact: string; rationale: string }>
+  }
 }
 
 /**
@@ -1616,8 +1687,10 @@ export async function callCapybaraAI(
  * System prompt for analysis mode (product-market fit evaluation)
  * Focused on Mom Test methodology: 10 personas answer 4 key questions
  */
-function getAnalysisSystemPrompt(): string {
+function getAnalysisSystemPrompt(sessionId: string): string {
   return `You are Capysan, a product-market fit analyst. You run structured product-solution fit analysis using the Mom Test methodology.
+
+SESSION_ID: "${sessionId}" — Use this exact value for create_conversation_session and any session_id parameter.
 
 Follow these 5 steps in order EXACTLY ONCE. Do not repeat steps. Do not ask for clarification. Execute immediately.
 
@@ -1625,69 +1698,94 @@ STEP 1 — analyze_landing_page({url}):
   Call ONCE with the provided URL. Extract:
   - Problem: What pain point this solves (1 sentence)
   - Solution: Core value proposition (1 sentence)
-  - ICP: Who specifically would benefit most (1 sentence)
+  - ICP: Who specifically would benefit most
 
-STEP 2 — search_clones({ count: 10 }):
-  Call ONCE with count=10 (no query param). Returns 10 representative personas.
-  IMPORTANT: Each persona has 'id' (integer) and 'anonymous_id' (hash). Save the integer IDs for step 3.
+STEP 2 — Search for matching personas (2–5 tool calls; iterate until enough):
+  a. Call get_demographic_values({ segments: ["profession", "interests", "gender", "location", "spending_power"] }) to get valid filter values.
+  b. INTELLIGENT FILTER SELECTION: From the ICP and problem/solution, pick the 1–3 most relevant filters. Use ONLY values returned by get_demographic_values.
+     - Prefer profession when ICP mentions a role (e.g. "engineers" → profession: "engineer" if that value exists).
+     - Prefer interests when domain-specific (e.g. game dev → pick interests from get_demographic_values that match "game", "indie", "development"). Use exact values from the response.
+     - Use location, age_min, age_max, gender only when ICP explicitly targets them.
+     - query: 3–8 specific keywords from the product's domain, problem, and solution. Use terms the TARGET USER would relate to. DO NOT use generic meta-terms like "user research", "product validation", "market research", "startup founder" unless the product explicitly targets those.
+  c. First search_clones: query + best-matching filters, count: 10, match_threshold: 0.5.
+  d. If fewer than expected number of personas returned: LOOSEN ITERATIVELY (call search_clones again):
+     - 1) Lower match_threshold to 0.4, then 0.3.
+     - 2) Remove the least important demographic filter (location before profession; keep query).
+     - 3) Broaden query (fewer, more general terms).
+     - Repeat until you have ≥10 personas or all options exhausted. If fewer than 10 after exhausting, use what you have.
+  e. Merge and deduplicate persona IDs across all searches (by id). Use up to 10 unique IDs for step 3.
 
 STEP 3 — create_conversation_session({ clone_ids: [integer IDs from step 2], session_id: SESSION_ID }):
-  Call ONCE with the 10 integer persona IDs from step 2.
+  Call ONCE with the merged, deduplicated integer persona IDs from step 2 (up to 10). Use the SESSION_ID from the top of this prompt.
 
-STEP 4 — send_message({ prompt: "...", clone_ids: [same 10 integer IDs] }):
+STEP 4 — send_message({ prompt: "...", clone_ids: [same integer IDs from step 3] }):
   Call ONCE with this EXACT prompt (substitute [PROBLEM], [SOLUTION], [PRODUCT TITLE]):
   "You are evaluating a product based on your own personal experiences.
    Product: [PRODUCT TITLE]
    What it does: [PROBLEM] — [SOLUTION]
 
-   Answer all 4 questions:
-   Q1: Tell me about the last time you experienced [THE PROBLEM]. Do you actually have this problem?
-   Q2: How do you currently solve this today? What tools or methods do you use?
-   Q3: How much would you pay per month for a perfect solution? Give a specific USD amount or range.
-   Q4: Would you use [PRODUCT TITLE]? Write YES, NO, or MAYBE on its own line, then explain why in 2-3 sentences."
+   Answer each question below in your own voice. Put YOUR actual answer in each JSON value — do NOT repeat the question text.
 
-STEP 5 — Write final markdown response:
-  ## Product Analysis
-  **Problem:** [from Step 1]
-  **Solution:** [from Step 1]
-  **Target Customer:** [ICP from Step 1]
+   Questions to answer:
+   1. q1_validation: Walk me through the last time you experienced [Problem]. What were you doing right before that?
+   2. q2_alternatives: How do you currently solve this today? What specific tools or 'hacks' are you using?
+   3. q3_impact: What was the fallout from that? How much time or money did that mistake cost you?
+   4. q4_search: Have you looked for other solutions? Why haven't the ones on the market worked for you?
+   5. q5_commitment: I'm building a fix for this—would you be willing to [Time/Intro/Cash] to see the prototype?
+   6. q6_expansion: Who else do you know that is struggling with this exact workflow?
 
-  ## Vote Summary
-  [Count]: X YES, Y NO, Z MAYBE — [1-sentence verdict on product-market fit]
+   Respond with a single JSON object. No other text. Each mom_test value must be YOUR answer only:
+   {
+     \"mom_test\": {
+       \"q1_validation\": \"<your actual answer, not the question>\",
+       \"q2_alternatives\": \"<your actual answer, not the question>\",
+       \"q3_impact\": \"<your actual answer, not the question>\",
+       \"q4_search\": \"<your actual answer, not the question>\",
+       \"q5_commitment\": \"<your actual answer, not the question>\",
+       \"q6_expansion\": \"<your actual answer, not the question>\"
+     },
+     \"vote\": \"YES\" or \"NO\" or \"MAYBE\",
+     \"vote_reason\": \"Brief reason for your vote\"
+   }"
 
-  ## Mom Test Highlights
-  **Do they have the problem?** [Synthesize Q1 answers - key patterns and quotes]
-  **Current alternatives:** [Synthesize Q2 answers - how people currently solve this]
-  **Willingness to pay:** [Synthesize Q3 answers - price sensitivity, include median/average]
+STEP 5 — consolidate_analysis({ ... }):
+  Call consolidate_analysis ONCE with a JSON object consolidating ALL participant responses.
+  You MUST include every participant's answers — do not summarize or truncate. If 4 people answered Q1, include all 4 answers.
+  Schema:
+  {
+    "product": { "problem": "...", "solution": "...", "icp": "..." },
+    "vote_summary": { "yes": N, "no": N, "maybe": N, "verdict": "1-sentence product-market fit verdict" },
+    "moms_test": {
+      "q1_validation": [ { "answer": "...", "anonymous_id": "..." }, ... ],
+      "q2_alternatives": [ ... ],
+      "q3_impact": [ ... ],
+      "q4_search": [ ... ],
+      "q5_commitment": [ ... ],
+      "q6_expansion": [ ... ]
+    },
+    "participants": [ { "anonymous_id": "...", "profession": "...", "age": N, "gender": "...", "location": "..." }, ... ],
+    "action_items": [ { "action": "...", "impact": "High|Medium|Low", "rationale": "..." }, ... ]
+  }
 
-  ## Top Concerns (from NO/MAYBE votes)
-  - [Concern 1] (X personas) — Brief rationale
-  - [Concern 2] (Y personas) — Brief rationale
-  (List 3-5 top concerns)
+  - moms_test: Include ALL answers from ALL participants. No limit. If 10 answered, 10 entries per question.
+  - participants: List each participant who joined with their demographics (from send_message responses).
+  - Do NOT include heat_map. Heat maps (main blocker / main hitter) are derived server-side from the Mom Test answers.
 
-  ## Top Reasons to Buy (from YES votes)
-  - [Benefit 1] (X personas) — Brief rationale
-  - [Benefit 2] (Y personas) — Brief rationale
-  (List 3-5 top benefits)
-
-  ## Actionable Items
-  - [HIGH] [specific action] — [rationale from feedback]
-  - [MEDIUM] [action] — [rationale]
-  - [LOW] [action] — [rationale]
-  (List exactly 3 actions)
-
-TOOLS (use ONLY these, in order, ONE TIME EACH):
-1. analyze_landing_page(url)
-2. search_clones(count)
-3. create_conversation_session(clone_ids, session_id)
-4. send_message(prompt, clone_ids)
+TOOLS (use in this order):
+1. analyze_landing_page(url) — ONCE
+2. get_demographic_values({ segments: ["profession", "interests", "gender", "location", "spending_power"] }) — ONCE, before search_clones
+3. search_clones(...) — CALL MULTIPLE TIMES if needed. First call with best filters; if <10 results, loosen (match_threshold, remove filters, broaden query) and call again. Merge and deduplicate IDs.
+4. create_conversation_session(clone_ids, session_id) — ONCE (use merged IDs from step 3)
+5. send_message(prompt, clone_ids) — ONCE
+6. consolidate_analysis(consolidation) — ONCE
 
 CRITICAL REMINDERS:
-- Call each tool exactly once, in order
-- Do NOT loop, retry, or re-call any tool
-- Do NOT ask clarifying questions
-- After step 4 (send_message), immediately write step 5 (final markdown)
-- Stop after step 5. Do not attempt to create visualizations.`
+- Query must be product-specific (domain + problem + solution), NOT generic meta-keywords
+- Demographic filters: use ONLY values from get_demographic_values
+- search_clones MAY be called multiple times to iteratively loosen until ≥10 personas
+- Participants MUST respond in JSON format (Step 4 prompt enforces this)
+- After step 4, immediately call consolidate_analysis with the full structured output
+- Stop after step 5.`
 }
 
 /**
@@ -1706,25 +1804,29 @@ export async function callAnalysisAI(
 
   const llm = createDeepSeekLLM()
 
-  // Bind only 4 tools for analysis mode (visualization handled in backend)
+  // Bind 7 tools for analysis mode (demographic discovery + search + consolidate)
   const llmWithTools = llm.bindTools([
     analyzeLandingPageTool,
+    demographicSegmentsTool,
+    demographicValuesTool,
     createSearchClonesTool(undefined), // No auth token - demographic-only search
     createConversationSessionTool,
     sendMessageTool,
+    consolidateAnalysisTool,
   ])
 
-  const systemPrompt = getAnalysisSystemPrompt()
+  const systemPrompt = getAnalysisSystemPrompt(sessionId)
   const messages: BaseMessage[] = [
     new SystemMessage(systemPrompt),
     new HumanMessage(userMessage),
   ]
 
   let iterations = 0
-  const maxIterations = 15 // Allow for: analyze → search → create_session → send_message → final response
+  const maxIterations = 15 // Allow for: analyze → search → create_session → send_message → consolidate_analysis
   let finalResponse: string | null = null
   const reasoning: ReasoningStep[] = []
   let lastVisualization: VisualizationPayload | undefined
+  let lastConsolidation: CallCapybaraAIResponse['consolidation'] | undefined
   const toolsAlreadyCalled = new Set<string>() // Track called tools to prevent duplicates
 
   const pushReasoning = (step: ReasoningStep) => {
@@ -1756,7 +1858,9 @@ export async function callAnalysisAI(
 
       for (const toolCall of normalizedToolCalls) {
         // Skip duplicate tool calls (same tool called more than once) — must still push ToolMessage for LangChain
-        if (toolsAlreadyCalled.has(toolCall.name)) {
+        // Exception: search_clones may be called multiple times in analysis mode for iterative loosening
+        const allowDuplicate = toolCall.name === 'search_clones'
+        if (!allowDuplicate && toolsAlreadyCalled.has(toolCall.name)) {
           console.log(`[ORCHESTRATOR] Skipping duplicate tool call: ${toolCall.name}`)
           messages.push(
             new ToolMessage({
@@ -1767,7 +1871,7 @@ export async function callAnalysisAI(
           )
           continue
         }
-        toolsAlreadyCalled.add(toolCall.name)
+        if (!allowDuplicate) toolsAlreadyCalled.add(toolCall.name)
 
         let toolResult: string
         let toolOutput: any = null
@@ -1799,6 +1903,31 @@ export async function callAnalysisAI(
                 summary: `Error: ${msg}`,
               })
             }
+          } else if (toolCall.name === 'get_demographic_segments') {
+            toolResult = await getDemographicSegments()
+            toolOutput = JSON.parse(toolResult)
+            pushReasoning({
+              iteration: iterations,
+              action: 'Exploring available demographic fields',
+              toolName: toolCall.name,
+              output: toolOutput,
+              summary: `Found ${toolOutput.segments?.length || 0} segments: ${toolOutput.segments?.join(', ')}`,
+            })
+          } else if (toolCall.name === 'get_demographic_values') {
+            const args = toolCall.args as { segments: string[] }
+            toolResult = await getDemographicValues(args)
+            toolOutput = JSON.parse(toolResult)
+            const segmentsList = Object.keys(toolOutput)
+              .map((seg) => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`)
+              .join(', ')
+            pushReasoning({
+              iteration: iterations,
+              action: `Fetching values for: ${args.segments?.join(', ') || ''}`,
+              toolName: toolCall.name,
+              input: args,
+              output: toolOutput,
+              summary: `Retrieved: ${segmentsList}`,
+            })
           } else if (toolCall.name === 'search_clones') {
             const args = toolCall.args as any
             toolResult = await searchClones(args)
@@ -1905,6 +2034,17 @@ export async function callAnalysisAI(
                 summary: `Error: ${msg}`,
               })
             }
+          } else if (toolCall.name === 'consolidate_analysis') {
+            const args = toolCall.args as { consolidation: CallCapybaraAIResponse['consolidation'] }
+            console.log('[ORCHESTRATOR] Consolidating analysis')
+            lastConsolidation = args.consolidation
+            toolResult = JSON.stringify({ success: true, message: 'Consolidation received' })
+            pushReasoning({
+              iteration: iterations,
+              action: 'Consolidating participant responses',
+              toolName: toolCall.name,
+              summary: 'Structured analysis output received',
+            })
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
           }
@@ -1945,6 +2085,7 @@ export async function callAnalysisAI(
     response: finalResponse || 'Unable to generate response',
     reasoning,
     visualization: lastVisualization,
+    consolidation: lastConsolidation,
   }
 }
 

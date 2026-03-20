@@ -118,20 +118,6 @@ function ResultsLayout({
           <AnalysisDashboard result={result} loading={loading} url={url} />
         )}
       </main>
-
-      {/* Stitch FAB - Final Results only */}
-      {!loading && result && (
-        <div className="fixed bottom-8 right-8 z-50">
-          <button
-            className="w-14 h-14 bg-primary-container text-on-primary-fixed rounded-full shadow-[0_10px_30px_rgba(0,245,212,0.4)] flex items-center justify-center active:scale-90 transition-transform hover:shadow-[0_15px_40px_rgba(0,245,212,0.6)]"
-            aria-label="Add"
-          >
-            <span className="material-symbols-outlined" style={{ fontVariationSettings: "'wght' 700" }}>
-              add
-            </span>
-          </button>
-        </div>
-      )}
     </div>
   )
 }

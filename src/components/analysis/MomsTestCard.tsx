@@ -1,17 +1,34 @@
-import type { CloneResponse } from '@/types/analysis'
+import type { CloneResponse, MomsTestConsolidated } from '@/types/analysis'
 
 interface MomTestPair {
   readonly q: string
-  readonly key: 'q1' | 'q2' | 'q3'
+  readonly key: string
 }
 
 interface MomsTestCardProps {
   readonly pairs: readonly MomTestPair[]
-  readonly cloneResponses: readonly CloneResponse[]
+  readonly momsTest?: MomsTestConsolidated
+  readonly cloneResponses?: readonly CloneResponse[]
 }
 
-/** Stitch: Q1/Q2 badges, multiple persona answers per question */
-export function MomsTestCard({ pairs, cloneResponses }: Readonly<MomsTestCardProps>) {
+/** Mom's Test: all answers per question (no limit). Dynamic based on pairs. Uses momsTest when available, else cloneResponses. */
+export function MomsTestCard({ pairs, momsTest, cloneResponses }: Readonly<MomsTestCardProps>) {
+  const getAnswers = (key: string): Array<{ answer: string; anonymous_id?: string }> => {
+    if (momsTest) {
+      const arr = momsTest[key]
+      return arr?.map((a) => (typeof a === 'string' ? { answer: a } : a)) ?? []
+    }
+    if (cloneResponses) {
+      return cloneResponses
+        .map((c) => {
+          const ans = c.answers.momTest?.[key]
+          return { answer: ans && ans !== 'No response' ? ans : '—', anonymous_id: c.anonymousId }
+        })
+        .filter((a) => a.answer !== '—' && a.answer !== 'No response')
+    }
+    return []
+  }
+
   return (
     <div className="flex flex-col bg-surface-container-high rounded-xl shadow-2xl relative overflow-hidden border border-outline-variant/5">
       <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary-container/10 blur-[80px] pointer-events-none" />
@@ -20,22 +37,19 @@ export function MomsTestCard({ pairs, cloneResponses }: Readonly<MomsTestCardPro
           Mom&apos;s Test: Persona Responses
         </h3>
         <p className="text-[10px] font-bold text-primary-container uppercase tracking-widest mt-1">
-          Synthesized User Validation
+          Synthesized User Validation — All Responses
         </p>
       </div>
-      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar max-h-[480px]">
         <div className="space-y-10">
           {pairs.map((pair) => {
-            const answers = cloneResponses
-              .slice(0, 2)
-              .map((c) => c.answers[pair.key] || '—')
-              .filter((a) => a !== '—')
-            if (answers.length === 0) answers.push('—')
+            const answers = getAnswers(pair.key)
+            const displayAnswers = answers.length > 0 ? answers : [{ answer: '—', anonymous_id: undefined }]
             return (
               <div key={pair.key} className="space-y-4">
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0 w-8 h-8 rounded bg-primary-container/10 border border-primary-container/20 flex items-center justify-center text-[10px] font-black text-primary-container">
-                    {pair.key.toUpperCase()}
+                    {pair.key.replace(/^q(\d)_.*/, 'Q$1')}
                   </div>
                   <div className="flex-1">
                     <h4 className="font-headline font-bold text-on-surface text-base leading-tight">
@@ -45,12 +59,19 @@ export function MomsTestCard({ pairs, cloneResponses }: Readonly<MomsTestCardPro
                   </div>
                 </div>
                 <div className="space-y-3 pl-12">
-                  {answers.map((answer, i) => (
+                  {displayAnswers.map((item, i) => (
                     <div key={i} className="flex gap-3 items-start group">
                       <div className="w-6 h-6 rounded-full bg-secondary-container/50 border border-outline-variant/10 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm font-medium text-on-surface leading-snug">
-                        &quot;{answer}&quot;
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-on-surface leading-snug">
+                          &quot;{item.answer}&quot;
+                        </p>
+                        {item.anonymous_id && (
+                          <span className="text-[10px] text-on-surface-variant mt-0.5 block">
+                            {item.anonymous_id}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

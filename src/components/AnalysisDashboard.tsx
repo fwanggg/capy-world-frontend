@@ -2,12 +2,11 @@
 
 import React from 'react'
 import type { AnalysisResult } from '@/types/analysis'
-import type { ChartSpec } from '@/types/chat'
-import { AnalysisStatsCards } from '@/components/analysis/AnalysisStatsCards'
-import { BlockerHitterCards } from '@/components/analysis/BlockerHitterCards'
+import { MOM_TEST_V2, MOM_TEST_QUESTIONS } from '@/data/momTestV2'
+import { ParticipantsDemographicsCard } from '@/components/analysis/ParticipantsDemographicsCard'
+import { HeatMapCard } from '@/components/analysis/HeatMapCard'
 import { MomsTestCard } from '@/components/analysis/MomsTestCard'
 import { LandingPageOptimizationCard } from '@/components/analysis/LandingPageOptimizationCard'
-import { PersonaSentimentCard } from '@/components/analysis/PersonaSentimentCard'
 
 interface Props {
   result: AnalysisResult | null
@@ -15,16 +14,11 @@ interface Props {
   url: string
 }
 
-function findChart(charts: ChartSpec[], type: string): ChartSpec | undefined {
-  return charts.find((c) => c.type === type)
-}
-
-// Stitch Final Results — Q1/Q2 only (Q3 optional)
-const momTestPairs = [
-  { q: 'When did you last have this problem?', key: 'q1' as const },
-  { q: 'What else have you tried?', key: 'q2' as const },
-  { q: 'Why do you need to solve this now?', key: 'q3' as const },
-]
+/** Mom Test pairs — dynamic from config. Add questions in momTestV2.ts to extend. */
+const momTestPairs = MOM_TEST_QUESTIONS.map(({ key }) => ({
+  q: MOM_TEST_V2[key],
+  key,
+}))
 
 export default function AnalysisDashboard({ result, loading, url }: Props) {
   if (loading && !result) {
@@ -38,53 +32,6 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
       </div>
     )
   }
-
-  const charts = result.visualization.charts
-  const topConcerns = findChart(charts, 'top_concerns')
-  const topBenefits = findChart(charts, 'top_benefits')
-  const pieChart = findChart(charts, 'pie')
-
-  const mainBlocker = (topConcerns?.data?.[0] as { name?: string })?.name ?? result.problem
-  const mainBlockerDetail = (topConcerns?.data?.[0] as { note?: string })?.note ?? 'Personas reported concerns'
-  const mainHitter = (topBenefits?.data?.[0] as { name?: string })?.name ?? result.solution
-  const mainHitterDetail = (topBenefits?.data?.[0] as { note?: string })?.note ?? 'Personas cited value'
-
-  const voteBreakdown = pieChart?.data?.reduce(
-    (acc, d) => {
-      if (d.name === 'YES') acc.yes = d.value ?? 0
-      if (d.name === 'NO') acc.no = d.value ?? 0
-      if (d.name === 'MAYBE') acc.maybe = d.value ?? 0
-      return acc
-    },
-    { yes: 0, no: 0, maybe: 0 }
-  ) ?? { yes: 0, no: 0, maybe: 0 }
-  const totalVotes = voteBreakdown.yes + voteBreakdown.no + voteBreakdown.maybe
-  const yesPct = totalVotes > 0 ? Math.round((voteBreakdown.yes / totalVotes) * 100) : 70
-
-  const avgAgeRaw =
-    result.cloneResponses.length > 0
-      ? result.cloneResponses
-          .filter((r) => r.demographics.age != null)
-          .reduce((acc, r) => acc + (r.demographics.age ?? 0), 0) /
-        Math.max(result.cloneResponses.filter((r) => r.demographics.age != null).length, 1)
-      : 32
-  const avgAge = Number.isInteger(avgAgeRaw) ? avgAgeRaw : Math.round(avgAgeRaw * 10) / 10
-  const femaleCount = result.cloneResponses.filter(
-    (r) => r.demographics.gender?.toLowerCase() === 'female' || r.demographics.gender === 'f'
-  ).length
-  const maleCount = result.cloneResponses.filter(
-    (r) => r.demographics.gender?.toLowerCase() === 'male' || r.demographics.gender === 'm'
-  ).length
-  const genderSplit = femaleCount + maleCount > 0 ? `${femaleCount}/${maleCount}` : '54/46'
-  const locationCounts = result.cloneResponses.reduce<Record<string, number>>((acc, r) => {
-    const loc = r.demographics.location?.split(',')[0]?.trim() ?? 'Unknown'
-    acc[loc] = (acc[loc] ?? 0) + 1
-    return acc
-  }, {})
-  const topHub =
-    Object.entries(locationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ??
-    result.cloneResponses[0]?.demographics.location ??
-    'Berlin, DE'
 
   const actionItems = result.actionItems.slice(0, 4)
 
@@ -100,37 +47,38 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
         </p>
       </div>
 
-      {/* Stitch: Demographics + Blocker/Hitter (Pipeline removed) */}
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <AnalysisStatsCards
-            avgAge={avgAge}
-            genderSplit={genderSplit}
-            topHub={topHub}
-            yesPct={yesPct}
-          />
+      {/* Who joined — personas-style demographics */}
+      {result.participantDemographics && (
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12">
+            <h2 className="text-lg font-headline font-bold text-on-surface mb-4">Participants Who Joined</h2>
+            <ParticipantsDemographicsCard demographics={result.participantDemographics} />
+          </div>
         </div>
-        <div className="col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <BlockerHitterCards
-            mainBlocker={mainBlocker}
-            mainBlockerDetail={mainBlockerDetail}
-            mainHitter={mainHitter}
-            mainHitterDetail={mainHitterDetail}
-          />
-        </div>
-      </div>
+      )}
 
-      {/* Stitch: Mom's Test + Landing Page */}
+      {/* Heat map: derived from Mom Test answers (aggregation), not LLM synthesis */}
+      {result.heatMap && (
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12">
+            <HeatMapCard heatMap={result.heatMap} />
+          </div>
+        </div>
+      )}
+
+      {/* Mom's Test (all answers) + Landing Page */}
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 lg:col-span-5 flex flex-col">
-          <MomsTestCard pairs={momTestPairs} cloneResponses={result.cloneResponses} />
+          <MomsTestCard
+            pairs={momTestPairs}
+            momsTest={result.momsTest}
+            cloneResponses={result.cloneResponses}
+          />
         </div>
         <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
           <LandingPageOptimizationCard actionItems={actionItems} />
         </div>
       </div>
-
-      <PersonaSentimentCard clones={result.cloneResponses} />
     </div>
   )
 }

@@ -1,6 +1,8 @@
+import { MOM_TEST_QUESTIONS, MOM_TEST_V2 } from '@/data/momTestV2'
 import { supabase } from '@/lib/supabase'
 import { callAnalysisAI, type CallCapybaraAIResponse } from '@/lib/langgraph-orchestrator'
-import type { AnalysisResult, CloneResponse, ActionItem } from '@/types/analysis'
+import { deriveHeatMapFromMomTestAnswers } from '@/lib/heatmap-from-momtest'
+import type { AnalysisResult, CloneResponse, ActionItem, HeatMap, ParticipantDemographics, MomsTestConsolidated } from '@/types/analysis'
 import type { ReasoningStep } from '@/types/chat'
 
 export const maxDuration = 300 // Vercel timeout override
@@ -109,24 +111,20 @@ function categorizeResponses(
   responses: Array<{
     personaId: string
     demographics: { age?: number; gender?: string; profession?: string; location?: string }
-    answers: {
-      q1: string
-      q2: string
-      q3: string
-      vote: 'YES' | 'NO' | 'MAYBE'
-      voteReason: string
-    }
+    answers: { momTest: Record<string, string | undefined>; vote: 'YES' | 'NO' | 'MAYBE'; voteReason: string }
   }>
 ): {
   responded: typeof responses
   didntRespond: typeof responses
 } {
-  const responded = []
-  const didntRespond = []
+  const responded: typeof responses = []
+  const didntRespond: typeof responses = []
 
   for (const response of responses) {
-    // Check if they actually responded with meaningful content
-    const hasResponse = response.answers.q1 && response.answers.q1 !== 'No response' && response.answers.q1.trim().length > 0
+    const momTest = response.answers.momTest ?? {}
+    const hasResponse = Object.values(momTest).some(
+      (v) => v && v !== 'No response' && v.trim().length > 0
+    )
 
     if (hasResponse) {
       responded.push(response)
@@ -146,13 +144,7 @@ function generateVisualization(
   cloneResponses: Array<{
     personaId: string
     demographics: { age?: number; gender?: string; profession?: string; location?: string }
-    answers: {
-      q1: string
-      q2: string
-      q3: string
-      vote: 'YES' | 'NO' | 'MAYBE'
-      voteReason: string
-    }
+    answers: { momTest: Record<string, string | undefined>; vote: 'YES' | 'NO' | 'MAYBE'; voteReason: string }
   }>
 ) {
   // Categorize responses: Responded vs Didn't Respond
@@ -288,32 +280,168 @@ function generateVisualization(
   }
 }
 
+/** Filter out answers that are the question text or "Your answer: [question]" placeholder */
+function filterPlaceholderAnswers(
+  key: string,
+  items: Array<{ answer: string; anonymous_id?: string }>
+): Array<{ answer: string; anonymous_id?: string }> {
+  const questionText = MOM_TEST_V2[key as keyof typeof MOM_TEST_V2]
+  if (!questionText) return items
+  const qLower = questionText.toLowerCase()
+  return items.filter((item) => {
+    const a = (item.answer || '').trim()
+    if (!a || a === '—' || a === 'No response') return false
+    const aLower = a.toLowerCase()
+    // Skip if answer is the question, or "Your answer: <question>"
+    if (aLower === qLower) return false
+    if (aLower.startsWith('your answer:') && aLower.includes(qLower.slice(0, 40))) return false
+    if (aLower.startsWith('your answer :') && aLower.includes(qLower.slice(0, 40))) return false
+    return true
+  })
+}
+
+/** Compute participant demographics (personas-style) from cloneResponses */
+function computeParticipantDemographics(cloneResponses: CloneResponse[]): ParticipantDemographics {
+  const professions: Record<string, number> = {}
+  const ageGroups: Record<string, number> = { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0, 'Not Specified': 0 }
+  const demographics: Record<string, number> = { Male: 0, Female: 0, Other: 0, 'Not Specified': 0 }
+  const interests: Record<string, number> = {}
+
+  for (const r of cloneResponses) {
+    const prof = r.demographics.profession || 'Not Specified'
+    professions[prof] = (professions[prof] ?? 0) + 1
+
+    const age = r.demographics.age
+    if (age == null) ageGroups['Not Specified']++
+    else if (age < 25) ageGroups['18-24']++
+    else if (age < 35) ageGroups['25-34']++
+    else if (age < 45) ageGroups['35-44']++
+    else ageGroups['45+']++
+
+    const g = (r.demographics.gender || '').toLowerCase()
+    if (g === 'male' || g === 'm') demographics.Male++
+    else if (g === 'female' || g === 'f') demographics.Female++
+    else if (g) demographics.Other++
+    else demographics['Not Specified']++
+
+    for (const interest of r.demographics.interests ?? []) {
+      const name = typeof interest === 'string' ? interest : (interest as { name?: string })?.name ?? ''
+      if (name) {
+        const key = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase()
+        interests[key] = (interests[key] ?? 0) + 1
+      }
+    }
+  }
+
+  return {
+    professions: Object.entries(professions)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([label, count]) => ({ label, count })),
+    ageGroups: Object.entries(ageGroups).map(([label, count]) => ({ label, count })),
+    demographics: Object.entries(demographics).map(([label, count]) => ({ label, count })),
+    interests: Object.entries(interests)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([label, count]) => ({ label, count })),
+  }
+}
+
 /**
- * Build final AnalysisResult from orchestrator response and extracted data
+ * Build final AnalysisResult from orchestrator response and extracted data.
+ * Heat map is ALWAYS derived from Mom Test answers (aggregation), never from LLM synthesis.
  */
-function buildAnalysisResult(
+async function buildAnalysisResult(
   orchestratorResponse: CallCapybaraAIResponse,
   url: string,
   cloneResponses: CloneResponse[],
   reasoning: ReasoningStep[],
   productTitle: string,
-): AnalysisResult {
+): Promise<AnalysisResult> {
+  const consolidation = orchestratorResponse.consolidation
   const parsed = parseAnalysisResponse(orchestratorResponse.response)
 
-  // Generate professional visualization from actual responses
+  const problem = consolidation?.product.problem ?? parsed.problem
+  const solution = consolidation?.product.solution ?? parsed.solution
+  const icp = consolidation?.product.icp ?? parsed.icp
+  const actionItems: ActionItem[] = consolidation?.action_items?.map((a) => ({
+    action: a.action,
+    impact: a.impact as 'High' | 'Medium' | 'Low',
+    rationale: a.rationale,
+  })) ?? parsed.actionItems
+
+  // Heat map: derived from Mom Test answers (aggregation), NOT from LLM synthesis
+
+  const participantDemographics: ParticipantDemographics =
+    consolidation?.participants?.length
+      ? (() => {
+          const profs: Record<string, number> = {}
+          const ages: Record<string, number> = { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0, 'Not Specified': 0 }
+          const demos: Record<string, number> = { Male: 0, Female: 0, Other: 0, 'Not Specified': 0 }
+          for (const p of consolidation.participants) {
+            const prof = p.profession || 'Not Specified'
+            profs[prof] = (profs[prof] ?? 0) + 1
+            if (p.age == null) ages['Not Specified']++
+            else if (p.age < 25) ages['18-24']++
+            else if (p.age < 35) ages['25-34']++
+            else if (p.age < 45) ages['35-44']++
+            else ages['45+']++
+            const g = (p.gender || '').toLowerCase()
+            if (g === 'male' || g === 'm') demos.Male++
+            else if (g === 'female' || g === 'f') demos.Female++
+            else if (g) demos.Other++
+            else demos['Not Specified']++
+          }
+          const fromClones = computeParticipantDemographics(cloneResponses)
+          return {
+            professions: Object.entries(profs).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, count]) => ({ label, count })),
+            ageGroups: Object.entries(ages).map(([label, count]) => ({ label, count })),
+            demographics: Object.entries(demos).map(([label, count]) => ({ label, count })),
+            interests: fromClones.interests,
+          }
+        })()
+      : computeParticipantDemographics(cloneResponses)
+
   const visualization = generateVisualization(productTitle, cloneResponses)
+
+  const momsTest: MomsTestConsolidated = consolidation?.moms_test
+    ? Object.fromEntries(
+        Object.entries(consolidation.moms_test).map(([k, v]) => [
+          k,
+          filterPlaceholderAnswers(k, Array.isArray(v) ? v : []),
+        ])
+      )
+    : (() => {
+        const out: MomsTestConsolidated = {}
+        for (const { key } of MOM_TEST_QUESTIONS) {
+          const raw = cloneResponses.map((r) => {
+            const ans = r.answers.momTest?.[key]
+            return {
+              answer: ans && ans !== 'No response' ? ans : '—',
+              anonymous_id: r.anonymousId,
+            }
+          })
+          out[key] = filterPlaceholderAnswers(key, raw)
+        }
+        return out
+      })()
+
+  const heatMap = await deriveHeatMapFromMomTestAnswers(momsTest, { problem, solution })
 
   return {
     url,
     productTitle,
-    problem: parsed.problem,
-    solution: parsed.solution,
-    icp: parsed.icp,
+    problem,
+    solution,
+    icp,
     visualization,
     cloneResponses,
-    actionItems: parsed.actionItems,
+    actionItems,
     reasoning,
     summary: orchestratorResponse.response,
+    heatMap,
+    participantDemographics,
+    momsTest,
   }
 }
 
@@ -379,71 +507,90 @@ export async function POST(req: Request) {
               writeSSE({ type: 'progress', step })
             },
             onRelayMessages: (messages) => {
-              // Parse clone responses for later extraction
               for (const msg of messages) {
                 if (msg.role === 'clone') {
-                  // Extract persona ID from sender_id (format: clone-{id})
                   const personaId = msg.sender_id.replace('clone-', '')
+                  const content = (msg.content || '').trim()
 
-                  // Parse Q1-Q4 from response text
-                  const content = msg.content || ''
-                  const lines = content.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-
-                  // Extract individual question answers
-                  let q1 = '', q2 = '', q3 = '', vote = 'MAYBE', voteReason = ''
-                  let currentQuestion = ''
-
-                  for (const line of lines) {
-                    if (line.toLowerCase().startsWith('q1:') || line.match(/^q1[\s:]/i)) {
-                      currentQuestion = 'q1'
-                      q1 = line.replace(/^q1[\s:]*/i, '').trim()
-                    } else if (line.toLowerCase().startsWith('q2:') || line.match(/^q2[\s:]/i)) {
-                      currentQuestion = 'q2'
-                      q2 = line.replace(/^q2[\s:]*/i, '').trim()
-                    } else if (line.toLowerCase().startsWith('q3:') || line.match(/^q3[\s:]/i)) {
-                      currentQuestion = 'q3'
-                      q3 = line.replace(/^q3[\s:]*/i, '').trim()
-                    } else if (line.toLowerCase().startsWith('q4:') || line.match(/^q4[\s:]/i)) {
-                      currentQuestion = 'q4'
-                      const q4Text = line.replace(/^q4[\s:]*/i, '').trim()
-                      // First line of Q4 should be YES/NO/MAYBE
-                      const voteMatch = q4Text.match(/^(YES|NO|MAYBE)/i)
-                      if (voteMatch) {
-                        vote = voteMatch[1].toUpperCase() as 'YES' | 'NO' | 'MAYBE'
-                        voteReason = q4Text.replace(/^(YES|NO|MAYBE)\s*/i, '').trim()
-                      } else {
-                        voteReason = q4Text
-                      }
-                    } else if (currentQuestion && line) {
-                      // Append multi-line answers
-                      const sep = (currentQuestion === 'q1' && q1) || (currentQuestion === 'q2' && q2) || (currentQuestion === 'q3' && q3) ? ' ' : ''
-                      if (currentQuestion === 'q1') q1 += sep + line
-                      else if (currentQuestion === 'q2') q2 += sep + line
-                      else if (currentQuestion === 'q3') q3 += sep + line
-                      else if (currentQuestion === 'q4') voteReason += sep + line
-                    }
-
-                    // Detect YES/NO/MAYBE at start of line for Q4 without label
-                    const voteMatch = line.match(/^(YES|NO|MAYBE)\b/i)
-                    if (voteMatch && currentQuestion !== 'q4') {
-                      vote = voteMatch[1].toUpperCase() as 'YES' | 'NO' | 'MAYBE'
-                      voteReason = line.replace(/^(YES|NO|MAYBE)\s*/i, '').trim()
-                      currentQuestion = 'q4'
-                    }
+                  // Try JSON first (Mom Test v2 format)
+                  interface ParticipantJson {
+                    mom_test?: Record<string, string | undefined>
+                    vote?: string
+                    vote_reason?: string
+                  }
+                  let parsed: ParticipantJson | null = null
+                  try {
+                    const stripped = content.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim()
+                    parsed = JSON.parse(stripped) as ParticipantJson
+                  } catch {
+                    // Fallback: plain text Q1-Q6 parsing
                   }
 
-                  cloneResponses.push({
-                    personaId,
-                    anonymousId: personaId,
-                    demographics: {},
-                    answers: {
-                      q1: q1 || 'No response',
-                      q2: q2 || 'No response',
-                      q3: q3 || 'No response',
-                      vote: vote as 'YES' | 'NO' | 'MAYBE',
-                      voteReason: voteReason || 'No reasoning provided',
-                    },
-                  })
+                  if (parsed?.mom_test && typeof parsed.mom_test === 'object') {
+                    const momTest: Record<string, string | undefined> = {}
+                    for (const [k, v] of Object.entries(parsed.mom_test)) {
+                      if (typeof v === 'string') momTest[k] = v
+                    }
+                    cloneResponses.push({
+                      personaId,
+                      anonymousId: personaId,
+                      demographics: {},
+                      answers: {
+                        momTest,
+                        vote: (parsed.vote?.toUpperCase() === 'YES' || parsed.vote?.toUpperCase() === 'NO' ? parsed.vote.toUpperCase() : 'MAYBE') as 'YES' | 'NO' | 'MAYBE',
+                        voteReason: parsed.vote_reason ?? 'No reasoning provided',
+                      },
+                    })
+                  } else {
+                    // Legacy: parse Q1-Q6 from plain text
+                    const lines = content.split('\n').map((l) => l.trim()).filter((l) => l.length > 0)
+                    const keys = MOM_TEST_QUESTIONS.map((q) => q.key)
+                    const answers: Record<string, string> = Object.fromEntries(keys.map((k) => [k, '']))
+                    let vote: 'YES' | 'NO' | 'MAYBE' = 'MAYBE'
+                    let voteReason = ''
+                    let currentKey: string | null = null
+
+                    for (const line of lines) {
+                      const qMatch = line.match(/^q([1-6])[\s:_]*(.*)/i)
+                      if (qMatch) {
+                        const num = parseInt(qMatch[1], 10)
+                        const rest = qMatch[2].trim()
+                        if (num >= 1 && num <= 6 && keys[num - 1]) {
+                          currentKey = keys[num - 1]
+                          const voteMatch = rest.match(/^(YES|NO|MAYBE)\b/i)
+                          if (voteMatch) {
+                            vote = voteMatch[1].toUpperCase() as 'YES' | 'NO' | 'MAYBE'
+                            voteReason = rest.replace(/^(YES|NO|MAYBE)\s*/i, '').trim()
+                          } else {
+                            answers[currentKey] = rest
+                          }
+                        }
+                      } else if (currentKey && line) {
+                        const sep = answers[currentKey] ? ' ' : ''
+                        answers[currentKey] += sep + line
+                      }
+                      const voteMatch = line.match(/^(YES|NO|MAYBE)\b/i)
+                      if (voteMatch && !qMatch) {
+                        vote = voteMatch[1].toUpperCase() as 'YES' | 'NO' | 'MAYBE'
+                        voteReason = line.replace(/^(YES|NO|MAYBE)\s*/i, '').trim()
+                      }
+                    }
+
+                    const momTest: Record<string, string | undefined> = {}
+                    for (const k of keys) {
+                      momTest[k] = answers[k] || 'No response'
+                    }
+                    cloneResponses.push({
+                      personaId,
+                      anonymousId: personaId,
+                      demographics: {},
+                      answers: {
+                        momTest,
+                        vote,
+                        voteReason: voteReason || 'No reasoning provided',
+                      },
+                    })
+                  }
                 }
               }
             },
@@ -490,16 +637,21 @@ export async function POST(req: Request) {
             try {
               const { data: persona } = await supabase
                 .from('personas')
-                .select('profession, location, age, gender')
+                .select('profession, location, age, gender, interests')
                 .eq('id', clone.personaId)
                 .single()
 
               if (persona) {
+                const interestsRaw = persona.interests
+                const interestsArr: string[] = Array.isArray(interestsRaw)
+                  ? interestsRaw.map((i: unknown) => (typeof i === 'string' ? i : (i as { name?: string })?.name ?? '')).filter(Boolean)
+                  : []
                 clone.demographics = {
                   age: persona.age,
                   gender: persona.gender,
                   profession: persona.profession,
                   location: persona.location,
+                  interests: interestsArr,
                 }
               }
             } catch (err) {
@@ -508,8 +660,8 @@ export async function POST(req: Request) {
             }
           }
 
-          // Build final result
-          const finalResult = buildAnalysisResult(
+          // Build final result (heat map derived from Mom Test answers)
+          const finalResult = await buildAnalysisResult(
             result,
             url,
             cloneResponses,
