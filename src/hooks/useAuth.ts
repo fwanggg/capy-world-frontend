@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { getSupabaseClient } from "@/lib/supabase-client";
 import type { User } from "@supabase/supabase-js";
 
 /** Max attempts to detect session (Supabase can take a moment to restore from storage) */
@@ -30,7 +30,7 @@ export function useAuth(): UseAuthResult {
       let attempts = 0;
 
       while (attempts < SESSION_RETRY_ATTEMPTS) {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await getSupabaseClient().auth.getSession();
         const sessionUser = data.session?.user ?? null;
 
         if (sessionUser) {
@@ -57,7 +57,7 @@ export function useAuth(): UseAuthResult {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = getSupabaseClient().auth.onAuthStateChange((_event, session) => {
       if (!isMounted) return;
       setUser(session?.user ?? null);
     });

@@ -16,17 +16,18 @@ export function SignInDialog({
   title = 'Sign in to Analyze',
   message = 'Sign in with Google to analyze landing pages and get feedback from AI personas.',
 }: SignInDialogProps) {
-  const { signInWithGoogle } = useAuthClient()
+  const { signInWithGoogle, error: authError } = useAuthClient()
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [localError, setLocalError] = useState<string | null>(null)
+  const error = localError || authError
 
   const handleSignIn = async () => {
     try {
       setLoading(true)
-      setError(null)
+      setLocalError(null)
       await signInWithGoogle()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed')
+      setLocalError(err instanceof Error ? err.message : 'Sign in failed')
       setLoading(false)
     }
   }
