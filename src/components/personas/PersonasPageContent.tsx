@@ -41,7 +41,11 @@ async function fetchPersonasAnalytics(): Promise<PersonasAnalytics> {
       interests: [],
       professions: [],
       ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0 },
-      demographics: [],
+      demographics: [
+        { label: 'Male', count: 0 },
+        { label: 'Female', count: 0 },
+        { label: 'Not Specified', count: 0 },
+      ],
     }
   }
 }

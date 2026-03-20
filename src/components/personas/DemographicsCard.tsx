@@ -20,7 +20,7 @@ export function DemographicsCard({ items, footnote }: Readonly<DemographicsCardP
           <div key={item.label} className="flex items-center justify-between gap-4">
             <span className="text-on-surface font-body">{item.label}</span>
             <span className="text-primary-container font-bold font-headline tabular-nums">
-              {item.count.toLocaleString()}
+              {item.count !== undefined ? item.count.toLocaleString() : '0'}
             </span>
           </div>
         ))}
