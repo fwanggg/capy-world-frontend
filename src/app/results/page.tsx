@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
-import ReasoningTimeline from '@/components/ReasoningTimeline'
+import Link from 'next/link'
 import AnalysisDashboard from '@/components/AnalysisDashboard'
 import type { AnalysisResult } from '@/types/analysis'
 import type { ReasoningStep } from '@/types/chat'
@@ -73,55 +73,46 @@ function ResultsContent() {
   }, [url])
 
   return (
-    <ResultsLayout result={result} reasoningSteps={reasoningSteps} loading={loading} error={error} url={url} />
+    <ResultsLayout result={result} loading={loading} error={error} url={url} />
   )
 }
 
-function ResultsLayout({ result, reasoningSteps, loading, error, url }: { result: AnalysisResult | null; reasoningSteps: ReasoningStep[]; loading: boolean; error: string | null; url: string }) {
+function ResultsLayout({
+  result,
+  loading,
+  error,
+  url,
+}: {
+  result: AnalysisResult | null
+  loading: boolean
+  error: string | null
+  url: string
+}) {
   return (
-    <div className="dark bg-background text-on-surface font-body">
+    <div className="min-h-screen bg-[#10131a] text-[#e1e2eb]">
       {/* Top Nav */}
-      <header className="fixed top-0 w-full z-50 bg-[#10131a]/80 backdrop-blur-xl border-b border-outline-variant/10">
-        <div className="flex items-center justify-between px-8 h-16 w-full max-w-screen-2xl mx-auto">
-          <div className="flex items-center gap-4">
-            <span className="text-xl font-bold tracking-tighter text-[#e1e2eb] font-headline">CAPYSAN</span>
-          </div>
-          <div className="hidden md:flex items-center gap-8">
-            <nav className="flex gap-8 items-center h-full font-manrope tracking-tight text-sm font-semibold">
-              <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors" href="#">About</a>
-              <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors" href="#">Personas</a>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#94d3c3] hover:text-[#e1e2eb] cursor-pointer active:scale-95 duration-200">settings</span>
-              <span className="material-symbols-outlined text-[#94d3c3] hover:text-[#e1e2eb] cursor-pointer active:scale-95 duration-200">notifications</span>
-            </div>
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/20 active:scale-95 transition-transform bg-surface-container"></div>
-          </div>
-        </div>
+      <header className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 md:px-8 bg-[#10131a]/95 backdrop-blur-xl border-b border-[#2a3a36]/50">
+        <Link href="/" className="text-xl font-bold tracking-tighter text-[#e1e2eb] hover:text-[#00f5d4] transition-colors">
+          CAPYSAN
+        </Link>
+        <nav className="flex items-center gap-8">
+          <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors text-sm font-medium" href="#">About</a>
+          <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors text-sm font-medium" href="#">Personas</a>
+        </nav>
       </header>
 
       {/* Main Content */}
-      <main className="pt-24 pb-16 min-h-screen bg-surface">
-        <div className="max-w-screen-2xl mx-auto px-8 flex flex-col lg:flex-row gap-8">
-          {/* Left Sidebar - Reasoning Timeline */}
-          <div className="lg:w-80 flex-shrink-0">
-            <ReasoningTimeline steps={reasoningSteps} loading={loading} />
+      <main className="pt-20 pb-16 min-h-screen bg-[#10131a]">
+        {error ? (
+          <div className="max-w-6xl mx-auto px-6 md:px-8">
+            <div className="p-8 bg-[#93000a]/20 border border-[#ffb4ab]/50 rounded-xl text-[#ffb4ab]">
+              <p className="font-bold mb-2">Analysis Error</p>
+              <p className="text-sm">{error}</p>
+            </div>
           </div>
-
-          {/* Right Content - Analysis Dashboard */}
-          <div className="flex-1">
-            {error ? (
-              <div className="p-8 bg-error-container/20 border border-error/30 rounded-xl text-error">
-                <p className="font-bold mb-2">Analysis Error</p>
-                <p className="text-sm">{error}</p>
-              </div>
-            ) : (
-              <AnalysisDashboard result={result} loading={loading} url={url} />
-            )}
-          </div>
-        </div>
+        ) : (
+          <AnalysisDashboard result={result} loading={loading} url={url} />
+        )}
       </main>
     </div>
   )
@@ -129,7 +120,13 @@ function ResultsLayout({ result, reasoningSteps, loading, error, url }: { result
 
 export default function ResultsPage() {
   return (
-    <Suspense fallback={<div className="dark bg-background text-on-surface font-body min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#10131a] text-[#e1e2eb] flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
       <ResultsContent />
     </Suspense>
   )
