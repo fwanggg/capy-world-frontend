@@ -1170,11 +1170,21 @@ export async function callCapybaraAI(
     // Check if there are tool calls
     if (response.tool_calls && response.tool_calls.length > 0) {
       console.log('[ORCHESTRATOR] Processing', response.tool_calls.length, 'tool calls')
-      // Append the assistant's response first
-      messages.push(response)
+      // Normalize tool_call IDs before pushing to ensure consistency
+      const normalizedToolCalls = response.tool_calls.map((tc: any) => ({
+        ...tc,
+        id: tc.id || tc.tool_call_id || `${tc.name}_${iterations}_${Math.random().toString(36).slice(2, 9)}`,
+      }))
+
+      // Create a new AIMessage with normalized tool_calls
+      const normalizedResponse = {
+        ...response,
+        tool_calls: normalizedToolCalls,
+      }
+      messages.push(normalizedResponse)
 
       // Process tool calls
-      for (const toolCall of response.tool_calls) {
+      for (const toolCall of normalizedToolCalls) {
         let toolResult: string
         let toolOutput: any = null
         console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
@@ -1567,9 +1577,10 @@ export async function callCapybaraAI(
         }
 
         // Append tool message to continue conversation
+        // Use the normalized ID from the AIMessage
         messages.push(
           new ToolMessage({
-            tool_call_id: toolCall.id || `${toolCall.name}_${Date.now()}`,
+            tool_call_id: toolCall.id,
             content: toolResult,
             name: toolCall.name,
           })
@@ -1728,9 +1739,20 @@ export async function callAnalysisAI(
     console.log('[ORCHESTRATOR] LLM response received, tool_calls:', response.tool_calls?.length || 0)
 
     if (response.tool_calls && response.tool_calls.length > 0) {
-      messages.push(response)
+      // Normalize tool_call IDs before pushing to ensure consistency
+      const normalizedToolCalls = response.tool_calls.map((tc: any) => ({
+        ...tc,
+        id: tc.id || tc.tool_call_id || `${tc.name}_${iterations}_${Math.random().toString(36).slice(2, 9)}`,
+      }))
 
-      for (const toolCall of response.tool_calls) {
+      // Create a new AIMessage with normalized tool_calls
+      const normalizedResponse = {
+        ...response,
+        tool_calls: normalizedToolCalls,
+      }
+      messages.push(normalizedResponse)
+
+      for (const toolCall of normalizedToolCalls) {
         // Skip duplicate tool calls (same tool called more than once)
         if (toolsAlreadyCalled.has(toolCall.name)) {
           console.log(`[ORCHESTRATOR] Skipping duplicate tool call: ${toolCall.name}`)
@@ -1843,7 +1865,8 @@ export async function callAnalysisAI(
           toolResult = JSON.stringify({ error: `Tool execution failed: ${errorMsg}` })
         }
 
-        const toolCallId = toolCall.id ?? (toolCall as { tool_call_id?: string }).tool_call_id ?? `${toolCall.name}_${iterations}_${toolsAlreadyCalled.size}`
+        // Use the ID that's already in the normalized toolCall
+        const toolCallId = toolCall.id
         console.log(`[ORCHESTRATOR] Creating ToolMessage with id: ${toolCallId}`)
         messages.push(
           new ToolMessage({
