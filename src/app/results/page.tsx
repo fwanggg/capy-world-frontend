@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
-import Link from 'next/link'
+import { AnalysisNav } from '@/components/analysis/AnalysisNav'
 import AnalysisDashboard from '@/components/AnalysisDashboard'
 import type { AnalysisResult } from '@/types/analysis'
 import type { ReasoningStep } from '@/types/chat'
@@ -11,7 +11,6 @@ function ResultsContent() {
   const searchParams = useSearchParams()
   const url = searchParams.get('url') || ''
   const [result, setResult] = useState<AnalysisResult | null>(null)
-  const [reasoningSteps, setReasoningSteps] = useState<ReasoningStep[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,9 +47,8 @@ function ResultsContent() {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6))
-
                 if (data.type === 'progress') {
-                  setReasoningSteps((prev) => [...prev, data.step])
+                  // progress steps
                 } else if (data.type === 'complete') {
                   setResult(data.result)
                 } else if (data.type === 'error') {
@@ -89,23 +87,13 @@ function ResultsLayout({
   url: string
 }) {
   return (
-    <div className="min-h-screen bg-[#10131a] text-[#e1e2eb]">
-      {/* Top Nav */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 md:px-8 bg-[#10131a]/95 backdrop-blur-xl border-b border-[#2a3a36]/50">
-        <Link href="/" className="text-xl font-bold tracking-tighter text-[#e1e2eb] hover:text-[#00f5d4] transition-colors">
-          CAPYSAN
-        </Link>
-        <nav className="flex items-center gap-8">
-          <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors text-sm font-medium" href="#">About</a>
-          <a className="text-[#94d3c3] hover:text-[#00f5d4] transition-colors text-sm font-medium" href="#">Personas</a>
-        </nav>
-      </header>
+    <div className="bg-[#10131a] text-on-surface font-body selection:bg-primary-container selection:text-on-primary-fixed min-h-screen">
+      <AnalysisNav />
 
-      {/* Main Content */}
-      <main className="pt-20 pb-16 min-h-screen bg-[#10131a]">
+      <main className="pt-24 pb-16 min-h-screen bg-surface">
         {error ? (
-          <div className="max-w-6xl mx-auto px-6 md:px-8">
-            <div className="p-8 bg-[#93000a]/20 border border-[#ffb4ab]/50 rounded-xl text-[#ffb4ab]">
+          <div className="max-w-screen-2xl mx-auto px-8">
+            <div className="p-8 bg-error-container/20 border border-error/30 rounded-xl text-error">
               <p className="font-bold mb-2">Analysis Error</p>
               <p className="text-sm">{error}</p>
             </div>
@@ -114,6 +102,13 @@ function ResultsLayout({
           <AnalysisDashboard result={result} loading={loading} url={url} />
         )}
       </main>
+
+      {/* Stitch FAB */}
+      <div className="fixed bottom-8 right-8 z-50">
+        <button className="w-14 h-14 bg-primary-container text-on-primary-fixed rounded-full shadow-[0_10px_30px_rgba(0,245,212,0.4)] flex items-center justify-center active:scale-90 transition-transform hover:shadow-[0_15px_40px_rgba(0,245,212,0.6)]" aria-label="Add">
+          <span className="material-symbols-outlined" style={{ fontVariationSettings: "'wght' 700" }}>add</span>
+        </button>
+      </div>
     </div>
   )
 }
@@ -122,7 +117,7 @@ export default function ResultsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#10131a] text-[#e1e2eb] flex items-center justify-center">
+        <div className="bg-[#10131a] text-on-surface font-body min-h-screen flex items-center justify-center">
           Loading...
         </div>
       }

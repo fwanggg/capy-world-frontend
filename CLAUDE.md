@@ -22,6 +22,12 @@ Everything runs as a **single Next.js application** on one port (default 3000).
 
 ✅ **Authentication Clarified** — No custom users table; all auth managed by Supabase Auth exclusively. Updated documentation for clarity.
 
+## Stitch UX Conversion (MANDATORY)
+
+**Before any UX changes from Stitch designs, read `docs/STITCH_UX_CHECKLIST.md`.**
+
+Key rules: (1) Copy Stitch source exactly — no "improvements." (2) Use `<link>` in layout for fonts, not CSS `@import`. (3) Do not add `* { margin: 0; padding: 0 }` — Tailwind v4 cascade layers mean unlayered `*` overrides utilities like `mx-auto` and breaks centering.
+
 ## Architecture
 
 ### Project Structure

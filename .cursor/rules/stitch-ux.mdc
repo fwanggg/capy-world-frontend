@@ -1,0 +1,16 @@
+---
+description: Stitch UX conversion rules — read before converting Stitch designs to React
+globs: "src/components/landing/**"
+alwaysApply: false
+---
+
+# Stitch UX Conversion Rules
+
+**Before editing these files, read `docs/STITCH_UX_CHECKLIST.md`.**
+
+## Quick Reference
+
+1. **Copy exactly** — Match Stitch HTML/classes byte-for-byte. No "improvements."
+2. **Fonts** — Use `<link>` in `layout.tsx` for Material Symbols, not CSS `@import`.
+3. **No `*` reset** — Do not add `* { margin: 0; padding: 0 }`. Tailwind v4 cascade layers: unlayered `*` overrides utilities like `mx-auto` and breaks centering.
+4. **Verify** — Compare with Stitch source; check icons render (not as text) and centering works.

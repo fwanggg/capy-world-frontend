@@ -1740,7 +1740,7 @@ export async function callAnalysisAI(
 
         let toolResult: string
         let toolOutput: any = null
-        console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
+        console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`, 'tool_call_id:', toolCall.id)
 
         try {
           if (toolCall.name === 'analyze_landing_page') {
@@ -1843,9 +1843,11 @@ export async function callAnalysisAI(
           toolResult = JSON.stringify({ error: `Tool execution failed: ${errorMsg}` })
         }
 
+        const toolCallId = toolCall.id ?? (toolCall as { tool_call_id?: string }).tool_call_id ?? `${toolCall.name}_${iterations}_${toolsAlreadyCalled.size}`
+        console.log(`[ORCHESTRATOR] Creating ToolMessage with id: ${toolCallId}`)
         messages.push(
           new ToolMessage({
-            tool_call_id: toolCall.id || `${toolCall.name}_${Date.now()}`,
+            tool_call_id: toolCallId,
             content: toolResult,
             name: toolCall.name,
           })

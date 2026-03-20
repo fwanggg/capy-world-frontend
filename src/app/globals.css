@@ -1,20 +1,21 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap");
+/* Stitch design system */
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
-/* Material Design 3 Color System - Capysan Dark Mode */
-:root {
-  /* Material Design 3 Semantic Colors */
-  --color-background: #10131a;
-  --color-surface: #10131a;
-  --color-surface-dim: #10131a;
+@theme {
+  /* Stitch colors - exact from code.html */
+  --color-background: #0a0c10;
+  --color-surface: #0a0c10;
+  --color-surface-dim: #0a0c10;
+  --color-surface-container-lowest: #06080b;
+  --color-surface-container-low: #0f1218;
+  --color-surface-container: #12151c;
+  --color-surface-container-high: #1a1d24;
+  --color-surface-container-highest: #2c3038;
+  --color-surface-variant: #22262d;
   --color-surface-bright: #363940;
-  --color-surface-container-lowest: #0b0e14;
-  --color-surface-container-low: #191c22;
-  --color-surface-container: #1d2026;
-  --color-surface-container-high: #272a31;
-  --color-surface-container-highest: #32353c;
-
+  --color-outline: #83948f;
+  --color-outline-variant: #2a3a36;
   --color-primary: #d7fff3;
   --color-primary-container: #00f5d4;
   --color-primary-fixed: #26fedc;
@@ -23,16 +24,23 @@
   --color-on-primary-container: #006c5c;
   --color-on-primary-fixed: #00201a;
   --color-on-primary-fixed-variant: #005144;
-
   --color-secondary: #94d3c3;
   --color-secondary-container: #0b5347;
   --color-secondary-fixed: #afefdf;
   --color-secondary-fixed-dim: #94d3c3;
   --color-on-secondary: #00382f;
-  --color-on-secondary-fixed: #00201a;
-  --color-on-secondary-fixed-variant: #065045;
   --color-on-secondary-container: #86c4b5;
-
+  --color-on-background: #e1e2eb;
+  --color-on-surface: #e1e2eb;
+  --color-on-surface-variant: #b9cac4;
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error: #690005;
+  --color-on-error-container: #ffdad6;
+  --color-inverse-surface: #e1e2eb;
+  --color-inverse-on-surface: #2e3037;
+  --color-inverse-primary: #006b5b;
+  --color-surface-tint: #00dfc1;
   --color-tertiary: #fff5e4;
   --color-tertiary-container: #ffd651;
   --color-tertiary-fixed: #ffe086;
@@ -41,79 +49,22 @@
   --color-on-tertiary-container: #745c00;
   --color-on-tertiary-fixed: #231b00;
   --color-on-tertiary-fixed-variant: #574500;
+  --color-on-secondary-fixed: #00201a;
+  --color-on-secondary-fixed-variant: #065045;
 
-  --color-error: #ffb4ab;
-  --color-error-container: #93000a;
-  --color-on-error: #690005;
-  --color-on-error-container: #ffdad6;
-
-  --color-outline: #83948f;
-  --color-outline-variant: #3a4a46;
-
-  --color-on-background: #e1e2eb;
-  --color-on-surface: #e1e2eb;
-  --color-on-surface-variant: #b9cac4;
-
-  --color-inverse-surface: #e1e2eb;
-  --color-inverse-on-surface: #2e3037;
-  --color-inverse-primary: #006b5b;
-  --color-surface-tint: #00dfc1;
-
-  /* Legacy variables for compatibility */
-  --font-display: "Manrope", sans-serif;
   --font-headline: "Manrope", sans-serif;
   --font-body: "Inter", sans-serif;
   --font-label: "Inter", sans-serif;
 
-  --color-navy: var(--color-background);
-  --color-navy-light: var(--color-surface-container);
-  --color-navy-lighter: var(--color-surface-container-high);
-  --color-teal: var(--color-primary-container);
-  --color-teal-light: var(--color-primary-fixed-dim);
-  --color-white: #ffffff;
-
-  /* Dark mode semantic surfaces */
-  --color-surface-1: var(--color-surface);
-  --color-surface-2: var(--color-surface-container);
-  --color-surface-3: var(--color-surface-container-high);
-  --color-border: var(--color-outline-variant);
-  --color-text-primary: var(--color-on-surface);
-  --color-text-secondary: var(--color-on-surface-variant);
-
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-base: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
-  --space-2xl: 3rem;
-  --space-3xl: 4rem;
-  --space-4xl: 6rem;
-
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 2rem;
-  --text-4xl: 2.5rem;
-  --text-5xl: 3rem;
-
-  --line-tight: 1.2;
-  --line-normal: 1.5;
-  --line-relaxed: 1.75;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --radius-default: 0.125rem;
+  --radius-lg: 0.4rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
 }
 
+/* Material Symbols - exact from Stitch code.html */
 .material-symbols-outlined {
-  font-family: 'Material Symbols Outlined';
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  display: inline-block;
-  line-height: 1;
-  font-size: 1.5rem;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
 }
 
 .bg-hero-gradient {
@@ -124,109 +75,59 @@
   text-shadow: 0 0 30px rgba(0, 245, 212, 0.3);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
+/* Avoid * reset - Tailwind v4 uses cascade layers; unlayered * overrides mx-auto and other utilities */
 html,
 body {
-  height: 100%;
-  width: 100%;
-  font-family: var(--font-body);
-  background-color: var(--color-navy);
-  color: var(--color-text-primary);
-  line-height: var(--line-normal);
-}
-
-body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+html {
+  box-sizing: border-box;
+}
+*, *::before, *::after {
+  box-sizing: inherit;
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-sm) var(--space-xl);
-  font-size: var(--text-base);
-  font-weight: 600;
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-decoration: none;
-}
-
-.btn-primary {
-  background-color: var(--color-teal);
-  color: var(--color-white);
-  box-shadow: var(--shadow-md);
-}
-
-.btn-primary:hover {
-  background-color: var(--color-teal-light);
-  box-shadow: var(--shadow-lg);
-}
-
-.card {
-  background-color: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  padding: var(--space-xl);
-  box-shadow: var(--shadow-sm);
-}
-
-.container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 var(--space-xl);
-}
-
-.grid {
-  display: grid;
-  gap: var(--space-xl);
-}
-
-.grid-2 {
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-}
-
-/* Landing use case animation keyframes */
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes popIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+/* Compatibility vars for markdown.css and other components - mapped to Stitch tokens */
+:root {
+  --color-navy: #0a0c10;
+  --color-navy-light: #12151c;
+  --color-navy-lighter: #1a1d24;
+  --color-teal: #00f5d4;
+  --color-teal-light: #00dfc1;
+  --color-white: #ffffff;
+  --color-gray-200: #2a3a36;
+  --color-gray-500: #a2b1ad;
+  --color-gray-700: #83948f;
+  --color-gray-100: #f1f2f8;
+  --color-surface-1: #0a0c10;
+  --color-surface-2: #12151c;
+  --color-surface-3: #1a1d24;
+  --color-border: #2a3a36;
+  --color-text-primary: #f1f2f8;
+  --color-text-secondary: #a2b1ad;
+  --font-body: "Inter", sans-serif;
+  --font-headline: "Manrope", sans-serif;
+  --line-relaxed: 1.75;
+  --line-tight: 1.2;
+  --line-normal: 1.5;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-base: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @import "./styles/markdown.css";
