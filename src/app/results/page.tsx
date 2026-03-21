@@ -25,9 +25,9 @@ function ResultsContent() {
   const [authRejected, setAuthRejected] = useState(false) // 401/403 - don't show "did not complete"
   const mountedRef = useRef(true)
   const fetchIdRef = useRef(0)
+  const fetchingRef = useRef(false)
 
-  // Show sign-in when auth is ready, we have a URL, and user is not logged in
-  const needsSignIn = !authLoading && url && !user && !dismissedSignIn
+  const needsSignIn = false // Analyze works without auth
 
   useEffect(() => {
     mountedRef.current = true
@@ -41,12 +41,11 @@ function ResultsContent() {
       setLoading(false)
       return
     }
-    if (!user) {
-      setLoading(false)
-      return
-    }
+    // Prevent duplicate fetches: auth refresh (new user object) or Strict Mode remount
+    if (fetchingRef.current) return
 
     setAuthRejected(false)
+    fetchingRef.current = true
     const currentFetchId = ++fetchIdRef.current
     const fetchAnalysis = async () => {
       setLoading(true)
@@ -54,33 +53,25 @@ function ResultsContent() {
       setReasoningSteps([])
       setShowSignIn(false)
       try {
-        let session: { access_token?: string } | null = null
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         try {
           const { data } = await getSupabaseClient().auth.getSession()
-          session = data.session
+          if (data.session?.access_token) {
+            headers.Authorization = `Bearer ${data.session.access_token}`
+          }
         } catch {
-          setShowSignIn(true)
-          setLoading(false)
-          return
-        }
-
-        if (!session?.access_token) {
-          setShowSignIn(true)
-          setLoading(false)
-          return
+          // No auth — analyze works without it
         }
 
         const res = await fetch('/api/analyze', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers,
           body: JSON.stringify({ url }),
           // No AbortController - Strict Mode double-mount was aborting the first fetch before it could complete
         })
 
         if (res.status === 401) {
+          fetchingRef.current = false
           if (mountedRef.current) {
             setAuthRejected(true)
             setShowSignIn(true)
@@ -90,6 +81,7 @@ function ResultsContent() {
         }
 
         if (res.status === 403) {
+          fetchingRef.current = false
           const data = await res.json().catch(() => ({}))
           setError((data as { error?: string })?.error ?? 'Access denied. Please sign up at /waitlist first.')
           setLoading(false)
@@ -142,6 +134,7 @@ function ResultsContent() {
           setError(err instanceof Error ? err.message : 'Analysis failed')
         }
       } finally {
+        fetchingRef.current = false
         if (mountedRef.current && currentFetchId === fetchIdRef.current) {
           setLoading(false)
         }
@@ -149,9 +142,9 @@ function ResultsContent() {
     }
 
     fetchAnalysis()
-  }, [url, user, retryKey])
+  }, [url, retryKey])
 
-  const canRetry = Boolean(url && user)
+  const canRetry = Boolean(url)
   return (
     <>
       <ResultsLayout

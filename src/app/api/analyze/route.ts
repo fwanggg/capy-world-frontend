@@ -1,6 +1,6 @@
 import { MOM_TEST_QUESTIONS, MOM_TEST_V2 } from '@/data/momTestV2'
-import { supabase } from '@/lib/supabase'
-import { requireAuth, requireApproval } from '@/lib/auth'
+import { supabase, supabaseAdmin } from '@/lib/supabase'
+import { getAuthFromRequest, requireApproval } from '@/lib/auth'
 import { callAnalysisAI, type CallCapybaraAIResponse } from '@/lib/langgraph-orchestrator'
 import { deriveHeatMapFromMomTestAnswers } from '@/lib/heatmap-from-momtest'
 import type { AnalysisResult, CloneResponse, ActionItem, HeatMap, ParticipantDemographics, MomsTestConsolidated } from '@/types/analysis'
@@ -490,22 +490,18 @@ async function buildAnalysisResult(
   }
 }
 
+const ANON_USER_ID = '00000000-0000-0000-0000-000000000001' // Hardcoded for unauthenticated analyze
+
 export async function POST(req: Request) {
   try {
-    console.log('[analyze] Auth check start')
-    const auth = await requireAuth(req)
-    if (auth instanceof Response) {
-      console.log('[analyze] Auth failed: 401 (missing/invalid token)')
-      return auth
-    }
-    console.log('[analyze] Auth OK userId=', auth.userId)
+    const auth = await getAuthFromRequest(req)
+    const userId = auth?.userId ?? ANON_USER_ID
+    const isAnonymous = !auth
 
-    const approval = await requireApproval(req, auth.userId)
-    if (approval) {
-      console.log('[analyze] Approval failed: 403 (not on waitlist or pending)')
-      return approval
+    if (auth) {
+      const approval = await requireApproval(req, auth.userId)
+      if (approval) return approval
     }
-    console.log('[analyze] Approval OK, proceeding')
 
     const body = await req.json()
     const { url } = body as { url?: string }
@@ -527,21 +523,22 @@ export async function POST(req: Request) {
       )
     }
 
-    // Create analysis session for authenticated user
+    // Create analysis session (use admin client for anonymous to bypass RLS)
     const sessionId = crypto.randomUUID()
-    const { error: sessionError } = await supabase
+    const sessionClient = isAnonymous && supabaseAdmin ? supabaseAdmin : supabase
+    const { error: sessionError } = await sessionClient
       .from('chat_sessions')
       .insert({
         id: sessionId,
-        user_id: auth.userId,
+        user_id: userId,
         active_clones: [],
         mode: 'god',
-        metadata: { url, source: 'analyze' },
+        metadata: { url, source: 'analyze', anonymous: isAnonymous },
       })
 
     if (sessionError) {
       console.error('[ANALYZE] Session creation error:', sessionError)
-      // Continue anyway - session might already exist or user_id constraint might not apply
+      // Continue anyway - analysis can proceed with in-memory session
     }
 
     const encoder = new TextEncoder()

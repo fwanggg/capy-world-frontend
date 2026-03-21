@@ -3,9 +3,15 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseKey =
   process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /** Server-side Supabase client. Uses anon key only — never service_role, never bypasses RLS. */
 export const supabase = createClient(supabaseUrl, supabaseKey);
+
+/** Service role client — bypasses RLS. Use only for server-side ops that need elevated access (e.g. anonymous analyze). */
+export const supabaseAdmin = serviceRoleKey
+  ? createClient(supabaseUrl, serviceRoleKey)
+  : null;
 
 /** Server-side client for Edge Function invocation. Uses anon key only — never service_role. */
 const supabaseForFunctions = createClient(
