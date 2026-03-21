@@ -8,6 +8,8 @@ interface SignInDialogProps {
   onClose: () => void
   title?: string
   message?: string
+  /** Redirect URL after sign-in (default: current page) */
+  redirectTo?: string
 }
 
 export function SignInDialog({
@@ -15,6 +17,7 @@ export function SignInDialog({
   onClose,
   title = 'Sign in to Analyze',
   message = 'Sign in with Google to analyze landing pages and get feedback from AI personas.',
+  redirectTo,
 }: SignInDialogProps) {
   const { signInWithGoogle, error: authError } = useAuthClient()
   const [loading, setLoading] = useState(false)
@@ -25,7 +28,7 @@ export function SignInDialog({
     try {
       setLoading(true)
       setLocalError(null)
-      await signInWithGoogle()
+      await signInWithGoogle(redirectTo)
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Sign in failed')
       setLoading(false)

@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { UserMenu } from '@/components/UserMenu'
 
 export function LandingNav() {
   return (
@@ -14,6 +17,7 @@ export function LandingNav() {
         <div className="flex items-center gap-4">
           <button className="material-symbols-outlined text-[#94d3c3] hover:bg-[#1d2026] p-2 rounded-lg transition-all active:scale-95 duration-200" aria-label="Notifications">notifications</button>
           <button className="material-symbols-outlined text-[#94d3c3] hover:bg-[#1d2026] p-2 rounded-lg transition-all active:scale-95 duration-200" aria-label="Settings">settings</button>
+          <UserMenu showName />
         </div>
       </div>
     </nav>

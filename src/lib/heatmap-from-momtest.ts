@@ -1,7 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai'
 import { HumanMessage } from '@langchain/core/messages'
 import type { HeatMap, MomsTestConsolidated } from '@/types/analysis'
-import { MOM_TEST_QUESTIONS } from '@/data/momTestV2'
+import { MOM_TEST_QUESTIONS, MOM_TEST_V2 } from '@/data/momTestV2'
 
 /** DeepSeek does not support withStructuredOutput (json_schema). Use plain JSON + parse. */
 
@@ -97,10 +97,11 @@ export async function deriveHeatMapFromMomTestAnswers(
   momsTest: MomsTestConsolidated,
   productContext?: { problem?: string; solution?: string }
 ): Promise<HeatMap> {
+  // Include ALL answers for fidelity: if 10 interviewed, sum of theme counts = 10. No filtering.
   const allAnswers: Array<{ key: string; label: string; answers: Array<{ answer: string }> }> = []
   let totalCount = 0
   for (const { key, label } of MOM_TEST_QUESTIONS) {
-    const arr = momsTest[key]?.filter((a) => a.answer && a.answer !== '—' && a.answer !== 'No response') ?? []
+    const arr = momsTest[key] ?? []
     allAnswers.push({ key, label, answers: arr })
     totalCount += arr.length
   }
@@ -108,7 +109,12 @@ export async function deriveHeatMapFromMomTestAnswers(
   if (totalCount === 0) {
     return {
       conclusion: 'No participant responses to aggregate.',
-      rows: MOM_TEST_QUESTIONS.map((q) => ({ question: q.label, questionKey: q.key, themes: [] })),
+      rows: MOM_TEST_QUESTIONS.map((q) => ({
+        question: q.label,
+        questionKey: q.key,
+        questionText: MOM_TEST_V2[q.key as keyof typeof MOM_TEST_V2],
+        themes: [],
+      })),
     }
   }
 
@@ -133,13 +139,14 @@ Product context: ${productContext?.problem ?? 'N/A'} — ${productContext?.solut
 PARTICIPANT ANSWERS:
 ${participantText}
 
-CRITICAL: Each participant answers ONCE per question. Assign each answer to exactly ONE theme.
-- Each participant contributes to exactly one theme per question. Sum of theme counts per question MUST equal the number of participants who answered that question (no double-counting).
-- AGGREGATE similar concepts into a single canonical theme label. E.g. "Willing to test if integrates well" (P1) and "Willing to test if Godot integration" (P2) → both assign to "Willing to test if integration works well". Use consistent labels so similar answers group together.
+FIDELITY (CRITICAL): Every participant MUST be assigned to exactly ONE theme per question. Sum of theme counts per question MUST equal the number of participants (P1, P2, ... PN).
+- If an answer is "—", "No response", "not relevant", vague, or low-quality, assign it to "Not relevant". Never drop a participant.
+- MERGE AGGRESSIVELY: Create at most 4–6 canonical themes per question. Combine similar phrasings into one label (e.g. "Manual outreach to forums" and "Manual outreach to communities" → "Manual outreach"). Never create more than 6 distinct themes.
 - If an answer mentions multiple concepts, pick the PRIMARY one for assignment.
+- Use 3–5 substantive themes + "Not relevant" for non-substantive answers. Avoid granular one-off labels.
 
 TASK:
-1. For EACH question, assign each participant (P1, P2, ...) to exactly ONE theme. Use aggregated/canonical labels for similar concepts so they group naturally.
+1. For EACH question, assign EVERY participant (P1, P2, ...) to exactly ONE theme. Sum of counts = N. Merge similar answers into top themes; put non-substantive answers in "Not relevant".
 2. Write ONE conclusion that synthesizes the patterns.
 3. Assign a status: "High Resistance" (mostly negative), "Mixed Signals", or "Strong Fit" (mostly positive).
 
@@ -163,7 +170,7 @@ Respond with ONLY valid JSON, no other text. Use these exact questionKeys:
     "q6_expansion": [...]
   }
 }
-Each question's assignments array must have one entry per participant (P1, P2, ...) listed for that question. Theme labels: short (3-6 words), no double-quotes or newlines inside (use apostrophes if needed).`
+Each question's assignments array must have exactly one entry per participant (P1, P2, ... PN). Theme labels: short (3-6 words), no double-quotes or newlines inside (use apostrophes if needed). Sum of theme counts per question MUST equal N. Aim for 4–6 themes per question max; merge similar answers into canonical labels. Include "Not relevant" for non-substantive answers.`
 
   const response = await llm.invoke([new HumanMessage(prompt)])
   const raw = response.content
@@ -178,23 +185,41 @@ Each question's assignments array must have one entry per participant (P1, P2, .
     console.error('[heatmap] Failed to parse LLM JSON. Raw (first 500 chars):', content.slice(0, 500))
     return {
       conclusion: 'Failed to parse heat map from response.',
-      rows: MOM_TEST_QUESTIONS.map((q) => ({ question: q.label, questionKey: q.key, themes: [] })),
+      rows: MOM_TEST_QUESTIONS.map((q) => ({
+        question: q.label,
+        questionKey: q.key,
+        questionText: MOM_TEST_V2[q.key as keyof typeof MOM_TEST_V2],
+        themes: [],
+      })),
     }
   }
 
-  // Derive themes from assignments: group by theme label, count = participants. Guarantees sum = participantCount.
   const assignments = (parsed.assignments as Record<string, Array<{ p?: string; theme?: string }>>) ?? {}
   const rows = MOM_TEST_QUESTIONS.map((q) => {
+    const expectedCount = allAnswers.find((a) => a.key === q.key)?.answers.length ?? 0
     const arr = assignments[q.key] ?? []
     const byTheme = new Map<string, number>()
     for (const { theme } of arr) {
       const t = (theme || '').trim()
       if (t) byTheme.set(t, (byTheme.get(t) ?? 0) + 1)
     }
+    const assignedSum = [...byTheme.values()].reduce((a, b) => a + b, 0)
+    if (assignedSum < expectedCount) {
+      const gap = expectedCount - assignedSum
+      byTheme.set('Not categorized', (byTheme.get('Not categorized') ?? 0) + gap)
+      console.warn(`[heatmap] ${q.key}: LLM assigned ${assignedSum}/${expectedCount}, adding "Not categorized" for ${gap}`)
+    }
     const themes = [...byTheme.entries()]
       .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count)
-    return { question: q.label, questionKey: q.key, themes }
+      .sort((a, b) => {
+        const aOther = /not relevant|other|not categorized/i.test(a.label)
+        const bOther = /not relevant|other|not categorized/i.test(b.label)
+        if (aOther && !bOther) return 1
+        if (!aOther && bOther) return -1
+        return b.count - a.count
+      })
+    const questionText = MOM_TEST_V2[q.key as keyof typeof MOM_TEST_V2]
+    return { question: q.label, questionKey: q.key, questionText, themes }
   })
 
   return {

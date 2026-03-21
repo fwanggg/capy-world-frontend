@@ -1,5 +1,8 @@
+'use client'
+
 import Link from 'next/link'
 import { navLinks } from '@/data/personasPageData'
+import { UserMenu } from '@/components/UserMenu'
 
 interface PersonasNavProps {
   readonly activeLink?: string
@@ -40,6 +43,7 @@ export function PersonasNav({ activeLink = 'personas' }: Readonly<PersonasNavPro
           >
             settings
           </button>
+          <UserMenu showName />
         </div>
       </div>
     </nav>

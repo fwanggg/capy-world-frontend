@@ -1,8 +1,10 @@
 import type { ParticipantDemographics } from '@/types/analysis'
+import { AnalysisCard } from './AnalysisCard'
 import { DemographicsBarChartCard } from './DemographicsBarChartCard'
 
 interface ParticipantsDemographicsCardProps {
   readonly demographics: ParticipantDemographics
+  readonly className?: string
 }
 
 /** Participant count — use profession sum as canonical (each person has one profession) */
@@ -15,43 +17,44 @@ function getParticipantCount(d: ParticipantDemographics): number {
   )
 }
 
-/** Who joined — Stitch design: aggregated persona distribution, teal accent, percentage bars */
-export function ParticipantsDemographicsCard({ demographics }: Readonly<ParticipantsDemographicsCardProps>) {
+/** Participants Who Joined — single card with scrollable sub-areas (Profession, Age, Gender, Interests) */
+export function ParticipantsDemographicsCard({ demographics, className }: Readonly<ParticipantsDemographicsCardProps>) {
   const participantCount = getParticipantCount(demographics)
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <p className="text-sm text-on-surface-variant font-body">
-          Aggregated Persona Distribution
-        </p>
-        <p className="text-sm font-semibold text-primary-container tabular-nums">
-          {participantCount.toLocaleString()} Total Participants
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <AnalysisCard
+      title="Participants Who Joined"
+      subtitle={`${participantCount.toLocaleString()} total participants`}
+      scrollable
+      className={className}
+    >
+      <div className="space-y-6">
         <DemographicsBarChartCard
           title="Profession"
           icon="work"
           items={demographics.professions}
+          compact
         />
         <DemographicsBarChartCard
           title="Age Groups"
           icon="calendar_month"
           items={demographics.ageGroups}
+          compact
         />
         <DemographicsBarChartCard
           title="Gender Segment"
           icon="diversity_3"
           items={demographics.demographics}
           footnote="Participants who joined the survey"
+          compact
         />
         <DemographicsBarChartCard
           title="Interests"
           icon="insights"
           items={demographics.interests}
+          compact
         />
       </div>
-    </div>
+    </AnalysisCard>
   )
 }

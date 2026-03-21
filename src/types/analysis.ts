@@ -25,10 +25,12 @@ export interface HeatMap {
   conclusion: string
   /** Status label (e.g. "High Resistance", "Mixed Signals") */
   status?: string
-  /** Each row = one Mom's Test question, themes = categorized answers with counts */
+  /** Each row = one Mom's Test question, themes = categorized answers with counts (max 3 per row) */
   rows: Array<{
     question: string
     questionKey: string
+    /** Full question text asked to participants */
+    questionText?: string
     themes: Array<{ label: string; count: number }>
   }>
 }

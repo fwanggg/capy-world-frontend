@@ -4,7 +4,6 @@ import { supabase, supabaseForFunctions } from './supabase'
 import { tool } from '@langchain/core/tools'
 import { z } from 'zod'
 import { log } from './logging'
-import { wouldExceedPersonaLimit } from './persona-limit'
 import { extractGoogleForm, submitGoogleForm } from './google-forms'
 import { scrapeLandingPage } from './scrape-url'
 import type { VisualizationPayload, ChartSpec } from '@/types/chat'
@@ -189,7 +188,6 @@ IMPORTANT TIPS:
 - After any recruit/release operation, consider calling list_clones() to confirm changes
 - When releasing specific clones, you need their IDs - ask user if unclear
 - Be conversational and explain what you're doing: "I'm adding 3 engineers in their 30s..."
-- Persona limit: Each customer has a max of 50 personas across all study rooms. If create_conversation_session or recruit_clones returns a limit error, tell the user to release some personas first.
 - When a tool returns an error (e.g. search_clones "Embed search failed"), relay it clearly to the user so they know what went wrong. Do not pretend the operation succeeded.
 
 ${labeledHistory ? `CONVERSATION HISTORY:\n${labeledHistory}\n` : ''}
@@ -513,7 +511,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
     demoMode: isDemoMode,
   })
 
-  // Fetch session to get user_id for limit check
+  // Fetch session to get user_id
   const { data: session, error: sessionErr } = await supabase
     .from('chat_sessions')
     .select('user_id')
@@ -524,10 +522,7 @@ async function createConversationSession(input: { clone_ids: string[]; session_i
     return JSON.stringify({ error: 'Session not found' })
   }
 
-  const limitCheck = await wouldExceedPersonaLimit(session.user_id, input.session_id, input.clone_ids.length)
-  if (!limitCheck.ok) {
-    return JSON.stringify({ error: limitCheck.message, limit: limitCheck.limit, total: limitCheck.total })
-  }
+  // Persona limit disabled for now
 
   // Fetch persona anonymous_ids from database
   const result = await supabase
@@ -640,10 +635,7 @@ async function recruitClones(input: {
   // Merge: current + new (deduplicated)
   const mergedCloneIds = [...new Set([...currentCloneIds, ...newCloneIds])]
 
-  const limitCheck = await wouldExceedPersonaLimit(session.user_id, input.session_id, mergedCloneIds.length)
-  if (!limitCheck.ok) {
-    return JSON.stringify({ error: limitCheck.message, limit: limitCheck.limit, total: limitCheck.total })
-  }
+  // Persona limit disabled for now
 
   // Update session via the endpoint
   const updateResult = await supabase
@@ -1694,13 +1686,15 @@ SESSION_ID: "${sessionId}" — Use this exact value for create_conversation_sess
 
 Follow these 5 steps in order EXACTLY ONCE. Do not repeat steps. Do not ask for clarification. Execute immediately.
 
+REASONING OUTPUT (required): Before EVERY tool call or batch of tool calls, output 1-3 brief sentences in your message explaining what you are doing and why. This reasoning is shown to the user in real time. Example: "Fetching the landing page to extract the problem, solution, and ICP." or "Search returned 10 personas. Target met. Activating them now." Put this in your message content BEFORE the tool call. After receiving a tool result, your next message should briefly note the outcome (e.g. "Found X personas") before calling the next tool.
+
 STEP 1 — analyze_landing_page({url}):
   Call ONCE with the provided URL. Extract:
   - Problem: What pain point this solves (1 sentence)
   - Solution: Core value proposition (1 sentence)
   - ICP: Who specifically would benefit most
 
-STEP 2 — Search for matching personas (2–5 tool calls; iterate until enough):
+STEP 2 — Search for matching personas (1–5 tool calls; STOP AS SOON AS YOU HAVE ENOUGH):
   a. Call get_demographic_values({ segments: ["profession", "interests", "gender", "location", "spending_power"] }) to get valid filter values.
   b. INTELLIGENT FILTER SELECTION: From the ICP and problem/solution, pick the 1–3 most relevant filters. Use ONLY values returned by get_demographic_values.
      - Prefer profession when ICP mentions a role (e.g. "engineers" → profession: "engineer" if that value exists).
@@ -1708,18 +1702,20 @@ STEP 2 — Search for matching personas (2–5 tool calls; iterate until enough)
      - Use location, age_min, age_max, gender only when ICP explicitly targets them.
      - query: 3–8 specific keywords from the product's domain, problem, and solution. Use terms the TARGET USER would relate to. DO NOT use generic meta-terms like "user research", "product validation", "market research", "startup founder" unless the product explicitly targets those.
   c. First search_clones: query + best-matching filters, count: 10, match_threshold: 0.5.
-  d. If fewer than expected number of personas returned: LOOSEN ITERATIVELY (call search_clones again):
+  d. IF THE SEARCH RETURNS ≥10 PERSONAS: STOP SEARCHING. Proceed immediately to step 3. Do NOT call search_clones again.
+  e. ONLY IF the search returns <10: LOOSEN ITERATIVELY (call search_clones again):
      - 1) Lower match_threshold to 0.4, then 0.3.
      - 2) Remove the least important demographic filter (location before profession; keep query).
      - 3) Broaden query (fewer, more general terms).
-     - Repeat until you have ≥10 personas or all options exhausted. If fewer than 10 after exhausting, use what you have.
-  e. Merge and deduplicate persona IDs across all searches (by id). Use up to 10 unique IDs for step 3.
+     - Repeat until you have ≥10 personas OR all options exhausted. If fewer than 10 after exhausting, use what you have.
+  f. Merge and deduplicate persona IDs across all searches (by id). Use up to 10 unique IDs for step 3.
 
 STEP 3 — create_conversation_session({ clone_ids: [integer IDs from step 2], session_id: SESSION_ID }):
   Call ONCE with the merged, deduplicated integer persona IDs from step 2 (up to 10). Use the SESSION_ID from the top of this prompt.
 
-STEP 4 — send_message({ prompt: "...", clone_ids: [same integer IDs from step 3] }):
-  Call ONCE with this EXACT prompt (substitute [PROBLEM], [SOLUTION], [PRODUCT TITLE]):
+STEP 4 — send_message({ prompt: "...", clone_ids: [ALL IDs from step 3] }):
+  CRITICAL: Call send_message EXACTLY ONCE with the EXACT SAME clone_ids array as step 3. Copy the full list verbatim — if create_conversation_session had 10 IDs, send_message MUST have all 10. Never subset, truncate, or batch.
+  Use this EXACT prompt (substitute [PROBLEM], [SOLUTION], [PRODUCT TITLE]):
   "You are evaluating a product based on your own personal experiences.
    Product: [PRODUCT TITLE]
    What it does: [PROBLEM] — [SOLUTION]
@@ -1767,22 +1763,23 @@ STEP 5 — consolidate_analysis({ ... }):
     "action_items": [ { "action": "...", "impact": "High|Medium|Low", "rationale": "..." }, ... ]
   }
 
-  - moms_test: Include ALL answers from ALL participants. No limit. If 10 answered, 10 entries per question.
+  - moms_test: Include ALL answers from ALL participants. If 10 participants answered, EACH question MUST have exactly 10 entries. Do not summarize, truncate, or drop. For non-responders use answer: "—".
   - participants: List each participant who joined with their demographics (from send_message responses).
   - Do NOT include heat_map. Heat maps (main blocker / main hitter) are derived server-side from the Mom Test answers.
 
 TOOLS (use in this order):
 1. analyze_landing_page(url) — ONCE
 2. get_demographic_values({ segments: ["profession", "interests", "gender", "location", "spending_power"] }) — ONCE, before search_clones
-3. search_clones(...) — CALL MULTIPLE TIMES if needed. First call with best filters; if <10 results, loosen (match_threshold, remove filters, broaden query) and call again. Merge and deduplicate IDs.
+3. search_clones(...) — First call with best filters. If result ≥10: STOP, proceed to step 4. If <10: loosen (match_threshold, remove filters, broaden query) and call again. Merge and deduplicate IDs. Never search again once you have ≥10.
 4. create_conversation_session(clone_ids, session_id) — ONCE (use merged IDs from step 3)
-5. send_message(prompt, clone_ids) — ONCE
+5. send_message(prompt, clone_ids) — ONCE with ALL IDs (do not batch 5+5)
 6. consolidate_analysis(consolidation) — ONCE
 
 CRITICAL REMINDERS:
 - Query must be product-specific (domain + problem + solution), NOT generic meta-keywords
 - Demographic filters: use ONLY values from get_demographic_values
-- search_clones MAY be called multiple times to iteratively loosen until ≥10 personas
+- search_clones: STOP as soon as any search returns ≥10 personas. Only loosen if a search returns <10.
+- send_message: ONE call with ALL persona IDs. Never split into 5+5 or multiple batches.
 - Participants MUST respond in JSON format (Step 4 prompt enforces this)
 - After step 4, immediately call consolidate_analysis with the full structured output
 - Stop after step 5.`
@@ -1822,12 +1819,14 @@ export async function callAnalysisAI(
   ]
 
   let iterations = 0
-  const maxIterations = 15 // Allow for: analyze → search → create_session → send_message → consolidate_analysis
+  const maxIterations = 50 // Allow for: analyze → search → create_session → send_message → consolidate_analysis
   let finalResponse: string | null = null
   const reasoning: ReasoningStep[] = []
   let lastVisualization: VisualizationPayload | undefined
   let lastConsolidation: CallCapybaraAIResponse['consolidation'] | undefined
   const toolsAlreadyCalled = new Set<string>() // Track called tools to prevent duplicates
+  let lastSearchPersonaIds: string[] = [] // All persona IDs from search_clones (merged across calls)
+  let lastActivatedCloneIds: string[] = [] // Safeguard: ensure send_message reaches all recruited personas
 
   const pushReasoning = (step: ReasoningStep) => {
     reasoning.push(step)
@@ -1847,6 +1846,27 @@ export async function callAnalysisAI(
         ...tc,
         id: tc.id || tc.tool_call_id || `${tc.name}_${iterations}_${Math.random().toString(36).slice(2, 9)}`,
       }))
+
+      // Push LLM's actual reasoning (response.content) as reasoning step — shown to user in real time
+      const rawContent = response.content
+      const llmReasoning = (typeof rawContent === 'string'
+        ? rawContent
+        : Array.isArray(rawContent)
+          ? rawContent
+              .filter((c: any) => c?.type === 'text' && typeof c.text === 'string')
+              .map((c: any) => c.text)
+              .join('\n')
+          : ''
+      )?.trim()
+      if (llmReasoning) {
+        const firstTool = normalizedToolCalls[0]
+        pushReasoning({
+          iteration: iterations,
+          action: 'Reasoning',
+          toolName: firstTool?.name,
+          summary: llmReasoning,
+        })
+      }
 
       // Create a new AIMessage with normalized tool_calls (required for LangChain message chain)
       messages.push(
@@ -1884,69 +1904,36 @@ export async function callAnalysisAI(
               const page = await scrapeLandingPage(args.url)
               toolResult = JSON.stringify(page)
               toolOutput = page.error ? { error: page.error } : { title: page.title, chars: page.bodyText?.length }
-              pushReasoning({
-                iteration: iterations,
-                action: `Fetching landing page: ${args.url}`,
-                toolName: toolCall.name,
-                input: args,
-                output: toolOutput,
-                summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars. Extracting problem, solution, ICP...`,
-              })
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err)
               toolResult = JSON.stringify({ error: msg, url: args.url })
-              pushReasoning({
-                iteration: iterations,
-                action: `Fetching landing page: ${args.url}`,
-                toolName: toolCall.name,
-                input: args,
-                summary: `Error: ${msg}`,
-              })
             }
           } else if (toolCall.name === 'get_demographic_segments') {
             toolResult = await getDemographicSegments()
             toolOutput = JSON.parse(toolResult)
-            pushReasoning({
-              iteration: iterations,
-              action: 'Exploring available demographic fields',
-              toolName: toolCall.name,
-              output: toolOutput,
-              summary: `Found ${toolOutput.segments?.length || 0} segments: ${toolOutput.segments?.join(', ')}`,
-            })
           } else if (toolCall.name === 'get_demographic_values') {
             const args = toolCall.args as { segments: string[] }
             toolResult = await getDemographicValues(args)
             toolOutput = JSON.parse(toolResult)
-            const segmentsList = Object.keys(toolOutput)
-              .map((seg) => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`)
-              .join(', ')
-            pushReasoning({
-              iteration: iterations,
-              action: `Fetching values for: ${args.segments?.join(', ') || ''}`,
-              toolName: toolCall.name,
-              input: args,
-              output: toolOutput,
-              summary: `Retrieved: ${segmentsList}`,
-            })
           } else if (toolCall.name === 'search_clones') {
             const args = toolCall.args as any
             toolResult = await searchClones(args)
             toolOutput = JSON.parse(toolResult)
-            const filterDesc = Object.entries(args)
-              .filter(([k, v]) => v !== undefined && k !== 'count')
-              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-              .join(', ') || 'no filters'
-            pushReasoning({
-              iteration: iterations,
-              action: `Searching personas: ${filterDesc}`,
-              toolName: toolCall.name,
-              input: args,
-              output: { count: toolOutput.personas?.length || 0 },
-              summary: `Found ${toolOutput.personas?.length || 0} personas matching product audience`,
-            })
+            const newIds = (toolOutput.personas ?? []).map((p: any) => String(p.id))
+            lastSearchPersonaIds = [...new Set([...lastSearchPersonaIds, ...newIds])].slice(0, 10)
           } else if (toolCall.name === 'create_conversation_session') {
+            const args = (toolCall.args as any) || {}
+            const requestedIds = args.clone_ids ?? []
+            const effectiveIds =
+              lastSearchPersonaIds.length > requestedIds.length
+                ? lastSearchPersonaIds
+                : requestedIds
+            if (effectiveIds.length > requestedIds.length) {
+              console.log(`[ORCHESTRATOR] create_conversation_session safeguard: LLM passed ${requestedIds.length} ids, using all ${effectiveIds.length} from search_clones`)
+            }
             const toolArgs = {
-              ...(toolCall.args as any),
+              ...args,
+              clone_ids: effectiveIds,
               session_id: sessionId,
             }
             toolResult = await createConversationSession(toolArgs as { clone_ids: string[]; session_id: string })
@@ -1954,69 +1941,24 @@ export async function callAnalysisAI(
 
             if (toolOutput.success) {
               const count = toolOutput.clone_names?.length || toolArgs.clone_ids?.length || 0
-              let summary = `Recruited ${count} personas (trial)`
-              try {
-                const { data: personas } = await supabase
-                  .from('personas')
-                  .select('profession, interests')
-                  .in('id', toolArgs.clone_ids || [])
-                if (personas && personas.length > 0) {
-                  const professions = personas.reduce<Record<string, number>>((acc, p) => {
-                    const prof = (p.profession as string) || 'unknown'
-                    acc[prof] = (acc[prof] || 0) + 1
-                    return acc
-                  }, {})
-                  const profStr = Object.entries(professions)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 5)
-                    .map(([p, n]) => `${n} ${n > 1 && !p.endsWith('s') ? p + 's' : p}`)
-                    .join(', ')
-                  const allInterests = personas.flatMap(p => (Array.isArray(p.interests) ? p.interests : []))
-                  const interestCounts = allInterests.reduce<Record<string, number>>((acc, i) => {
-                    acc[i] = (acc[i] || 0) + 1
-                    return acc
-                  }, {})
-                  const topInterests = Object.entries(interestCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 4)
-                    .map(([k]) => k)
-                  const interestsStr = topInterests.length ? topInterests.join(', ') : ''
-                  summary = `Recruited ${count} personas (trial). Demographics: ${profStr}${interestsStr ? `; interests: ${interestsStr}` : ''}`
-                }
-              } catch {
-                // Keep simple summary if demographics fetch fails
-              }
-              pushReasoning({
-                iteration: iterations,
-                action: `Activating personas in session`,
-                toolName: toolCall.name,
-                input: { clone_ids: toolArgs.clone_ids },
-                output: { count },
-                summary,
-              })
               console.log('[ORCHESTRATOR] Analysis session activated:', count, 'personas')
+              lastActivatedCloneIds = [...(toolArgs.clone_ids || [])]
             }
           } else if (toolCall.name === 'send_message') {
             const args = toolCall.args as { prompt: string; clone_ids: string[] }
-            console.log('[ORCHESTRATOR] Sending message to', args.clone_ids?.length || 0, 'clones')
+            const requestedIds = args.clone_ids ?? []
+            const effectiveIds =
+              lastActivatedCloneIds.length > 0 && requestedIds.length < lastActivatedCloneIds.length
+                ? lastActivatedCloneIds
+                : requestedIds
+            if (effectiveIds.length > requestedIds.length) {
+              console.log(`[ORCHESTRATOR] send_message safeguard: LLM passed ${requestedIds.length} ids, using all ${effectiveIds.length} from create_conversation_session`)
+            }
+            const cloneCount = effectiveIds.length
+            console.log('[ORCHESTRATOR] Sending message to', cloneCount, 'clones')
             try {
-              pushReasoning({
-                iteration: iterations,
-                action: `Interviewing AI Personas`,
-                toolName: toolCall.name,
-                input: { clone_count: args.clone_ids?.length },
-                summary: `Interviewing ${args.clone_ids?.length || 0} AI Personas...`,
-              })
-              const responses = await callMultipleClones(args.clone_ids, sessionId, args.prompt, null)
+              const responses = await callMultipleClones(effectiveIds, sessionId, args.prompt, null)
               toolResult = JSON.stringify({ success: true, responses })
-              pushReasoning({
-                iteration: iterations,
-                action: `Interviewing AI Personas`,
-                toolName: toolCall.name,
-                input: { clone_count: args.clone_ids?.length },
-                output: { responses: responses?.length || 0 },
-                summary: `Received ${responses?.length || 0} responses from AI Personas`,
-              })
               if (options?.onRelayMessages && responses) {
                 options.onRelayMessages(responses.map(r => ({
                   role: 'clone',
@@ -2027,24 +1969,12 @@ export async function callAnalysisAI(
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err)
               toolResult = JSON.stringify({ error: msg })
-              pushReasoning({
-                iteration: iterations,
-                action: `Interviewing AI Personas`,
-                toolName: toolCall.name,
-                summary: `Error: ${msg}`,
-              })
             }
           } else if (toolCall.name === 'consolidate_analysis') {
             const args = toolCall.args as { consolidation: CallCapybaraAIResponse['consolidation'] }
             console.log('[ORCHESTRATOR] Consolidating analysis')
             lastConsolidation = args.consolidation
             toolResult = JSON.stringify({ success: true, message: 'Consolidation received' })
-            pushReasoning({
-              iteration: iterations,
-              action: 'Consolidating participant responses',
-              toolName: toolCall.name,
-              summary: 'Structured analysis output received',
-            })
           } else {
             toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
           }

@@ -5,6 +5,7 @@ import type { AnalysisResult } from '@/types/analysis'
 import { MOM_TEST_V2, MOM_TEST_QUESTIONS } from '@/data/momTestV2'
 import { ParticipantsDemographicsCard } from '@/components/analysis/ParticipantsDemographicsCard'
 import { HeatMapCard } from '@/components/analysis/HeatMapCard'
+import { SignalStrengthCard } from '@/components/analysis/SignalStrengthCard'
 import { MomsTestCard } from '@/components/analysis/MomsTestCard'
 import { LandingPageOptimizationCard } from '@/components/analysis/LandingPageOptimizationCard'
 
@@ -47,17 +48,21 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
         </p>
       </div>
 
-      {/* Who joined — personas-style demographics */}
-      {result.participantDemographics && (
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12">
-            <h2 className="text-lg font-headline font-bold text-on-surface mb-4">Participants Who Joined</h2>
-            <ParticipantsDemographicsCard demographics={result.participantDemographics} />
+      {/* Row 1: Participants (left) + Signal Strength (right) — full width, equal height */}
+      <div className="grid grid-cols-12 gap-6 items-stretch">
+        {result.participantDemographics && (
+          <div className="col-span-12 lg:col-span-6 min-h-[280px] flex">
+            <ParticipantsDemographicsCard demographics={result.participantDemographics} className="h-full w-full" />
           </div>
-        </div>
-      )}
+        )}
+        {result.heatMap && (
+          <div className="col-span-12 lg:col-span-6 min-h-[280px] flex">
+            <SignalStrengthCard status={result.heatMap.status} className="h-full w-full" />
+          </div>
+        )}
+      </div>
 
-      {/* Heat map: derived from Mom Test answers (aggregation), not LLM synthesis */}
+      {/* Row 2: Friction Density — full width below */}
       {result.heatMap && (
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12">

@@ -1,5 +1,6 @@
 import { MOM_TEST_QUESTIONS, MOM_TEST_V2 } from '@/data/momTestV2'
 import { supabase } from '@/lib/supabase'
+import { requireAuth, requireApproval } from '@/lib/auth'
 import { callAnalysisAI, type CallCapybaraAIResponse } from '@/lib/langgraph-orchestrator'
 import { deriveHeatMapFromMomTestAnswers } from '@/lib/heatmap-from-momtest'
 import type { AnalysisResult, CloneResponse, ActionItem, HeatMap, ParticipantDemographics, MomsTestConsolidated } from '@/types/analysis'
@@ -280,7 +281,25 @@ function generateVisualization(
   }
 }
 
-/** Filter out answers that are the question text or "Your answer: [question]" placeholder */
+/** Filter out only echo artifacts (answer = question). Keeps "—" and "No response" for fidelity. */
+function filterEchoOnly(
+  key: string,
+  items: Array<{ answer: string; anonymous_id?: string }>
+): Array<{ answer: string; anonymous_id?: string }> {
+  const questionText = MOM_TEST_V2[key as keyof typeof MOM_TEST_V2]
+  if (!questionText) return items
+  const qLower = questionText.toLowerCase()
+  return items.map((item) => {
+    const a = (item.answer || '').trim() || '—'
+    const aLower = a.toLowerCase()
+    if (aLower === qLower) return { ...item, answer: '—' }
+    if (aLower.startsWith('your answer:') && aLower.includes(qLower.slice(0, 40))) return { ...item, answer: '—' }
+    if (aLower.startsWith('your answer :') && aLower.includes(qLower.slice(0, 40))) return { ...item, answer: '—' }
+    return { ...item, answer: a || '—' }
+  })
+}
+
+/** Filter out answers that are the question text or "Your answer: [question]" placeholder. Also drops "—" and "No response" (for display where we want only substantive answers). */
 function filterPlaceholderAnswers(
   key: string,
   items: Array<{ answer: string; anonymous_id?: string }>
@@ -292,12 +311,20 @@ function filterPlaceholderAnswers(
     const a = (item.answer || '').trim()
     if (!a || a === '—' || a === 'No response') return false
     const aLower = a.toLowerCase()
-    // Skip if answer is the question, or "Your answer: <question>"
     if (aLower === qLower) return false
     if (aLower.startsWith('your answer:') && aLower.includes(qLower.slice(0, 40))) return false
     if (aLower.startsWith('your answer :') && aLower.includes(qLower.slice(0, 40))) return false
     return true
   })
+}
+
+/** Normalize profession for case-insensitive grouping; display as title case */
+function normalizeProfessionKey(prof: string): string {
+  return prof
+    .toLowerCase()
+    .trim()
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 /** Compute participant demographics (personas-style) from cloneResponses */
@@ -309,7 +336,8 @@ function computeParticipantDemographics(cloneResponses: CloneResponse[]): Partic
 
   for (const r of cloneResponses) {
     const prof = r.demographics.profession || 'Not Specified'
-    professions[prof] = (professions[prof] ?? 0) + 1
+    const key = normalizeProfessionKey(prof)
+    professions[key] = (professions[key] ?? 0) + 1
 
     const age = r.demographics.age
     if (age == null) ageGroups['Not Specified']++
@@ -380,7 +408,8 @@ async function buildAnalysisResult(
           const demos: Record<string, number> = { Male: 0, Female: 0, Other: 0, 'Not Specified': 0 }
           for (const p of consolidation.participants) {
             const prof = p.profession || 'Not Specified'
-            profs[prof] = (profs[prof] ?? 0) + 1
+            const key = normalizeProfessionKey(prof)
+            profs[key] = (profs[key] ?? 0) + 1
             if (p.age == null) ages['Not Specified']++
             else if (p.age < 25) ages['18-24']++
             else if (p.age < 35) ages['25-34']++
@@ -426,7 +455,23 @@ async function buildAnalysisResult(
         return out
       })()
 
-  const heatMap = await deriveHeatMapFromMomTestAnswers(momsTest, { problem, solution })
+  // For heatmap: include ALL participants so fidelity = N. Always build from cloneResponses (source of truth).
+  const momsTestForHeatmap: MomsTestConsolidated = (() => {
+    const out: MomsTestConsolidated = {}
+    for (const { key } of MOM_TEST_QUESTIONS) {
+      const raw = cloneResponses.map((r) => {
+        const ans = r.answers.momTest?.[key]
+        return {
+          answer: ans && ans !== 'No response' ? ans : '—',
+          anonymous_id: r.anonymousId,
+        }
+      })
+      out[key] = filterEchoOnly(key, raw)
+    }
+    return out
+  })()
+
+  const heatMap = await deriveHeatMapFromMomTestAnswers(momsTestForHeatmap, { problem, solution })
 
   return {
     url,
@@ -447,6 +492,21 @@ async function buildAnalysisResult(
 
 export async function POST(req: Request) {
   try {
+    console.log('[analyze] Auth check start')
+    const auth = await requireAuth(req)
+    if (auth instanceof Response) {
+      console.log('[analyze] Auth failed: 401 (missing/invalid token)')
+      return auth
+    }
+    console.log('[analyze] Auth OK userId=', auth.userId)
+
+    const approval = await requireApproval(req, auth.userId)
+    if (approval) {
+      console.log('[analyze] Approval failed: 403 (not on waitlist or pending)')
+      return approval
+    }
+    console.log('[analyze] Approval OK, proceeding')
+
     const body = await req.json()
     const { url } = body as { url?: string }
 
@@ -467,13 +527,13 @@ export async function POST(req: Request) {
       )
     }
 
-    // Create anonymous session for analysis
+    // Create analysis session for authenticated user
     const sessionId = crypto.randomUUID()
     const { error: sessionError } = await supabase
       .from('chat_sessions')
       .insert({
         id: sessionId,
-        user_id: 'public-analysis',
+        user_id: auth.userId,
         active_clones: [],
         mode: 'god',
         metadata: { url, source: 'analyze' },
@@ -669,11 +729,16 @@ export async function POST(req: Request) {
             productTitle,
           )
 
+          console.log('[ANALYZE] Sending complete event')
           writeSSE({ type: 'complete', result: finalResult })
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
           console.error('[ANALYZE] Error:', errorMsg, err)
-          writeSSE({ type: 'error', error: errorMsg })
+          try {
+            writeSSE({ type: 'error', error: errorMsg })
+          } catch (e) {
+            console.error('[ANALYZE] Failed to send error event:', e)
+          }
         } finally {
           try {
             controller.close()

@@ -11,6 +11,8 @@ interface DemographicsBarChartCardProps {
   readonly items: readonly ChartItem[]
   readonly total?: number
   readonly footnote?: string
+  /** When true, render as section (no card border) for use inside parent card */
+  readonly compact?: boolean
 }
 
 /** Teal accent gradient — Stitch design system */
@@ -28,13 +30,18 @@ export function DemographicsBarChartCard({
   items,
   total,
   footnote,
+  compact = false,
 }: Readonly<DemographicsBarChartCardProps>) {
   const sum = total ?? items.reduce((a, i) => a + i.count, 0)
   const maxPct = sum > 0 ? Math.max(...items.map((i) => (i.count / sum) * 100), 1) : 1
 
+  const wrapperClass = compact
+    ? ''
+    : 'p-6 bg-surface-container-low rounded-xl border border-outline-variant/10 hover:border-primary-container/20 transition-colors'
+
   if (items.length === 0) {
     return (
-      <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/10">
+      <div className={compact ? '' : 'p-6 bg-surface-container-low rounded-xl border border-outline-variant/10'}>
         <h3 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
           <span className="material-symbols-outlined text-sm text-primary-container">{icon}</span>
           {title}
@@ -45,7 +52,7 @@ export function DemographicsBarChartCard({
   }
 
   return (
-    <div className="p-6 bg-surface-container-low rounded-xl border border-outline-variant/10 hover:border-primary-container/20 transition-colors">
+    <div className={wrapperClass}>
       <h3 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
         <span className="material-symbols-outlined text-sm text-primary-container">{icon}</span>
         {title}

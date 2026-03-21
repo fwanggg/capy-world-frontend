@@ -58,13 +58,13 @@ export function useAuthClient() {
     }
   }, [])
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (redirectTo?: string) => {
     const supabase = getSupabaseClient()
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/results`,
+        redirectTo: redirectTo ?? (typeof window !== 'undefined' ? window.location.href : '/results'),
       },
     })
     if (error) throw error
