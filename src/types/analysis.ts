@@ -19,18 +19,33 @@ export interface CloneResponse {
   }
 }
 
-/** Heat map: single grid based on Mom's Test questions. Rows = questions, cells = categorized themes, hotter = more frequent. */
+/** Heat map: Mom Test analysis with per-axis scores, themes, and overall score. */
 export interface HeatMap {
-  /** Synthesized conclusion from the patterns (e.g. "Majority don't like core value because they already find alternatives") */
+  /** Synthesized conclusion from the patterns */
   conclusion: string
   /** Status label (e.g. "High Resistance", "Mixed Signals") */
   status?: string
-  /** Each row = one Mom's Test question, themes = categorized answers with counts (max 3 per row) */
+  /** Overall Mom Test score 0–10 across all axes */
+  overallScore?: number
+  /** Rationale for overall score */
+  overallRationale?: string
+  /** Each row = one Mom's Test question with themes and axis score */
   rows: Array<{
     question: string
     questionKey: string
     /** Full question text asked to participants */
     questionText?: string
+    /** Per-axis score 0–10 (Gold signals = high, Red flags = low) */
+    score?: number
+    /** Summary with cited phrases — summary text + phrase → pIds map. Phrases must appear verbatim in summary. */
+    rationaleWithCitations?: {
+      summary: string
+      cited_phrases: Record<string, string[]>
+    }
+    /** @deprecated Use rationaleWithCitations.summary */
+    scoreRationale?: string
+    /** @deprecated Use rationaleWithCitations.cited_phrases */
+    evidenceCitations?: Array<{ phrase: string; pIds: string[] }>
     themes: Array<{ label: string; count: number }>
   }>
 }

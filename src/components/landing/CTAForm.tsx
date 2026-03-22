@@ -9,12 +9,15 @@ export function CTAForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!url.trim()) return
-    router.push(`/results?url=${encodeURIComponent(url)}`)
+    const raw = url.trim()
+    if (!raw) return
+    const normalized =
+      raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`
+    router.push(`/results?url=${encodeURIComponent(normalized)}`)
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-xl mx-auto bg-surface-container-low p-1.5 rounded-full flex flex-col md:flex-row gap-2 shadow-2xl border border-outline-variant/10">
+    <form onSubmit={handleSubmit} noValidate className="max-w-xl mx-auto bg-surface-container-low p-1.5 rounded-full flex flex-col md:flex-row gap-2 shadow-2xl border border-outline-variant/10">
       <div className="flex-1 flex items-center px-6 py-3 gap-3">
         <span className="material-symbols-outlined text-outline">link</span>
         <input

@@ -7,7 +7,6 @@ import { ParticipantsDemographicsCard } from '@/components/analysis/Participants
 import { HeatMapCard } from '@/components/analysis/HeatMapCard'
 import { SignalStrengthCard } from '@/components/analysis/SignalStrengthCard'
 import { MomsTestCard } from '@/components/analysis/MomsTestCard'
-import { LandingPageOptimizationCard } from '@/components/analysis/LandingPageOptimizationCard'
 
 interface Props {
   result: AnalysisResult | null
@@ -34,8 +33,6 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
     )
   }
 
-  const actionItems = result.actionItems.slice(0, 4)
-
   return (
     <div className="max-w-screen-2xl mx-auto px-8 flex flex-col gap-8">
       <div className="flex flex-col gap-2">
@@ -48,6 +45,35 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
         </p>
       </div>
 
+      {/* Problem, Solution, ICP — context for Mom Test questions */}
+      {(result.problem || result.solution || result.icp) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {result.problem && (
+            <div className="p-4 rounded-xl bg-surface-container-high border border-outline-variant/10">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-bold text-primary-container uppercase tracking-widest">Problem</p>
+                <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary-container hover:underline">
+                  View landing page →
+                </a>
+              </div>
+              <p className="text-sm text-on-surface font-body">{result.problem}</p>
+            </div>
+          )}
+          {result.solution && (
+            <div className="p-4 rounded-xl bg-surface-container-high border border-outline-variant/10">
+              <p className="text-[10px] font-bold text-primary-container uppercase tracking-widest mb-1">Solution</p>
+              <p className="text-sm text-on-surface font-body">{result.solution}</p>
+            </div>
+          )}
+          {result.icp && (
+            <div className="p-4 rounded-xl bg-surface-container-high border border-outline-variant/10">
+              <p className="text-[10px] font-bold text-primary-container uppercase tracking-widest mb-1">Target Customer</p>
+              <p className="text-sm text-on-surface font-body">{result.icp}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Row 1: Participants (left) + Signal Strength (right) — full width, equal height */}
       <div className="grid grid-cols-12 gap-6 items-stretch">
         {result.participantDemographics && (
@@ -57,7 +83,7 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
         )}
         {result.heatMap && (
           <div className="col-span-12 lg:col-span-6 min-h-[280px] flex">
-            <SignalStrengthCard status={result.heatMap.status} className="h-full w-full" />
+            <SignalStrengthCard heatMap={result.heatMap} className="h-full w-full" />
           </div>
         )}
       </div>
@@ -66,22 +92,20 @@ export default function AnalysisDashboard({ result, loading, url }: Props) {
       {result.heatMap && (
         <div className="grid grid-cols-12 gap-6">
           <div className="col-span-12">
-            <HeatMapCard heatMap={result.heatMap} />
+            <HeatMapCard heatMap={result.heatMap} momsTest={result.momsTest} />
           </div>
         </div>
       )}
 
-      {/* Mom's Test (all answers) + Landing Page */}
+      {/* Mom's Test: Persona Responses — full width */}
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-5 flex flex-col">
+        <div className="col-span-12 flex flex-col">
           <MomsTestCard
             pairs={momTestPairs}
             momsTest={result.momsTest}
             cloneResponses={result.cloneResponses}
+            problem={result.problem || `The core pain point that ${result.productTitle || 'this product'} addresses for its users`}
           />
-        </div>
-        <div className="col-span-12 lg:col-span-7 flex flex-col gap-6">
-          <LandingPageOptimizationCard actionItems={actionItems} />
         </div>
       </div>
     </div>

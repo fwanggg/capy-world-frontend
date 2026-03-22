@@ -1747,9 +1747,10 @@ STEP 4 — send_message({ prompt: "...", clone_ids: [ALL IDs from step 3] }):
 STEP 5 — consolidate_analysis({ ... }):
   Call consolidate_analysis ONCE with a JSON object consolidating ALL participant responses.
   You MUST include every participant's answers — do not summarize or truncate. If 4 people answered Q1, include all 4 answers.
+  CRITICAL for product: Use the EXACT problem, solution, and ICP you extracted from the landing page in Step 1. These must be SPECIFIC to the product (e.g. "Indie devs spend 40% of dev time on asset creation"). NEVER use generic descriptions like "the core pain point this product addresses" or "the target audience for this product".
   Schema:
   {
-    "product": { "problem": "...", "solution": "...", "icp": "..." },
+    "product": { "problem": "<from Step 1 - specific pain point>", "solution": "<from Step 1 - specific value prop>", "icp": "<from Step 1 - specific audience>" },
     "vote_summary": { "yes": N, "no": N, "maybe": N, "verdict": "1-sentence product-market fit verdict" },
     "moms_test": {
       "q1_validation": [ { "answer": "...", "anonymous_id": "..." }, ... ],
@@ -1902,11 +1903,29 @@ export async function callAnalysisAI(
             const args = toolCall.args as { url: string }
             try {
               const page = await scrapeLandingPage(args.url)
+              if (page.error) {
+                pushReasoning({
+                  iteration: iterations,
+                  action: 'Fetching landing page',
+                  toolName: 'analyze_landing_page',
+                  input: args,
+                  output: { error: page.error },
+                  summary: `URL fetch failed: ${page.error}`,
+                })
+                throw new Error(`Landing page fetch failed: ${page.error}`)
+              }
               toolResult = JSON.stringify(page)
-              toolOutput = page.error ? { error: page.error } : { title: page.title, chars: page.bodyText?.length }
+              toolOutput = { title: page.title, chars: page.bodyText?.length }
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err)
-              toolResult = JSON.stringify({ error: msg, url: args.url })
+              pushReasoning({
+                iteration: iterations,
+                action: 'Fetching landing page',
+                toolName: 'analyze_landing_page',
+                input: args,
+                summary: `URL fetch failed: ${msg}`,
+              })
+              throw new Error(`Landing page fetch failed: ${msg}`)
             }
           } else if (toolCall.name === 'get_demographic_segments') {
             toolResult = await getDemographicSegments()
@@ -1981,6 +2000,9 @@ export async function callAnalysisAI(
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
           console.error('[ORCHESTRATOR] Tool execution error:', errorMsg)
+          if (toolCall.name === 'analyze_landing_page') {
+            throw err
+          }
           toolResult = JSON.stringify({ error: `Tool execution failed: ${errorMsg}` })
         }
 

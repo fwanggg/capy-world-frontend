@@ -5,12 +5,12 @@ import { MOM_TEST_QUESTIONS, MOM_TEST_V2 } from '@/data/momTestV2'
 
 /** DeepSeek does not support withStructuredOutput (json_schema). Use plain JSON + parse. */
 
-/** Escape unescaped double-quotes inside "theme" and "p" values (common LLM error) */
+/** Escape unescaped double-quotes inside string values (common LLM error) */
 function repairJsonQuotes(s: string): string {
   const out: string[] = []
   let i = 0
   while (i < s.length) {
-    const qKeys = ['"theme": "', '"p": "', '"conclusion": "', '"status": "']
+    const qKeys = ['"theme": "', '"p": "', '"conclusion": "', '"status": "', '"overallRationale": "', '"summary": "', '"q1_validation": "', '"q2_alternatives": "', '"q3_impact": "', '"q4_search": "', '"q5_commitment": "', '"q6_expansion": "']
     const match = qKeys.find((k) => s.slice(i).startsWith(k))
     if (match) {
       const key = match
@@ -129,40 +129,95 @@ export async function deriveHeatMapFromMomTestAnswers(
     modelName: 'deepseek-chat',
     apiKey: process.env.DEEPSEEK_API_KEY,
     configuration: { baseURL: 'https://api.deepseek.com/v1' },
-    temperature: 0.2,
+    temperature: 0.5,
   })
 
-  const prompt = `You are aggregating participant answers from a Mom Test survey into a single heat map.
+  const prompt = `You are aggregating participant answers from a Mom Test survey. Your job is to score each axis using the Mom Test philosophy—looking for Gold signals (real pain, specific behavior) vs Red flags (generics, hypotheticals, "just annoying").
 
 Product context: ${productContext?.problem ?? 'N/A'} — ${productContext?.solution ?? 'N/A'}
 
 PARTICIPANT ANSWERS:
 ${participantText}
 
-FIDELITY (CRITICAL): Every participant MUST be assigned to exactly ONE theme per question. Sum of theme counts per question MUST equal the number of participants (P1, P2, ... PN).
-- If an answer is "—", "No response", "not relevant", vague, or low-quality, assign it to "Not relevant". Never drop a participant.
-- MERGE AGGRESSIVELY: Create at most 4–6 canonical themes per question. Combine similar phrasings into one label (e.g. "Manual outreach to forums" and "Manual outreach to communities" → "Manual outreach"). Never create more than 6 distinct themes.
-- If an answer mentions multiple concepts, pick the PRIMARY one for assignment.
-- Use 3–5 substantive themes + "Not relevant" for non-substantive answers. Avoid granular one-off labels.
+## MOM TEST FRAMEWORK (use this to score each axis)
 
-TASK:
-1. For EACH question, assign EVERY participant (P1, P2, ...) to exactly ONE theme. Sum of counts = N. Merge similar answers into top themes; put non-substantive answers in "Not relevant".
-2. Write ONE conclusion that synthesizes the patterns.
-3. Assign a status: "High Resistance" (mostly negative), "Mixed Signals", or "Strong Fit" (mostly positive).
+For each axis: Question | Theme (insight) | Gold (good) | Red flag (bad)
 
-Respond with ONLY valid JSON, no other text. Use these exact questionKeys:
-- q1_validation (Validation)
-- q2_alternatives (Alternatives)
-- q3_impact (Impact)
-- q4_search (Search)
-- q5_commitment (Commitment)
-- q6_expansion (Expansion)
+---
+**q1_validation — Validation**
+Question: Tell me about the last time you ran into [Problem]. Walk me through what happened.
+Theme: Workflow Gap — where things go wrong in the real world.
+Gold: Specific date, sequence of events. Problem is real and recent.
+Red flag: Generics ("Usually I just..."), hypotheticals ("In the future I would..."). Don't experience it often enough.
+
+---
+**q2_alternatives — Alternatives**
+Question: What are you doing to get around that right now? Any specific tools or hacks?
+Theme: True Competition — what they already "pay" for with time/effort.
+Gold: Messy spreadsheet, hacky Zapier, physical notebook. Already paying for a solution.
+Red flag: "I just deal with it" or "I haven't really thought about it." Won't buy.
+
+---
+**q3_impact — Impact**
+Question: When that happened last time, what was the consequence?
+Theme: Value Proposition — what you're really selling (revenue, time, emotion).
+Gold: Numbers or high-stakes emotion ("$2,000 lost", "missed my son's soccer game").
+Red flag: "It's just annoying." Annoyances are rarely must-buy.
+
+---
+**q4_search — Search**
+Question: Have you looked for other tools? What did you try and why didn't you stick?
+Theme: Market Gap — what competitors are missing.
+Gold: Names competitors, tells you why they hate them.
+Red flag: "No, figured there wasn't anything." Pain not high enough to search.
+
+---
+**q5_commitment — Commitment**
+Question: Would you be open to a 20-minute demo to give feedback?
+Theme: Reality Check / Skin in the Game. Will they give time now → money later?
+Gold: Checks calendar, commits to a time.
+Red flag: "Sounds cool, keep me posted!" Polite disinterest.
+
+---
+**q6_expansion — Expansion**
+Question: Who else in your circle deals with this same mess?
+Theme: Niche / Lead Cluster — who else to target.
+Gold: Names specific people/roles ("Talk to Sarah in Accounting").
+Red flag: "I think it's just me."
+
+## SCORING (0–10 per axis)
+- 8–10: Majority Gold signals. Strong validation.
+- 5–7: Mixed; some Gold, some Red. Partial validation.
+- 2–4: Mostly Red flags; weak validation.
+- 0–1: Almost all Red flags or no substantive answers.
+
+## TASK
+1. For EACH question: assign every participant (P1, P2, ...) to exactly ONE theme. Themes should reflect Gold vs Red patterns when possible. Sum of counts = N. Merge similar answers; use "Not relevant" for non-substantive answers. Max 4–6 themes per question.
+2. For EACH question: give axisScore (0–10).
+3. For EACH question: give rationaleWithCitations — summary + cited_phrases together:
+   - summary: 1–2 sentences. Write it first, then pick 3–6 phrases from it to cite.
+   - cited_phrases: object mapping each phrase (verbatim from summary) to pIds. Only include participants whose answer EXPLICITLY supports that phrase. "I haven't looked" → do NOT cite for "actively searched". Every question MUST have 2+ cited phrases.
+4. Give overallScore (0–10) and overallRationale (1–2 sentences).
+5. Write conclusion (1–2 sentence synthesis) and status: "High Resistance" | "Mixed Signals" | "Strong Fit".
+
+Respond with ONLY valid JSON. Use exact questionKeys: q1_validation, q2_alternatives, q3_impact, q4_search, q5_commitment, q6_expansion.
 
 {
-  "conclusion": "1-2 sentence synthesis of the patterns",
+  "conclusion": "1-2 sentence synthesis",
   "status": "High Resistance" | "Mixed Signals" | "Strong Fit",
+  "overallScore": 0,
+  "overallRationale": "1-2 sentences why this overall score",
+  "scores": { "q1_validation": 0, "q2_alternatives": 0, "q3_impact": 0, "q4_search": 0, "q5_commitment": 0, "q6_expansion": 0 },
+  "rationaleWithCitations": {
+    "q1_validation": { "summary": "1-2 sentences. Include citable phrases.", "cited_phrases": { "phrase from summary": ["P1","P2"], "another phrase": ["P3"] } },
+    "q2_alternatives": { "summary": "...", "cited_phrases": { "buying asset packs": ["P1","P3"], "hiring freelancers": ["P2","P5"] } },
+    "q3_impact": { "summary": "...", "cited_phrases": {} },
+    "q4_search": { "summary": "...", "cited_phrases": {} },
+    "q5_commitment": { "summary": "...", "cited_phrases": {} },
+    "q6_expansion": { "summary": "...", "cited_phrases": {} }
+  },
   "assignments": {
-    "q1_validation": [{"p": "P1", "theme": "short theme (3-6 words)"}, {"p": "P2", "theme": "..."}, ...],
+    "q1_validation": [{"p": "P1", "theme": "short (3-6 words)"}, ...],
     "q2_alternatives": [...],
     "q3_impact": [...],
     "q4_search": [...],
@@ -170,7 +225,7 @@ Respond with ONLY valid JSON, no other text. Use these exact questionKeys:
     "q6_expansion": [...]
   }
 }
-Each question's assignments array must have exactly one entry per participant (P1, P2, ... PN). Theme labels: short (3-6 words), no double-quotes or newlines inside (use apostrophes if needed). Sum of theme counts per question MUST equal N. Aim for 4–6 themes per question max; merge similar answers into canonical labels. Include "Not relevant" for non-substantive answers.`
+Theme labels: short (3-6 words), no double-quotes or newlines. Every participant MUST have exactly one assignment per question. Sum of theme counts per question MUST equal N. rationaleWithCitations: each cited_phrases key MUST appear verbatim in summary; 2+ cited phrases per question.`
 
   const response = await llm.invoke([new HumanMessage(prompt)])
   const raw = response.content
@@ -180,6 +235,13 @@ Each question's assignments array must have exactly one entry per participant (P
       : Array.isArray(raw)
         ? raw.map((c: unknown) => (typeof c === 'string' ? c : (c as { text?: string })?.text ?? '')).join('')
         : String(raw ?? '')
+
+  console.log('[heatmap] DeepSeek raw response length:', content.length)
+  console.log('[heatmap] DeepSeek raw response (first 2000 chars):', content.slice(0, 2000))
+  if (content.length > 2000) {
+    console.log('[heatmap] DeepSeek raw response (last 1000 chars):', content.slice(-1000))
+  }
+
   const parsed = tryParseHeatMapJson(content)
   if (!parsed) {
     console.error('[heatmap] Failed to parse LLM JSON. Raw (first 500 chars):', content.slice(0, 500))
@@ -195,6 +257,15 @@ Each question's assignments array must have exactly one entry per participant (P
   }
 
   const assignments = (parsed.assignments as Record<string, Array<{ p?: string; theme?: string }>>) ?? {}
+  const scores = (parsed.scores as Record<string, number>) ?? {}
+  const scoreRationales = (parsed.scoreRationales as Record<string, string>) ?? {}
+  const evidenceCitations = (parsed.evidenceCitations as Record<string, Array<{ phrase?: string; pIds?: string[] }>>) ?? {}
+  const rationaleWithCitationsRaw = (parsed.rationaleWithCitations as Record<string, { summary?: string; cited_phrases?: Record<string, string[]> }>) ?? {}
+
+  console.log('[heatmap] parsed.rationaleWithCitations:', JSON.stringify(rationaleWithCitationsRaw, null, 2))
+  console.log('[heatmap] parsed.scoreRationales:', JSON.stringify(parsed.scoreRationales, null, 2))
+  console.log('[heatmap] parsed.evidenceCitations:', JSON.stringify(parsed.evidenceCitations, null, 2))
+
   const rows = MOM_TEST_QUESTIONS.map((q) => {
     const expectedCount = allAnswers.find((a) => a.key === q.key)?.answers.length ?? 0
     const arr = assignments[q.key] ?? []
@@ -219,12 +290,54 @@ Each question's assignments array must have exactly one entry per participant (P
         return b.count - a.count
       })
     const questionText = MOM_TEST_V2[q.key as keyof typeof MOM_TEST_V2]
-    return { question: q.label, questionKey: q.key, questionText, themes }
+    const rawScore = scores[q.key]
+    const score = typeof rawScore === 'number' && rawScore >= 0 && rawScore <= 10 ? Math.round(rawScore) : undefined
+    const rwc = rationaleWithCitationsRaw[q.key]
+    const summary = (rwc?.summary ?? scoreRationales[q.key])?.trim() || undefined
+    const citedPhrases = rwc?.cited_phrases && typeof rwc.cited_phrases === 'object' ? rwc.cited_phrases : {}
+    const rationaleWithCitations =
+      summary && Object.keys(citedPhrases).length > 0
+        ? { summary, cited_phrases: citedPhrases as Record<string, string[]> }
+        : undefined
+    if (!rationaleWithCitations && summary) {
+      console.warn(`[heatmap] ${q.key}: No cited_phrases (got ${Object.keys(citedPhrases).length} keys). rwc=`, rwc)
+    }
+    const evidenceCitationsRow: Array<{ phrase: string; pIds: string[] }> = rationaleWithCitations
+      ? Object.entries(rationaleWithCitations.cited_phrases)
+          .filter(([, ids]) => Array.isArray(ids) && ids.length > 0)
+          .map(([phrase, pIds]) => ({ phrase: phrase.trim(), pIds: pIds.filter((id): id is string => typeof id === 'string') }))
+          .filter((c) => c.phrase && c.pIds.length > 0)
+      : (() => {
+          const raw = evidenceCitations[q.key]
+          if (!Array.isArray(raw)) return []
+          return raw
+            .map((c) => ({
+              phrase: (c.phrase ?? '').trim(),
+              pIds: Array.isArray(c.pIds) ? c.pIds.filter((id): id is string => typeof id === 'string') : [],
+            }))
+            .filter((c) => c.phrase && c.pIds.length > 0)
+        })()
+    return {
+      question: q.label,
+      questionKey: q.key,
+      questionText,
+      themes,
+      score,
+      rationaleWithCitations,
+      scoreRationale: rationaleWithCitations?.summary ?? summary,
+      evidenceCitations: evidenceCitationsRow.length > 0 ? evidenceCitationsRow : undefined,
+    }
   })
+
+  const rawOverall = parsed.overallScore
+  const overallScore = typeof rawOverall === 'number' && rawOverall >= 0 && rawOverall <= 10 ? Math.round(rawOverall) : undefined
+  const overallRationale = (parsed.overallRationale as string)?.trim() || undefined
 
   return {
     conclusion: (parsed.conclusion as string) ?? 'No conclusion extracted.',
     status: parsed.status as string | undefined,
+    overallScore,
+    overallRationale,
     rows,
   }
 }

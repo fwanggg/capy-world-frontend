@@ -389,9 +389,13 @@ async function buildAnalysisResult(
   const consolidation = orchestratorResponse.consolidation
   const parsed = parseAnalysisResponse(orchestratorResponse.response)
 
-  const problem = consolidation?.product.problem ?? parsed.problem
-  const solution = consolidation?.product.solution ?? parsed.solution
-  const icp = consolidation?.product.icp ?? parsed.icp
+  const rawProblem = consolidation?.product.problem ?? parsed.problem
+  const rawSolution = consolidation?.product.solution ?? parsed.solution
+  const rawIcp = consolidation?.product.icp ?? parsed.icp
+  // Use actual extracted content only — never show placeholder descriptions
+  const problem = rawProblem?.trim() || ''
+  const solution = rawSolution?.trim() || ''
+  const icp = rawIcp?.trim() || ''
   const actionItems: ActionItem[] = consolidation?.action_items?.map((a) => ({
     action: a.action,
     impact: a.impact as 'High' | 'Medium' | 'Low',

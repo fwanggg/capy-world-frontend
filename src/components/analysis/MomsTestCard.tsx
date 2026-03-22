@@ -9,10 +9,13 @@ interface MomsTestCardProps {
   readonly pairs: readonly MomTestPair[]
   readonly momsTest?: MomsTestConsolidated
   readonly cloneResponses?: readonly CloneResponse[]
+  /** Fills [X] in q1 — always provided (guaranteed by API + dashboard fallback) */
+  readonly problem: string
 }
 
 /** Mom's Test: all answers per question (no limit). Dynamic based on pairs. Uses momsTest when available, else cloneResponses. */
-export function MomsTestCard({ pairs, momsTest, cloneResponses }: Readonly<MomsTestCardProps>) {
+export function MomsTestCard({ pairs, momsTest, cloneResponses, problem }: Readonly<MomsTestCardProps>) {
+  const fillPlaceholder = (q: string) => q.replace(/\[X\]/g, problem)
   const getAnswers = (key: string): Array<{ answer: string; anonymous_id?: string }> => {
     if (momsTest) {
       const arr = momsTest[key]
@@ -53,7 +56,7 @@ export function MomsTestCard({ pairs, momsTest, cloneResponses }: Readonly<MomsT
                   </div>
                   <div className="flex-1">
                     <h4 className="font-headline font-bold text-on-surface text-base leading-tight">
-                      {pair.q}
+                      {fillPlaceholder(pair.q)}
                     </h4>
                     <div className="h-px w-12 bg-primary-container mt-2" />
                   </div>
