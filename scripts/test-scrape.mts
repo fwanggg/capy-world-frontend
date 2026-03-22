@@ -2,7 +2,7 @@
 /** Run: npm run test:scrape (requires .env for Playwright fallback via browser-pool) */
 import 'dotenv/config'
 const mod = await import('../src/lib/scrape-url')
-const scrapeLandingPage = mod.scrapeLandingPage ?? mod.default?.scrapeLandingPage
+const scrapeLandingPage = mod.scrapeLandingPage
 
 async function main() {
   const url = 'https://rika-ai.com/'
