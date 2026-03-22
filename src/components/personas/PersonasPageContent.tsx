@@ -1,3 +1,4 @@
+import { log } from '@/lib/logging'
 import { PersonasNav } from './PersonasNav'
 import { MetricsCard } from './MetricsCard'
 import { InterestDistributionCard } from './InterestDistributionCard'
@@ -23,10 +24,19 @@ interface PersonasAnalytics {
   demographics: Array<{ label: string; count: number }>
 }
 
+function getApiBaseUrl(): string {
+  // Production (Vercel): VERCEL_URL is set automatically (e.g. my-app.vercel.app)
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`
+  }
+  return process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+}
+
 async function fetchPersonasAnalytics(): Promise<PersonasAnalytics> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/personas/analytics`, {
+    const baseUrl = getApiBaseUrl()
+    const url = `${baseUrl}/api/personas/analytics`
+    const res = await fetch(url, {
       next: { revalidate: 300 }, // Cache for 5 minutes
     })
     if (!res.ok) {
@@ -34,7 +44,11 @@ async function fetchPersonasAnalytics(): Promise<PersonasAnalytics> {
     }
     return res.json()
   } catch (err) {
-    console.error('[PersonasPage] Failed to fetch analytics:', err)
+    const msg = err instanceof Error ? err.message : String(err)
+    const baseUrl = getApiBaseUrl()
+    log.error('personas_page_fetch_failed', `PersonasPage fetch failed: ${msg}`, {
+      metadata: { baseUrl, error: String(err) },
+    })
     // Return default empty state
     return {
       totalActive: 0,

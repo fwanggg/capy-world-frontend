@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { log } from '@/lib/logging'
 
 interface Interest {
   name: string
@@ -18,7 +19,15 @@ interface PersonasAnalytics {
 }
 
 export async function GET(): Promise<Response> {
+  const startMs = Date.now()
   try {
+    log.info('personas_analytics_start', 'Personas analytics API invoked', {
+      metadata: {
+        supabaseUrlSet: !!process.env.SUPABASE_URL,
+        supabaseKeySet: !!process.env.SUPABASE_ANON_KEY,
+      },
+    })
+
     // Fetch personas in batches to get all records (Supabase has a 1000-row limit per query)
     let allPersonas: Array<{ age?: number; gender?: string; profession?: string; interests?: Interest[] | string[]; spending_power?: string }> = []
     let offset = 0
@@ -32,11 +41,18 @@ export async function GET(): Promise<Response> {
         .range(offset, offset + pageSize - 1)
 
       if (error) {
-        console.error('[API] Personas fetch error:', error)
+        log.error('personas_analytics_fetch_error', 'Supabase personas fetch failed', {
+          metadata: { error: error.message, code: error.code, offset },
+        })
         return Response.json({ error: 'Failed to fetch personas' }, { status: 500 })
       }
 
       if (!batch || batch.length === 0) {
+        if (offset === 0) {
+          log.info('personas_analytics_empty', 'Personas table returned 0 rows', {
+            metadata: { batchCount: 0 },
+          })
+        }
         hasMore = false
       } else {
         allPersonas = allPersonas.concat(batch)
@@ -48,8 +64,12 @@ export async function GET(): Promise<Response> {
     }
 
     const personas = allPersonas
+    const durationMs = Date.now() - startMs
 
     if (!personas || personas.length === 0) {
+      log.warn('personas_analytics_zero', 'Returning zero analytics - no personas found', {
+        metadata: { totalBatches: Math.ceil(offset / pageSize) || 1, durationMs },
+      })
       return Response.json({
         totalActive: 0,
         liveClusters: 0,
@@ -159,6 +179,16 @@ export async function GET(): Promise<Response> {
       demographics,
     }
 
+    log.info('personas_analytics_success', `Returning analytics for ${totalActive} personas`, {
+      metadata: {
+        totalActive,
+        liveClusters,
+        totalUniqueInterests: Object.keys(interestCounts).length,
+        totalUniqueProfessions: Object.keys(professionCounts).length,
+        durationMs: Date.now() - startMs,
+      },
+    })
+
     return Response.json(analytics, {
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
@@ -166,7 +196,9 @@ export async function GET(): Promise<Response> {
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[API] Unexpected error:', msg)
+    log.error('personas_analytics_error', `Unexpected error: ${msg}`, {
+      metadata: { error: String(err), durationMs: Date.now() - startMs },
+    })
     return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
