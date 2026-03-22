@@ -1,4 +1,4 @@
-import { log } from '@/lib/logging'
+import { getPersonasAnalytics, type PersonasAnalytics } from '@/lib/personas-analytics'
 import { PersonasNav } from './PersonasNav'
 import { MetricsCard } from './MetricsCard'
 import { InterestDistributionCard } from './InterestDistributionCard'
@@ -12,67 +12,11 @@ interface PersonasPageContentProps {
   readonly description?: string
 }
 
-interface PersonasAnalytics {
-  totalActive: number
-  liveClusters: number
-  totalDataPoints: number
-  interests: Array<{ label: string; percent: number }>
-  totalUniqueInterests: number
-  professions: Array<{ label: string; count: string }>
-  totalUniqueProfessions: number
-  ageGroups: Record<string, number>
-  demographics: Array<{ label: string; count: number }>
-}
-
-function getApiBaseUrl(): string {
-  // Production (Vercel): VERCEL_URL is set automatically (e.g. my-app.vercel.app)
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`
-  }
-  return process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-}
-
-async function fetchPersonasAnalytics(): Promise<PersonasAnalytics> {
-  try {
-    const baseUrl = getApiBaseUrl()
-    const url = `${baseUrl}/api/personas/analytics`
-    const res = await fetch(url, {
-      next: { revalidate: 300 }, // Cache for 5 minutes
-    })
-    if (!res.ok) {
-      throw new Error(`API error: ${res.status}`)
-    }
-    return res.json()
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    const baseUrl = getApiBaseUrl()
-    log.error('personas_page_fetch_failed', `PersonasPage fetch failed: ${msg}`, {
-      metadata: { baseUrl, error: String(err) },
-    })
-    // Return default empty state
-    return {
-      totalActive: 0,
-      liveClusters: 0,
-      totalDataPoints: 0,
-      interests: [],
-      totalUniqueInterests: 0,
-      professions: [],
-      totalUniqueProfessions: 0,
-      ageGroups: { '18-24': 0, '25-34': 0, '35-44': 0, '45+': 0, 'Not Specified': 0 },
-      demographics: [
-        { label: 'Male', count: 0 },
-        { label: 'Female', count: 0 },
-        { label: 'Not Specified', count: 0 },
-      ],
-    }
-  }
-}
-
 export async function PersonasPageContent({
   title = 'Synthetic Personas',
   description = 'Real-time segment intelligence for AI-driven user modeling.',
 }: Readonly<PersonasPageContentProps>) {
-  const analytics = await fetchPersonasAnalytics()
+  const analytics = await getPersonasAnalytics()
 
   return (
     <div className="dark min-h-screen bg-surface">
