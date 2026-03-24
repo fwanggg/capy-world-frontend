@@ -35,7 +35,7 @@ export function HowItWorks() {
   return (
     <section
       style={{
-        padding: "var(--space-4xl) var(--space-xl)",
+        padding: "var(--space-2xl) var(--space-xl) var(--space-4xl)",
         background: "linear-gradient(180deg, var(--color-gray-50) 0%, rgba(13, 148, 136, 0.03) 100%)",
       }}
     >

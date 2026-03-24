@@ -116,8 +116,6 @@ export default function Home() {
           <div className="hero-cta">
             <ChatDemo />
           </div>
-
-          <div style={{ marginTop: "var(--space-3xl)" }} />
         </div>
       </section>
 
