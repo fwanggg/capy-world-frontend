@@ -332,7 +332,7 @@ export function HeatMapCard({ heatMap, momsTest }: Readonly<HeatMapCardProps>) {
                   {row.questionText && (
                     <>
                       <span className="text-on-surface-variant/50">—</span>
-                      <span className="text-xs text-on-surface-variant/90 font-body">
+                      <span className="text-base text-on-surface-variant/90 font-body">
                         {row.questionText}
                       </span>
                     </>
