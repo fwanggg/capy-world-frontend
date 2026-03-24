@@ -28,7 +28,7 @@ export default function Home() {
               lineHeight: "var(--line-tight)",
             }}
           >
-            Recruit ICP-aligned AI Personas in Seconds
+            User Research with Digital Twins, Backed by Real Human Data
             <br />
             <TypingHero />
           </h1>
@@ -42,8 +42,8 @@ export default function Home() {
               margin: "0 auto var(--space-3xl)",
             }}
           >
-            Recruit army of high-fidelity personas aligned with your Ideal Customer Profile.
-            Run surveys, validate ideas, and get brutally honest feedback, in seconds.
+            Interview AI personas trained on real Reddit user behavior.
+            Validate ideas, run surveys, and gather unfiltered feedback from authentic digital twins.
           </p>
 
           
@@ -89,7 +89,7 @@ export default function Home() {
                   lineHeight: "1.6",
                 }}
               >
-                ICP-matched personas. Real-time validation. Unfiltered feedback.
+                Digital twins trained on real human data. Authentic user research. Instant insights.
               </p>
             </div>
 
