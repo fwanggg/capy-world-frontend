@@ -257,33 +257,38 @@ export function HowItWorks() {
                 <g className="avatar-group">
                   {/* Avatar 1 */}
                   <circle cx="90" cy="120" r="24" fill="#0d9488" className="avatar" style={{ animationDelay: "0s" }} />
-                  <text x="90" y="128" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0s" }}>
-                    person
-                  </text>
+                  <g style={{ animationDelay: "0s" }}>
+                    <circle cx="90" cy="113" r="6" fill="white" />
+                    <path d="M85 122 Q85 125 90 125 Q95 125 95 122" fill="white" />
+                  </g>
 
                   {/* Avatar 2 */}
                   <circle cx="150" cy="100" r="24" fill="#0a8173" className="avatar" style={{ animationDelay: "0.1s" }} />
-                  <text x="150" y="108" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.1s" }}>
-                    person
-                  </text>
+                  <g style={{ animationDelay: "0.1s" }}>
+                    <circle cx="150" cy="93" r="6" fill="white" />
+                    <path d="M145 102 Q145 105 150 105 Q155 105 155 102" fill="white" />
+                  </g>
 
                   {/* Avatar 3 */}
                   <circle cx="210" cy="120" r="24" fill="#067d6e" className="avatar" style={{ animationDelay: "0.2s" }} />
-                  <text x="210" y="128" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.2s" }}>
-                    person
-                  </text>
+                  <g style={{ animationDelay: "0.2s" }}>
+                    <circle cx="210" cy="113" r="6" fill="white" />
+                    <path d="M205 122 Q205 125 210 125 Q215 125 215 122" fill="white" />
+                  </g>
 
                   {/* Avatar 4 */}
                   <circle cx="120" cy="180" r="24" fill="#0d9488" className="avatar" style={{ animationDelay: "0.15s" }} />
-                  <text x="120" y="188" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.15s" }}>
-                    person
-                  </text>
+                  <g style={{ animationDelay: "0.15s" }}>
+                    <circle cx="120" cy="173" r="6" fill="white" />
+                    <path d="M115 182 Q115 185 120 185 Q125 185 125 182" fill="white" />
+                  </g>
 
                   {/* Avatar 5 */}
                   <circle cx="180" cy="180" r="24" fill="#0a8173" className="avatar" style={{ animationDelay: "0.25s" }} />
-                  <text x="180" y="188" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.25s" }}>
-                    person
-                  </text>
+                  <g style={{ animationDelay: "0.25s" }}>
+                    <circle cx="180" cy="173" r="6" fill="white" />
+                    <path d="M175 182 Q175 185 180 185 Q185 185 185 182" fill="white" />
+                  </g>
                 </g>
               </svg>
             )}
