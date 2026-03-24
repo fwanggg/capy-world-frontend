@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { trackEvent } from '@/lib/analytics'
 
 interface ChatInputProps {
   onSend: (message: string, target?: 'capybara' | 'clones', recipient?: string) => void
@@ -84,17 +85,18 @@ export function ChatInput({ onSend, disabled, placeholder, activeClones = [] }: 
     if (input.trim()) {
       const { message, recipient } = extractRecipient(input.trim())
 
+      // Track message sent
       if (recipient === 'capysan' || recipient === 'capybara') {
-        // Route to Capysan (orchestrator)
+        trackEvent('message_sent', { target: 'capybara', recipient: 'capysan' })
         onSend(message, 'capybara', 'capysan')
       } else if (recipient === 'all_participants') {
-        // Route to all clones
+        trackEvent('message_sent', { target: 'clones', recipient: 'all_participants', count: activeClones.length })
         onSend(message, 'clones', 'all_participants')
       } else if (recipient) {
-        // Route to specific clone by name
+        trackEvent('message_sent', { target: 'clones', recipient, persona_id: recipient })
         onSend(message, 'clones', recipient)
       } else {
-        // Default: route to Capysan (no mention = Capysan)
+        trackEvent('message_sent', { target: 'capybara', recipient: 'default' })
         onSend(message)
       }
 

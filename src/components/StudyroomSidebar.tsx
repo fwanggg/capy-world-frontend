@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { trackEvent } from '@/lib/analytics'
 
 export interface Studyroom {
   id: string
@@ -36,6 +37,7 @@ export function StudyroomSidebar({
 
   const commitRename = () => {
     if (editingId && editName.trim()) {
+      trackEvent('studyroom_renamed', { studyroom_id: editingId, new_name: editName.trim() })
       onRename(editingId, editName.trim())
     }
     setEditingId(null)
@@ -72,7 +74,10 @@ export function StudyroomSidebar({
           Studyrooms
         </h3>
         <button
-          onClick={onCreate}
+          onClick={() => {
+            trackEvent('studyroom_created')
+            onCreate()
+          }}
           style={{
             background: 'none',
             border: '1px solid var(--color-gray-300)',
@@ -105,8 +110,16 @@ export function StudyroomSidebar({
           return (
             <div
               key={room.id}
-              onClick={() => { if (!isEditing) onSelect(room.id) }}
-              onDoubleClick={() => startEditing(room)}
+              onClick={() => {
+                if (!isEditing) {
+                  trackEvent('studyroom_selected', { studyroom_id: room.id })
+                  onSelect(room.id)
+                }
+              }}
+              onDoubleClick={() => {
+                trackEvent('studyroom_edit_started', { studyroom_id: room.id })
+                startEditing(room)
+              }}
               style={{
                 padding: 'var(--space-sm) var(--space-base)',
                 borderRadius: '0.375rem',
@@ -186,7 +199,10 @@ export function StudyroomSidebar({
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (studyrooms.length > 1) onDelete(room.id)
+                      if (studyrooms.length > 1) {
+                        trackEvent('studyroom_deleted', { studyroom_id: room.id })
+                        onDelete(room.id)
+                      }
                     }}
                     style={{
                       background: 'none',

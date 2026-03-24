@@ -7,6 +7,7 @@ import {
   getAuthHeaders,
 } from "@/lib/supabase-client";
 import { useAuth } from "@/hooks/useAuth";
+import { trackEvent } from "@/lib/analytics";
 
 type ApprovalStatus = "approved" | "pending" | null;
 
@@ -86,14 +87,17 @@ export default function WaitlistClient() {
   }, [approvalStatus, router]);
 
   const handleSignIn = async () => {
+    trackEvent('user_signin_started', { method: 'google' });
     setSignInLoading(true);
     setSignInError(null);
 
     try {
       await signInWithGoogle();
+      trackEvent('user_signin_success', { method: 'google' });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Authentication failed";
+      trackEvent('user_signin_failed', { method: 'google', error: message });
       setSignInError(message);
       setSignInLoading(false);
     }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/supabase-client";
 import { useAuth } from "@/hooks/useAuth";
+import { trackEvent } from "@/lib/analytics";
 
 export function Navigation() {
   const router = useRouter();
@@ -26,6 +27,7 @@ export function Navigation() {
   }, [menuOpen]);
 
   const handleSignOut = async () => {
+    trackEvent('user_logout');
     setMenuOpen(false);
     setSigningOut(true);
     try {
@@ -53,22 +55,22 @@ export function Navigation() {
       }}
     >
       <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-        <Link href="/" style={{ fontWeight: "bold", textDecoration: "none" }}>
+        <Link href="/" onClick={() => trackEvent('page_navigated', { page: 'home' })} style={{ fontWeight: "bold", textDecoration: "none" }}>
           Capysan
         </Link>
-        <Link href="/about" style={{ textDecoration: "none" }}>
+        <Link href="/about" onClick={() => trackEvent('page_navigated', { page: 'about' })} style={{ textDecoration: "none" }}>
           About
         </Link>
-        <Link href="/use-cases" style={{ textDecoration: "none" }}>
+        <Link href="/use-cases" onClick={() => trackEvent('page_navigated', { page: 'use_cases' })} style={{ textDecoration: "none" }}>
           Use Cases
         </Link>
         {!user && (
-          <Link href="/waitlist" style={{ textDecoration: "none" }}>
+          <Link href="/waitlist" onClick={() => trackEvent('page_navigated', { page: 'waitlist' })} style={{ textDecoration: "none" }}>
             Start Recruiting Now!
           </Link>
         )}
         {user && (
-          <Link href="/chat" style={{ textDecoration: "none" }}>
+          <Link href="/chat" onClick={() => trackEvent('page_navigated', { page: 'chat' })} style={{ textDecoration: "none" }}>
             Try for free
           </Link>
         )}
