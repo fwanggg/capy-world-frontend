@@ -10,14 +10,14 @@ export function RealVsSynthetic() {
     >
       <style>{`
         .comparison-card {
-          padding: "var(--space-2xl)";
-          border-radius: "12px";
+          padding: 32px;
+          border-radius: 16px;
           transition: all 0.3s ease;
           animation: slideInUp 0.6s ease-out backwards;
         }
 
         .comparison-card:hover {
-          transform: translateY(-4px);
+          transform: translateY(-6px);
         }
 
         @keyframes slideInUp {
@@ -34,10 +34,14 @@ export function RealVsSynthetic() {
         .feature-check {
           display: flex;
           align-items: flex-start;
-          gap: 12px;
-          margin-bottom: 12px;
-          font-size: 14px;
-          line-height: 1.6;
+          gap: 16px;
+          margin-bottom: 20px;
+          font-size: 15px;
+          line-height: 1.7;
+        }
+
+        .feature-check:last-child {
+          margin-bottom: 0;
         }
 
         .check-icon {
@@ -45,6 +49,7 @@ export function RealVsSynthetic() {
           font-weight: 700;
           flex-shrink: 0;
           margin-top: 2px;
+          font-size: 18px;
         }
 
         .cross-icon {
@@ -52,6 +57,7 @@ export function RealVsSynthetic() {
           font-weight: 700;
           flex-shrink: 0;
           margin-top: 2px;
+          font-size: 18px;
         }
       `}</style>
 
@@ -94,9 +100,9 @@ export function RealVsSynthetic() {
           <div
             className="comparison-card"
             style={{
-              backgroundColor: "var(--color-white)",
-              border: "1px solid var(--color-gray-200)",
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+              background: "linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(243, 244, 246, 0.5) 100%)",
+              border: "1px solid rgba(209, 213, 219, 0.5)",
+              boxShadow: "0 4px 16px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5)",
               animationDelay: "0s",
             }}
           >
@@ -105,7 +111,7 @@ export function RealVsSynthetic() {
                 fontSize: "var(--text-lg)",
                 fontWeight: 700,
                 color: "var(--color-navy)",
-                marginBottom: "var(--space-lg)",
+                marginBottom: "24px",
                 marginTop: 0,
               }}
             >
@@ -115,28 +121,14 @@ export function RealVsSynthetic() {
             <div className="feature-check">
               <span className="cross-icon">✗</span>
               <span>
-                <strong>Generic outputs:</strong> LLMs generate responses based on training data patterns, not real behavior
+                <strong>Generic outputs:</strong> Just ask LLM to assume a role of certain identity(35 YO, Male), i.e. 'LLM, You are a 35 year old male', works only as good as a sentimental analysis.
               </span>
             </div>
 
             <div className="feature-check">
               <span className="cross-icon">✗</span>
               <span>
-                <strong>No authentic perspective:</strong> May produce inconsistent or unrealistic viewpoints
-              </span>
-            </div>
-
-            <div className="feature-check">
-              <span className="cross-icon">✗</span>
-              <span>
-                <strong>Fabricated experience:</strong> No grounding in actual human life events or decisions
-              </span>
-            </div>
-
-            <div className="feature-check">
-              <span className="cross-icon">✗</span>
-              <span>
-                <strong>Biased patterns:</strong> Reflect training data biases, not real demographic diversity
+                <strong>Fabricated experience:</strong> no details, no context, inconsistent because there is no grounding of truth.
               </span>
             </div>
           </div>
@@ -145,9 +137,9 @@ export function RealVsSynthetic() {
           <div
             className="comparison-card"
             style={{
-              backgroundColor: "var(--color-white)",
+              background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(13, 148, 136, 0.03) 100%)",
               border: "2px solid var(--color-teal)",
-              boxShadow: "0 8px 24px -8px rgba(13, 148, 136, 0.2)",
+              boxShadow: "0 8px 32px rgba(13, 148, 136, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.8)",
               animationDelay: "0.1s",
             }}
           >
@@ -156,7 +148,7 @@ export function RealVsSynthetic() {
                 fontSize: "var(--text-lg)",
                 fontWeight: 700,
                 color: "var(--color-teal)",
-                marginBottom: "var(--space-lg)",
+                marginBottom: "24px",
                 marginTop: 0,
               }}
             >
@@ -166,28 +158,14 @@ export function RealVsSynthetic() {
             <div className="feature-check">
               <span className="check-icon">✓</span>
               <span>
-                <strong>Real human foundation:</strong> Built from anonymized human data points.
+                <strong>Real human foundation:</strong> Each Personas built from 1 anonymized real human interaction.
               </span>
             </div>
 
             <div className="feature-check">
               <span className="check-icon">✓</span>
               <span>
-                <strong>Authentic perspectives:</strong> Personas like "35-year-old male, US real estate agent" have real knowledge, opinions, and experiences
-              </span>
-            </div>
-
-            <div className="feature-check">
-              <span className="check-icon">✓</span>
-              <span>
-                <strong>Real interaction history:</strong> Grounded in actual posts, comments, and engagement patterns
-              </span>
-            </div>
-
-            <div className="feature-check">
-              <span className="check-icon">✓</span>
-              <span>
-                <strong>Genuine diversity:</strong> Represents actual demographic and psychographic variety from real humans
+                <strong>Authentic perspectives:</strong> Personas' segments are extracted from actual human history. Not the other way around.
               </span>
             </div>
           </div>
