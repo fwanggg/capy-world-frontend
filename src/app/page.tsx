@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { TypingHero } from "@/components/TypingHero";
 import { ChatDemo } from "@/components/ChatDemo";
 import { HowItWorks } from "@/components/HowItWorks";
 
@@ -29,8 +28,6 @@ export default function Home() {
             }}
           >
             User Research with Digital Twins, Backed by Real Human Data
-            <br />
-            <TypingHero />
           </h1>
 
           <p
