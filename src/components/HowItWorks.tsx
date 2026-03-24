@@ -119,20 +119,6 @@ export function HowItWorks() {
           overflow: hidden;
         }
 
-        .animation-icon {
-          font-family: "Material Symbols Rounded";
-          font-size: 120px;
-          font-weight: 700;
-          transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-          opacity: 0;
-          transform: scale(0) rotate(-180deg);
-          position: absolute;
-        }
-
-        .animation-icon.active {
-          opacity: 1;
-          transform: scale(1) rotate(0deg);
-        }
 
         .step-connector {
           position: absolute;
@@ -240,17 +226,126 @@ export function HowItWorks() {
 
           {/* Right side - Animation */}
           <div className="animation-container">
-            {STEPS.map((step, idx) => (
-              <div
-                key={idx}
-                className={`animation-icon ${activeStep === idx ? "active" : ""}`}
+            {/* Step 1: Recruit The Panel - Animated avatars */}
+            {activeStep === 0 && (
+              <svg
+                viewBox="0 0 300 300"
                 style={{
-                  color: step.color,
+                  width: "280px",
+                  height: "280px",
+                  position: "absolute",
                 }}
               >
-                {step.icon}
-              </div>
-            ))}
+                <defs>
+                  <style>{`
+                    @keyframes popIn {
+                      0% { r: 0; opacity: 0; }
+                      60% { r: 28px; }
+                      100% { r: 24px; opacity: 1; }
+                    }
+                    @keyframes float {
+                      0%, 100% { transform: translateY(0px); }
+                      50% { transform: translateY(-10px); }
+                    }
+                    .avatar { animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+                    .avatar-group { animation: float 3s ease-in-out infinite; }
+                  `}</style>
+                </defs>
+                <g className="avatar-group">
+                  <circle cx="90" cy="120" r="24" fill="#0d9488" className="avatar" style={{ animationDelay: "0s" }} />
+                  <circle cx="150" cy="100" r="24" fill="#0a8173" className="avatar" style={{ animationDelay: "0.1s" }} />
+                  <circle cx="210" cy="120" r="24" fill="#067d6e" className="avatar" style={{ animationDelay: "0.2s" }} />
+                  <circle cx="120" cy="180" r="24" fill="#0d9488" className="avatar" style={{ animationDelay: "0.15s" }} />
+                  <circle cx="180" cy="180" r="24" fill="#0a8173" className="avatar" style={{ animationDelay: "0.25s" }} />
+                </g>
+              </svg>
+            )}
+
+            {/* Step 2: Define Study & Survey - Animated survey form */}
+            {activeStep === 1 && (
+              <svg
+                viewBox="0 0 300 300"
+                style={{
+                  width: "280px",
+                  height: "280px",
+                  position: "absolute",
+                }}
+              >
+                <defs>
+                  <style>{`
+                    @keyframes slideInLine {
+                      0% { strokeDashoffset: 100; opacity: 0; }
+                      100% { strokeDashoffset: 0; opacity: 1; }
+                    }
+                    @keyframes checkmark {
+                      0% { strokeDashoffset: 30; }
+                      100% { strokeDashoffset: 0; }
+                    }
+                    .question { animation: slideInLine 0.8s ease-out both; }
+                    .check { animation: checkmark 0.6s ease-out both; }
+                  `}</style>
+                </defs>
+                {/* Form background */}
+                <rect x="60" y="60" width="180" height="180" rx="12" fill="rgba(13, 148, 136, 0.1)" stroke="#0d9488" strokeWidth="2" />
+
+                {/* Question lines */}
+                <line x1="85" y1="95" x2="145" y2="95" stroke="#0d9488" strokeWidth="3" strokeLinecap="round" className="question" style={{ animationDelay: "0s" }} strokeDasharray="100" />
+                <line x1="85" y1="130" x2="215" y2="130" stroke="#0a8173" strokeWidth="3" strokeLinecap="round" className="question" style={{ animationDelay: "0.2s" }} strokeDasharray="100" />
+                <line x1="85" y1="165" x2="215" y2="165" stroke="#067d6e" strokeWidth="3" strokeLinecap="round" className="question" style={{ animationDelay: "0.4s" }} strokeDasharray="100" />
+
+                {/* Checkmarks */}
+                <g>
+                  <path d="M215 90 L225 100 L235 85" stroke="#0d9488" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" className="check" style={{ animationDelay: "0.6s" }} strokeDasharray="30" />
+                  <path d="M215 125 L225 135 L235 120" stroke="#0a8173" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" className="check" style={{ animationDelay: "0.8s" }} strokeDasharray="30" />
+                  <path d="M215 160 L225 170 L235 155" stroke="#067d6e" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" className="check" style={{ animationDelay: "1s" }} strokeDasharray="30" />
+                </g>
+              </svg>
+            )}
+
+            {/* Step 3: Analyze & Conclude - Animated bar chart */}
+            {activeStep === 2 && (
+              <svg
+                viewBox="0 0 300 300"
+                style={{
+                  width: "280px",
+                  height: "280px",
+                  position: "absolute",
+                }}
+              >
+                <defs>
+                  <style>{`
+                    @keyframes growBar {
+                      0% { height: 0; }
+                      100% { height: var(--bar-height); }
+                    }
+                    .bar { animation: growBar 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+                    @keyframes pulse {
+                      0%, 100% { opacity: 1; }
+                      50% { opacity: 0.5; }
+                    }
+                    .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+                  `}</style>
+                </defs>
+
+                {/* Axis */}
+                <line x1="70" y1="70" x2="70" y2="220" stroke="#0d9488" strokeWidth="2" />
+                <line x1="70" y1="220" x2="230" y2="220" stroke="#0d9488" strokeWidth="2" />
+
+                {/* Bar 1 */}
+                <rect x="95" y="140" width="30" height="80" fill="#0d9488" className="bar" style={{"--bar-height": "80px", animationDelay: "0s"} as any} rx="4" />
+
+                {/* Bar 2 */}
+                <rect x="140" y="100" width="30" height="120" fill="#0a8173" className="bar" style={{"--bar-height": "120px", animationDelay: "0.2s"} as any} rx="4" />
+
+                {/* Bar 3 */}
+                <rect x="185" y="80" width="30" height="140" fill="#067d6e" className="bar" style={{"--bar-height": "140px", animationDelay: "0.4s"} as any} rx="4" />
+
+                {/* Data points */}
+                <circle cx="110" cy="135" r="4" fill="#0d9488" className="pulse-dot" style={{ animationDelay: "0.6s" }} />
+                <circle cx="155" cy="95" r="4" fill="#0a8173" className="pulse-dot" style={{ animationDelay: "0.8s" }} />
+                <circle cx="200" cy="75" r="4" fill="#067d6e" className="pulse-dot" style={{ animationDelay: "1s" }} />
+              </svg>
+            )}
 
             {/* Animated background glow */}
             <div
