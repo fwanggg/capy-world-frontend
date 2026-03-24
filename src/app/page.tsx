@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChatDemo } from "@/components/ChatDemo";
 import { HowItWorks } from "@/components/HowItWorks";
+import { RealVsSynthetic } from "@/components/RealVsSynthetic";
 import { Footer } from "@/components/Footer";
 
 export default function Home() {
@@ -121,6 +122,8 @@ export default function Home() {
       </section>
 
       <HowItWorks />
+
+      <RealVsSynthetic />
 
       <Footer />
     </div>
