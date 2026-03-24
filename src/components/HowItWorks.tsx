@@ -50,7 +50,7 @@ export function HowItWorks() {
         }
 
         .step-item::before {
-          content: '';
+          content: attr(data-number);
           position: absolute;
           left: 0;
           top: 18px;
@@ -62,10 +62,11 @@ export function HowItWorks() {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 600;
-          font-size: 12px;
+          font-weight: 700;
+          font-size: 14px;
           color: var(--color-teal);
           transition: all 0.3s ease;
+          line-height: 1;
         }
 
         .step-item.active {
@@ -194,7 +195,7 @@ export function HowItWorks() {
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: "var(--space-4xl)",
-            alignItems: "start",
+            alignItems: "end",
           }}
         >
           {/* Left side - Steps */}
@@ -205,6 +206,7 @@ export function HowItWorks() {
                   className={`step-item ${activeStep === idx ? "active" : ""}`}
                   onClick={() => setActiveStep(idx)}
                   onMouseEnter={() => setActiveStep(idx)}
+                  data-number={step.number}
                 >
                   <h3 className="step-title">{step.title}</h3>
                   <p className="step-description">{step.description}</p>
