@@ -166,7 +166,7 @@ export function ChatDemo() {
             target.style.backgroundColor = "var(--color-teal)";
           }}
         >
-          Send
+          Try For Free
         </Link>
       </div>
 
