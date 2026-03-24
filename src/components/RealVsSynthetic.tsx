@@ -166,7 +166,7 @@ export function RealVsSynthetic() {
             <div className="feature-check">
               <span className="check-icon">✓</span>
               <span>
-                <strong>Real human foundation:</strong> Built from anonymized Reddit interactions—actual human behavior and thought
+                <strong>Real human foundation:</strong> Built from anonymized human data points.
               </span>
             </div>
 
@@ -193,39 +193,6 @@ export function RealVsSynthetic() {
           </div>
         </div>
 
-        {/* Example Callout */}
-        <div
-          style={{
-            marginTop: "var(--space-4xl)",
-            padding: "var(--space-2xl)",
-            backgroundColor: "rgba(13, 148, 136, 0.08)",
-            border: "1px solid rgba(13, 148, 136, 0.2)",
-            borderRadius: "12px",
-            textAlign: "center",
-          }}
-        >
-          <h4
-            style={{
-              fontSize: "var(--text-base)",
-              fontWeight: 700,
-              color: "var(--color-navy)",
-              marginBottom: "var(--space-sm)",
-              marginTop: 0,
-            }}
-          >
-            Real Example: 35-year-old Male, US Real Estate Agent
-          </h4>
-          <p
-            style={{
-              fontSize: "var(--text-sm)",
-              color: "var(--color-gray-700)",
-              margin: 0,
-              lineHeight: 1.7,
-            }}
-          >
-            This isn't a generic LLM pretending to be a realtor. This persona is grounded in anonymized Reddit data from actual real estate professionals: their market insights, pricing strategies, client frustrations, technology adoption patterns, and genuine concerns about industry trends. When you ask them questions, you get authentic responses based on real professional experience—not AI-generated approximations.
-          </p>
-        </div>
       </div>
     </section>
   );
