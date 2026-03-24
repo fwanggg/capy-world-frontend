@@ -109,7 +109,7 @@ export function HowItWorks() {
         .animation-container {
           position: relative;
           width: 100%;
-          aspect-ratio: 1;
+          height: 100%;
           min-height: 400px;
           display: flex;
           align-items: center;
@@ -195,7 +195,7 @@ export function HowItWorks() {
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: "var(--space-4xl)",
-            alignItems: "end",
+            alignItems: "stretch",
           }}
         >
           {/* Left side - Steps */}
