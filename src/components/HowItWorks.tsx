@@ -228,7 +228,7 @@ export function HowItWorks() {
 
           {/* Right side - Animation */}
           <div className="animation-container">
-            {/* Step 1: Recruit The Panel - Animated avatars */}
+            {/* Step 1: Recruit The Panel - Animated avatars with person icons */}
             {activeStep === 0 && (
               <svg
                 viewBox="0 0 300 300"
@@ -251,14 +251,39 @@ export function HowItWorks() {
                     }
                     .avatar { animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
                     .avatar-group { animation: float 3s ease-in-out infinite; }
+                    .person-icon { font-family: "Material Symbols Rounded"; font-size: 28px; font-weight: 700; }
                   `}</style>
                 </defs>
                 <g className="avatar-group">
+                  {/* Avatar 1 */}
                   <circle cx="90" cy="120" r="24" fill="#0d9488" className="avatar" style={{ animationDelay: "0s" }} />
+                  <text x="90" y="128" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0s" }}>
+                    person
+                  </text>
+
+                  {/* Avatar 2 */}
                   <circle cx="150" cy="100" r="24" fill="#0a8173" className="avatar" style={{ animationDelay: "0.1s" }} />
+                  <text x="150" y="108" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.1s" }}>
+                    person
+                  </text>
+
+                  {/* Avatar 3 */}
                   <circle cx="210" cy="120" r="24" fill="#067d6e" className="avatar" style={{ animationDelay: "0.2s" }} />
+                  <text x="210" y="128" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.2s" }}>
+                    person
+                  </text>
+
+                  {/* Avatar 4 */}
                   <circle cx="120" cy="180" r="24" fill="#0d9488" className="avatar" style={{ animationDelay: "0.15s" }} />
+                  <text x="120" y="188" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.15s" }}>
+                    person
+                  </text>
+
+                  {/* Avatar 5 */}
                   <circle cx="180" cy="180" r="24" fill="#0a8173" className="avatar" style={{ animationDelay: "0.25s" }} />
+                  <text x="180" y="188" textAnchor="middle" className="person-icon" fill="white" style={{ animationDelay: "0.25s" }}>
+                    person
+                  </text>
                 </g>
               </svg>
             )}
