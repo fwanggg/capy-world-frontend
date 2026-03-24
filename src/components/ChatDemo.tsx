@@ -106,6 +106,18 @@ export function ChatDemo() {
           border: "1px solid var(--color-gray-200)",
           borderRadius: "0.5rem",
           cursor: "text",
+          background: "linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(13, 148, 136, 0.02) 100%)",
+          boxShadow: "0 8px 32px -8px rgba(13, 148, 136, 0.15)",
+          backdropFilter: "blur(10px)",
+          transition: "all 0.3s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = "0 12px 48px -12px rgba(13, 148, 136, 0.25)";
+          e.currentTarget.style.borderColor = "var(--color-teal)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = "0 8px 32px -8px rgba(13, 148, 136, 0.15)";
+          e.currentTarget.style.borderColor = "var(--color-gray-200)";
         }}
       >
         <textarea
@@ -144,26 +156,31 @@ export function ChatDemo() {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "var(--color-teal)",
+            background: "linear-gradient(135deg, var(--color-teal) 0%, #0a8173 100%)",
             color: "var(--color-white)",
             border: "none",
             borderRadius: "0.375rem",
             padding: "var(--space-base) var(--space-lg)",
             fontSize: "var(--text-sm)",
-            fontWeight: 500,
+            fontWeight: 600,
             textDecoration: "none",
             cursor: "pointer",
-            transition: "all 0.2s ease",
+            transition: "all 0.3s ease",
             whiteSpace: "nowrap",
             flexShrink: 0,
+            boxShadow: "0 4px 12px rgba(13, 148, 136, 0.3)",
+            position: "relative",
+            overflow: "hidden",
           }}
           onMouseEnter={(e) => {
             const target = e.currentTarget as HTMLAnchorElement;
-            target.style.backgroundColor = "var(--color-teal-light)";
+            target.style.transform = "translateY(-2px)";
+            target.style.boxShadow = "0 8px 20px rgba(13, 148, 136, 0.5)";
           }}
           onMouseLeave={(e) => {
             const target = e.currentTarget as HTMLAnchorElement;
-            target.style.backgroundColor = "var(--color-teal)";
+            target.style.transform = "translateY(0)";
+            target.style.boxShadow = "0 4px 12px rgba(13, 148, 136, 0.3)";
           }}
         >
           Try For Free

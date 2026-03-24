@@ -1,16 +1,69 @@
 import Link from "next/link";
 import { ChatDemo } from "@/components/ChatDemo";
 import { HowItWorks } from "@/components/HowItWorks";
+import { Footer } from "@/components/Footer";
 
 export default function Home() {
   return (
-    <div>
+    <div style={{ overflow: "hidden" }}>
+      <style>{`
+        @keyframes slideInDown {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes slideInUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: linear-gradient(135deg, rgba(13, 148, 136, 0.1) 0%, rgba(15, 23, 42, 0.05) 100%);
+          border: 1px solid rgba(13, 148, 136, 0.2);
+          border-radius: 9999px;
+          font-size: 0.875rem;
+          color: var(--color-teal);
+          font-weight: 500;
+          animation: slideInDown 0.6s ease-out;
+        }
+
+        .hero-title {
+          animation: slideInUp 0.6s ease-out 0.1s both;
+        }
+
+        .hero-subtitle {
+          animation: slideInUp 0.6s ease-out 0.2s both;
+        }
+
+        .hero-cta {
+          animation: slideInUp 0.6s ease-out 0.3s both;
+        }
+      `}</style>
+
       <section
         style={{
+          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.03) 0%, rgba(13, 148, 136, 0.05) 100%)",
           paddingTop: "var(--space-4xl)",
           paddingBottom: "var(--space-4xl)",
           paddingLeft: "var(--space-xl)",
           paddingRight: "var(--space-xl)",
+          position: "relative",
         }}
       >
         <div
@@ -20,11 +73,24 @@ export default function Home() {
             textAlign: "center",
           }}
         >
+          <div className="hero-badge">
+            <span style={{ fontSize: "1.2em" }}>✨</span>
+            Real human data at scale
+          </div>
+
           <h1
+            className="hero-title"
             style={{
               fontSize: "var(--text-5xl)",
-              marginBottom: "var(--space-xl)",
+              fontWeight: 800,
+              marginBottom: "var(--space-lg)",
+              marginTop: "var(--space-2xl)",
               lineHeight: "var(--line-tight)",
+              background: "linear-gradient(135deg, var(--color-navy) 0%, var(--color-teal) 100%)",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundSize: "100% 100%",
             }}
           >
             User Research with Digital Twins,
@@ -32,157 +98,31 @@ export default function Home() {
             Backed by Real Human Data
           </h1>
 
-          
+          <p
+            className="hero-subtitle"
+            style={{
+              fontSize: "var(--text-lg)",
+              color: "var(--color-gray-600)",
+              marginBottom: "var(--space-3xl)",
+              lineHeight: 1.6,
+              maxWidth: "600px",
+              margin: "0 auto var(--space-3xl)",
+            }}
+          >
+            Interview AI personas trained on real Reddit users. Run surveys, gather feedback, and validate ideas in minutes—not weeks.
+          </p>
 
-          <ChatDemo />
+          <div className="hero-cta">
+            <ChatDemo />
+          </div>
 
-          <div style={{ marginTop: "var(--space-4xl)" }} />
+          <div style={{ marginTop: "var(--space-3xl)" }} />
         </div>
       </section>
 
       <HowItWorks />
 
-      <footer
-        style={{
-          backgroundColor: "var(--color-navy)",
-          color: "var(--color-gray-300)",
-          padding: "var(--space-3xl) var(--space-xl)",
-          borderTop: "1px solid var(--color-gray-700)",
-        }}
-      >
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "var(--space-3xl)",
-              marginBottom: "var(--space-3xl)",
-            }}
-          >
-            <div>
-              <h3
-                style={{
-                  color: "var(--color-white)",
-                  marginBottom: "var(--space-base)",
-                  fontSize: "var(--text-lg)",
-                }}
-              >
-                Capysan
-              </h3>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  lineHeight: "1.6",
-                }}
-              >
-                Digital twins trained on real human data. Authentic user research. Instant insights.
-              </p>
-            </div>
-
-            <div>
-              <h4
-                style={{
-                  color: "var(--color-white)",
-                  marginBottom: "var(--space-base)",
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                }}
-              >
-                Product
-              </h4>
-              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                <li style={{ marginBottom: "var(--space-sm)" }}>
-                  <Link
-                    href="/"
-                    style={{
-                      color: "var(--color-gray-300)",
-                      textDecoration: "none",
-                      fontSize: "var(--text-sm)",
-                    }}
-                  >
-                    Home
-                  </Link>
-                </li>
-                <li style={{ marginBottom: "var(--space-sm)" }}>
-                  <Link
-                    href="/waitlist"
-                    style={{
-                      color: "var(--color-gray-300)",
-                      textDecoration: "none",
-                      fontSize: "var(--text-sm)",
-                    }}
-                  >
-                    Start Recruiting Now!
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/use-cases"
-                    style={{
-                      color: "var(--color-gray-300)",
-                      textDecoration: "none",
-                      fontSize: "var(--text-sm)",
-                    }}
-                  >
-                    Use Cases
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4
-                style={{
-                  color: "var(--color-white)",
-                  marginBottom: "var(--space-base)",
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                }}
-              >
-                Legal
-              </h4>
-              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                <li style={{ marginBottom: "var(--space-sm)" }}>
-                  <Link
-                    href="/privacy"
-                    style={{
-                      color: "var(--color-gray-300)",
-                      textDecoration: "none",
-                      fontSize: "var(--text-sm)",
-                    }}
-                  >
-                    Privacy
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/terms"
-                    style={{
-                      color: "var(--color-gray-300)",
-                      textDecoration: "none",
-                      fontSize: "var(--text-sm)",
-                    }}
-                  >
-                    Terms
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div
-            style={{
-              borderTop: "1px solid var(--color-gray-700)",
-              paddingTop: "var(--space-2xl)",
-              textAlign: "center",
-              fontSize: "var(--text-sm)",
-              color: "var(--color-gray-400)",
-            }}
-          >
-            <p>© 2025 Capysan. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
