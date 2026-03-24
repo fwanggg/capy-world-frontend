@@ -109,7 +109,7 @@ export default function Home() {
               margin: "0 auto var(--space-3xl)",
             }}
           >
-            Interview AI personas trained on real Reddit users. Run surveys, gather feedback, and validate ideas in minutes—not weeks.
+            Digital Twins, not synthetic, each backed by real human data. No fabricated emotion, inconsistent behavior.
           </p>
 
           <div className="hero-cta">
