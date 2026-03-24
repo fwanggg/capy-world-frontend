@@ -27,21 +27,10 @@ export default function Home() {
               lineHeight: "var(--line-tight)",
             }}
           >
-            User Research with Digital Twins, Backed by Real Human Data
+            User Research with Digital Twins,
+            <br />
+            Backed by Real Human Data
           </h1>
-
-          <p
-            style={{
-              fontSize: "var(--text-xl)",
-              marginBottom: "var(--space-3xl)",
-              color: "var(--color-gray-500)",
-              maxWidth: "600px",
-              margin: "0 auto var(--space-3xl)",
-            }}
-          >
-            Interview AI personas trained on real Reddit user behavior.
-            Validate ideas, run surveys, and gather unfiltered feedback from authentic digital twins.
-          </p>
 
           
 
