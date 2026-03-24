@@ -158,7 +158,7 @@ export function RealVsSynthetic() {
             <div className="feature-check">
               <span className="check-icon">✓</span>
               <span>
-                <strong>Real human foundation:</strong> Each Personas built from 1 anonymized real human interaction.
+                <strong>Real human foundation:</strong> Each Personas backed by anonymized private knowledge of a real human.
               </span>
             </div>
 
