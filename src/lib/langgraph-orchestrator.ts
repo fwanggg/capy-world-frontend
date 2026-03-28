@@ -8,6 +8,8 @@ import { wouldExceedPersonaLimit } from './persona-limit'
 import { extractGoogleForm, submitGoogleForm } from './google-forms'
 import { scrapeLandingPage } from './scrape-url'
 import type { VisualizationPayload, ChartSpec } from '@/types/chat'
+import { StateGraph, Annotation, MessagesAnnotation, START, END } from '@langchain/langgraph'
+import { RunnableLambda } from '@langchain/core/runnables'
 
 export function getCapybaraSystemPrompt(sessionId: string, labeledHistory?: string): string {
   return `You are Capysan. Your job is to intelligently manage personas and facilitate group conversations.
@@ -1110,6 +1112,7 @@ export async function callCapybaraAI(
     authToken?: string
   }
 ): Promise<CallCapybaraAIResponse> {
+
   log.info('orchestrator.capybara_start', 'Starting Capybara AI agentic loop', {
     sourceFile: 'langgraph-orchestrator.ts',
     sourceLine: 359,
@@ -1139,446 +1142,573 @@ export async function callCapybaraAI(
     createVisualizationTool,
   ])
 
-  // Build messages with system prompt (including session ID and conversation history) and message history
+  // Build messages with system prompt
   const systemPrompt = getCapybaraSystemPrompt(sessionId, labeledHistory)
-  const messages: BaseMessage[] = [
+  const initialMessages: BaseMessage[] = [
     new SystemMessage(systemPrompt),
     ...(messageHistory || []),
     new HumanMessage(userMessage),
   ]
 
-  let iterations = 0
-  const maxIterations = 30  // Allow for: segments → values → search(es) → create_session → response
-  let finalResponse: string | null = null
-  let sessionTransition: { clone_ids: string[]; clone_names: string[] } | undefined
-  const reasoning: ReasoningStep[] = []
-  let lastExtractedFormQuestions: { entryId: string; gridRows?: { entryId: string }[] }[] | undefined
-  let lastVisualization: VisualizationPayload | undefined
+  // Define AgentState with MessagesAnnotation + custom fields
+  const AgentStateAnnotation = Annotation.Root({
+    ...MessagesAnnotation.spec,
+    reasoning: Annotation<ReasoningStep[]>({
+      reducer: (left, right) => [...(left || []), ...(right || [])],
+      default: () => [],
+    }),
+    sessionTransition: Annotation<{ clone_ids: string[]; clone_names: string[] } | undefined>({
+      reducer: (left, right) => right ?? left,
+      default: () => undefined,
+    }),
+    lastExtractedFormQuestions: Annotation<{ entryId: string; gridRows?: { entryId: string }[] }[] | undefined>({
+      reducer: (left, right) => right ?? left,
+      default: () => undefined,
+    }),
+    lastVisualization: Annotation<VisualizationPayload | undefined>({
+      reducer: (left, right) => right ?? left,
+      default: () => undefined,
+    }),
+    iterationCount: Annotation<number>({
+      reducer: (left, right) => right,
+      default: () => 0,
+    }),
+  })
+
+  type AgentState = typeof AgentStateAnnotation.State
+
   const pushReasoning = (step: ReasoningStep) => {
-    reasoning.push(step)
     options?.onReasoningStep?.(step)
   }
 
-  while (iterations < maxIterations) {
-    iterations++
-    console.log(`[ORCHESTRATOR] Iteration ${iterations}/${maxIterations}`)
+  // Define routing function
+  const shouldContinue = (state: AgentState): 'tools' | '__end__' => {
+    const lastMessage = state.messages[state.messages.length - 1]
+    if (lastMessage && 'tool_calls' in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls.length > 0) {
+      return 'tools'
+    }
+    return '__end__'
+  }
 
-    // Invoke LLM
-    const response = await llmWithTools.invoke(messages)
+  // Define agent node
+  const agentNode = async (state: AgentState): Promise<Partial<AgentState>> => {
+    const iteration = state.iterationCount + 1
+    console.log(`[ORCHESTRATOR] Iteration ${iteration}/30`)
+
+    const response = await llmWithTools.invoke(state.messages)
     console.log('[ORCHESTRATOR] LLM response received, tool_calls:', response.tool_calls?.length || 0)
 
-    // Check if there are tool calls
-    if (response.tool_calls && response.tool_calls.length > 0) {
-      console.log('[ORCHESTRATOR] Processing', response.tool_calls.length, 'tool calls')
-      // Append the assistant's response first
-      messages.push(response)
+    return {
+      messages: [response],
+      iterationCount: iteration,
+    }
+  }
 
-      // Process tool calls
-      for (const toolCall of response.tool_calls) {
-        let toolResult: string
-        let toolOutput: any = null
-        console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
+  // Define tools node
+  const toolsNode = async (state: AgentState): Promise<Partial<AgentState>> => {
+    const iteration = state.iterationCount
+    const lastMessage = state.messages[state.messages.length - 1]
 
-        try {
-          if (toolCall.name === 'get_demographic_segments') {
-            // Tool 1: Get list of available demographic segments
-            toolResult = await getDemographicSegments()
-            toolOutput = JSON.parse(toolResult)
-            pushReasoning({
-              iteration: iterations,
-              action: `Exploring available demographic fields`,
-              toolName: toolCall.name,
-              output: toolOutput,
-              summary: `Found ${toolOutput.segments?.length || 0} demographic segments: ${toolOutput.segments?.join(', ')}`
-            })
-          } else if (toolCall.name === 'get_demographic_values') {
-            // Tool 2: Get unique values for specified segments
-            const args = toolCall.args as { segments: string[] }
-            toolResult = await getDemographicValues(args)
-            toolOutput = JSON.parse(toolResult)
-            const segmentsList = Object.keys(toolOutput)
-              .map(seg => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`)
-              .join(', ')
-            // Trim large value lists for the SSE reasoning output (full list stays in the LLM context)
-            const reasoningOutput: Record<string, any> = {}
-            for (const seg of Object.keys(toolOutput)) {
-              const val = toolOutput[seg]
-              reasoningOutput[seg] = Array.isArray(val) && val.length > 20
-                ? { count: val.length, sample: val.slice(0, 20) }
-                : val
-            }
-            pushReasoning({
-              iteration: iterations,
-              action: `Fetching available values for: ${args.segments.join(', ')}`,
-              toolName: toolCall.name,
-              input: args,
-              output: reasoningOutput,
-              summary: `Retrieved: ${segmentsList}`
-            })
-          } else if (toolCall.name === 'search_clones') {
-            // Tool 3: Search personas with specific filters
-            const args = toolCall.args as any
-            toolResult = await searchClones(args, authToken)
-            toolOutput = JSON.parse(toolResult)
-            const filterDesc = Object.entries(args)
-              .filter(([k, v]) => v !== undefined && k !== 'count')
-              .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-              .join(', ') || 'no filters'
-            if (toolOutput.error) {
-              pushReasoning({
-                iteration: iterations,
+    if (!('tool_calls' in lastMessage) || !lastMessage.tool_calls) {
+      return {}
+    }
+
+    const toolCalls = lastMessage.tool_calls as Array<{ name: string; id?: string; args?: any }>
+    console.log('[ORCHESTRATOR] Processing', toolCalls.length, 'tool calls')
+
+    const toolMessages: ToolMessage[] = []
+    let updatedSessionTransition = state.sessionTransition
+    let updatedLastExtractedFormQuestions = state.lastExtractedFormQuestions
+    let updatedLastVisualization = state.lastVisualization
+    const updatedReasoning: ReasoningStep[] = []
+
+    for (const toolCall of toolCalls) {
+      let toolResult: string
+      let toolOutput: any = null
+      console.log(`[ORCHESTRATOR] Executing tool: ${toolCall.name}`)
+
+      try {
+        if (toolCall.name === 'get_demographic_segments') {
+          const toolFunc = new RunnableLambda({
+            func: async () => await getDemographicSegments(),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          const step: ReasoningStep = {
+            iteration,
+            action: `Exploring available demographic fields`,
+            toolName: toolCall.name,
+            output: toolOutput,
+            summary: `Found ${toolOutput.segments?.length || 0} demographic segments: ${toolOutput.segments?.join(', ')}`
+          }
+          pushReasoning(step)
+          updatedReasoning.push(step)
+        } else if (toolCall.name === 'get_demographic_values') {
+          const args = toolCall.args as { segments: string[] }
+          const toolFunc = new RunnableLambda({
+            func: async () => await getDemographicValues(args),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          const segmentsList = Object.keys(toolOutput)
+            .map(seg => `${seg} (${Array.isArray(toolOutput[seg]) ? toolOutput[seg].length : 0} values)`)
+            .join(', ')
+          const reasoningOutput: Record<string, any> = {}
+          for (const seg of Object.keys(toolOutput)) {
+            const val = toolOutput[seg]
+            reasoningOutput[seg] = Array.isArray(val) && val.length > 20
+              ? { count: val.length, sample: val.slice(0, 20) }
+              : val
+          }
+          const step: ReasoningStep = {
+            iteration,
+            action: `Fetching available values for: ${args.segments.join(', ')}`,
+            toolName: toolCall.name,
+            input: args,
+            output: reasoningOutput,
+            summary: `Retrieved: ${segmentsList}`
+          }
+          pushReasoning(step)
+          updatedReasoning.push(step)
+        } else if (toolCall.name === 'search_clones') {
+          const args = toolCall.args as any
+          const toolFunc = new RunnableLambda({
+            func: async () => await searchClones(args, authToken),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          const filterDesc = Object.entries(args)
+            .filter(([k, v]) => v !== undefined && k !== 'count')
+            .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+            .join(', ') || 'no filters'
+          const step: ReasoningStep = toolOutput.error
+            ? {
+                iteration,
                 action: `Searching personas: ${filterDesc}`,
                 toolName: toolCall.name,
                 input: args,
                 output: { error: toolOutput.error },
                 summary: `Error: ${toolOutput.error}`
-              })
-            } else {
-              pushReasoning({
-                iteration: iterations,
+              }
+            : {
+                iteration,
                 action: `Searching personas: ${filterDesc}`,
                 toolName: toolCall.name,
                 input: args,
                 output: { count: toolOutput.personas?.length || 0, personas: toolOutput.personas },
                 summary: `Found ${toolOutput.personas?.length || 0} persona(s) matching criteria`
-              })
-            }
-          } else if (toolCall.name === 'create_conversation_session') {
-            // Tool 4: Activate personas in session
-            const toolArgs = {
-              ...(toolCall.args as any),
-              session_id: sessionId,
-            }
-            toolResult = await createConversationSession(toolArgs as { clone_ids: string[]; session_id: string })
-            toolOutput = JSON.parse(toolResult)
-
-            if (toolOutput.success) {
-              sessionTransition = {
-                clone_ids: toolOutput.clone_ids,
-                clone_names: toolOutput.clone_names,
               }
-              pushReasoning({
-                iteration: iterations,
-                action: `Activating personas in session`,
-                toolName: toolCall.name,
-                input: { clone_ids: toolArgs.clone_ids },
-                output: { count: toolOutput.clone_names?.length || 0 },
-                summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s)`
-              })
-              console.log('[ORCHESTRATOR] Session transition set:', toolOutput.clone_names?.length, 'personas')
+          pushReasoning(step)
+          updatedReasoning.push(step)
+        } else if (toolCall.name === 'create_conversation_session') {
+          const toolArgs = { ...(toolCall.args as any), session_id: sessionId }
+          const toolFunc = new RunnableLambda({
+            func: async () => await createConversationSession(toolArgs as { clone_ids: string[]; session_id: string }),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          if (toolOutput.success) {
+            updatedSessionTransition = { clone_ids: toolOutput.clone_ids, clone_names: toolOutput.clone_names }
+            const step: ReasoningStep = {
+              iteration,
+              action: `Activating personas in session`,
+              toolName: toolCall.name,
+              input: { clone_ids: toolArgs.clone_ids },
+              output: { count: toolOutput.clone_names?.length || 0 },
+              summary: `Session activated with ${toolOutput.clone_names?.length || 0} persona(s)`
             }
-          } else if (toolCall.name === 'recruit_clones') {
-            // Tool 5: Recruit new clones (add without removing existing)
-            const toolArgs = {
-              ...(toolCall.args as any),
-              session_id: sessionId,
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            console.log('[ORCHESTRATOR] Session transition set:', toolOutput.clone_names?.length, 'personas')
+          }
+        } else if (toolCall.name === 'recruit_clones') {
+          const toolArgs = { ...(toolCall.args as any), session_id: sessionId }
+          const toolFunc = new RunnableLambda({
+            func: async () => await recruitClones(toolArgs),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          if (!toolOutput.error) {
+            const addedCount = toolOutput.added_clones?.length || 0
+            const step: ReasoningStep = {
+              iteration,
+              action: `Recruiting new personas`,
+              toolName: toolCall.name,
+              input: toolArgs.demographic_filters,
+              output: { added: addedCount, total: toolOutput.total_active },
+              summary: `Recruited ${addedCount} new persona(s), total active: ${toolOutput.total_active}`
             }
-            toolResult = await recruitClones(toolArgs)
-            toolOutput = JSON.parse(toolResult)
-
-            if (!toolOutput.error) {
-              const addedCount = toolOutput.added_clones?.length || 0
-              pushReasoning({
-                iteration: iterations,
-                action: `Recruiting new personas`,
-                toolName: toolCall.name,
-                input: toolArgs.demographic_filters,
-                output: { added: addedCount, total: toolOutput.total_active },
-                summary: `Recruited ${addedCount} new persona(s), total active: ${toolOutput.total_active}`
-              })
-              console.log('[ORCHESTRATOR] Recruited clones:', addedCount)
-            } else {
-              pushReasoning({
-                iteration: iterations,
-                action: `Recruiting new personas`,
-                toolName: toolCall.name,
-                summary: `Error: ${toolOutput.error}`
-              })
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            console.log('[ORCHESTRATOR] Recruited clones:', addedCount)
+          } else {
+            const step: ReasoningStep = {
+              iteration,
+              action: `Recruiting new personas`,
+              toolName: toolCall.name,
+              summary: `Error: ${toolOutput.error}`
             }
-          } else if (toolCall.name === 'release_clones') {
-            // Tool 6: Release clones from session
-            const toolArgs = {
-              ...(toolCall.args as any),
-              session_id: sessionId,
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else if (toolCall.name === 'release_clones') {
+          const toolArgs = { ...(toolCall.args as any), session_id: sessionId }
+          const toolFunc = new RunnableLambda({
+            func: async () => await releaseClones(toolArgs),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          if (!toolOutput.error) {
+            const releasedCount = toolOutput.released_clones?.length || 0
+            const step: ReasoningStep = {
+              iteration,
+              action: `Releasing personas from session`,
+              toolName: toolCall.name,
+              input: { release_all: toolArgs.release_all, count: releasedCount },
+              output: { released: releasedCount, remaining: toolOutput.remaining_clones },
+              summary: `Released ${releasedCount} persona(s), ${toolOutput.remaining_clones} remaining`
             }
-            toolResult = await releaseClones(toolArgs)
-            toolOutput = JSON.parse(toolResult)
-
-            if (!toolOutput.error) {
-              const releasedCount = toolOutput.released_clones?.length || 0
-              pushReasoning({
-                iteration: iterations,
-                action: `Releasing personas from session`,
-                toolName: toolCall.name,
-                input: { release_all: toolArgs.release_all, count: releasedCount },
-                output: { released: releasedCount, remaining: toolOutput.remaining_clones },
-                summary: `Released ${releasedCount} persona(s), ${toolOutput.remaining_clones} remaining`
-              })
-              console.log('[ORCHESTRATOR] Released clones:', releasedCount)
-
-              // Update session transition if clones were released
-              if (releasedCount > 0) {
-                sessionTransition = {
-                  clone_ids: [],
-                  clone_names: [],
-                }
-              }
-            } else {
-              pushReasoning({
-                iteration: iterations,
-                action: `Releasing personas`,
-                toolName: toolCall.name,
-                summary: `Error: ${toolOutput.error}`
-              })
-            }
-          } else if (toolCall.name === 'list_clones') {
-            // Tool 7: List active clones
-            const toolArgs = {
-              ...(toolCall.args as any),
-              session_id: sessionId,
-            }
-            toolResult = await listClones(toolArgs)
-            toolOutput = JSON.parse(toolResult)
-
-            if (!toolOutput.error) {
-              const cloneCount = toolOutput.active_clones?.length || 0
-              pushReasoning({
-                iteration: iterations,
-                action: `Listing active personas`,
-                toolName: toolCall.name,
-                output: { count: cloneCount },
-                summary: `${cloneCount > 0 ? `${cloneCount} active persona(s)` : 'No active clones'}`
-              })
-              console.log('[ORCHESTRATOR] Listed clones:', cloneCount)
-            } else {
-              pushReasoning({
-                iteration: iterations,
-                action: `Listing active personas`,
-                toolName: toolCall.name,
-                summary: `Error: ${toolOutput.error}`
-              })
-            }
-          } else if (toolCall.name === 'send_message') {
-            // Tool 8: Send a message to personas and collect responses
-            const args = toolCall.args as { prompt: string; clone_ids: string[] }
-            toolResult = await sendMessage({ ...args, session_id: sessionId })
-            toolOutput = JSON.parse(toolResult)
-
-            if (!toolOutput.error) {
-              const responded = toolOutput.total_responded || 0
-              const total = toolOutput.total_sent || 0
-              pushReasoning({
-                iteration: iterations,
-                action: `Sending prompt to ${total} persona(s)`,
-                toolName: toolCall.name,
-                input: { prompt: args.prompt, clone_count: total },
-                output: { responded, total },
-                summary: `${responded}/${total} personas responded`
-              })
-              console.log(`[ORCHESTRATOR] send_message: ${responded}/${total} responded`)
-
-              // Stream relay messages to client so chat updates in real-time
-              const relayMessages: { role: string; sender_id: string; content: string }[] = [
-                { role: 'capybara', sender_id: 'capybara-ai', content: `**Asking participants:** ${args.prompt}` },
-                ...(toolOutput.responses || [])
-                  .filter((r: any) => r.response != null)
-                  .map((r: any) => ({ role: 'clone', sender_id: String(r.clone_id), content: String(r.response) })),
-              ]
-              options?.onRelayMessages?.(relayMessages)
-            } else {
-              pushReasoning({
-                iteration: iterations,
-                action: `Sending prompt to personas`,
-                toolName: toolCall.name,
-                summary: `Error: ${toolOutput.error}`
-              })
-            }
-          } else if (toolCall.name === 'extract_google_form') {
-            const args = toolCall.args as { form_url: string }
-            try {
-              const form = await extractGoogleForm(args.form_url)
-              toolResult = JSON.stringify({
-                formId: form.formId,
-                formUrl: form.formUrl,
-                formResponseUrl: form.formResponseUrl,
-                title: form.title,
-                description: form.description,
-                questions: form.questions.map((q) => ({
-                  entryId: q.entryId,
-                  prompt: q.prompt,
-                  type: q.typeName,
-                  options: q.options,
-                  gridRows: q.gridRows,
-                })),
-              })
-              toolOutput = JSON.parse(toolResult)
-              lastExtractedFormQuestions = toolOutput.questions
-              pushReasoning({
-                iteration: iterations,
-                action: 'Extracting Google Form structure',
-                toolName: toolCall.name,
-                output: { questionCount: toolOutput.questions?.length || 0 },
-                summary: `Found ${toolOutput.questions?.length || 0} questions`,
-              })
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err)
-              toolResult = JSON.stringify({ error: msg })
-              pushReasoning({
-                iteration: iterations,
-                action: 'Extracting Google Form',
-                toolName: toolCall.name,
-                summary: `Error: ${msg}`,
-              })
-            }
-          } else if (toolCall.name === 'submit_google_form') {
-            const args = toolCall.args as {
-              form_url: string
-              form_response_url?: string
-              form_questions?: { entryId: string; gridRows?: { entryId: string }[] }[]
-              responses: Record<string, string | string[]>
-            }
-            const urlToUse = args.form_response_url ?? args.form_url
-            const formQuestions = args.form_questions ?? lastExtractedFormQuestions
-            if (formQuestions && !args.form_questions) {
-              log.info('orchestrator.form_questions_auto', 'Using last extracted form questions for grid fill', {
-                sourceFile: 'langgraph-orchestrator.ts',
-                sourceLine: 1298,
-                metadata: { questionCount: formQuestions.length, hasGridRows: formQuestions.some((q: any) => q.gridRows?.length) }
-              })
-            }
-            try {
-              const result = await submitGoogleForm(urlToUse, args.responses, formQuestions)
-              toolResult = JSON.stringify(result)
-              toolOutput = result
-              const success = result.success
-              const summary = success
-                ? `Submitted ${result.submitted} form questions successfully`
-                : `Submission failed: ${result.error ?? 'unknown'}`
-              pushReasoning({
-                iteration: iterations,
-                action: 'Submitting to Google Form for 1 User',
-                toolName: toolCall.name,
-                output: toolOutput,
-                summary,
-              })
-              if (!success) {
-                log.warn('orchestrator.google_form_submit_failed', summary, {
-                  sourceFile: 'langgraph-orchestrator.ts',
-                  sourceLine: 1305,
-                  metadata: { sessionId, formUrl: args.form_url?.slice(0, 50), error: result.error }
-                })
-              }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err)
-              toolResult = JSON.stringify({ error: msg })
-              pushReasoning({
-                iteration: iterations,
-                action: 'Submitting to Google Form for 1 User',
-                toolName: toolCall.name,
-                summary: `Error: ${msg}`,
-              })
-              log.error('orchestrator.google_form_submit_error', msg, {
-                sourceFile: 'langgraph-orchestrator.ts',
-                sourceLine: 1318,
-                metadata: { sessionId, formUrl: args.form_url?.slice(0, 50) }
-              })
-            }
-          } else if (toolCall.name === 'analyze_landing_page') {
-            const args = toolCall.args as { url: string }
-            try {
-              const page = await scrapeLandingPage(args.url)
-              toolResult = JSON.stringify(page)
-              toolOutput = page.error ? { error: page.error } : { title: page.title, chars: page.bodyText?.length }
-              pushReasoning({
-                iteration: iterations,
-                action: `Fetching landing page: ${args.url}`,
-                toolName: toolCall.name,
-                input: args,
-                output: toolOutput,
-                summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars`,
-              })
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err)
-              toolResult = JSON.stringify({ error: msg, url: args.url })
-              pushReasoning({
-                iteration: iterations,
-                action: `Fetching landing page: ${args.url}`,
-                toolName: toolCall.name,
-                input: args,
-                summary: `Error: ${msg}`,
-              })
-            }
-          } else if (toolCall.name === 'create_visualization') {
-            const args = toolCall.args as { title: string; charts: ChartSpec[]; generatedAt?: string }
-            try {
-              lastVisualization = {
-                title: args.title,
-                charts: args.charts,
-                generatedAt: args.generatedAt || new Date().toISOString(),
-              }
-              toolResult = JSON.stringify({ success: true, chartCount: args.charts.length })
-              toolOutput = { success: true, chartCount: args.charts.length }
-              pushReasoning({
-                iteration: iterations,
-                action: 'Creating visualization',
-                toolName: toolCall.name,
-                input: { title: args.title, chartCount: args.charts.length },
-                output: toolOutput,
-                summary: `Rendering ${args.charts.length} chart(s): ${args.charts.map(c => c.title).join(', ')}`,
-              })
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err)
-              toolResult = JSON.stringify({ error: msg })
-              pushReasoning({
-                iteration: iterations,
-                action: 'Creating visualization',
-                toolName: toolCall.name,
-                summary: `Error: ${msg}`,
-              })
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            console.log('[ORCHESTRATOR] Released clones:', releasedCount)
+            if (releasedCount > 0) {
+              updatedSessionTransition = { clone_ids: [], clone_names: [] }
             }
           } else {
-            toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
-            pushReasoning({
-              iteration: iterations,
-              action: `Unknown tool called`,
+            const step: ReasoningStep = {
+              iteration,
+              action: `Releasing personas`,
               toolName: toolCall.name,
-              summary: `Error: Unknown tool`
+              summary: `Error: ${toolOutput.error}`
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else if (toolCall.name === 'list_clones') {
+          const toolArgs = { ...(toolCall.args as any), session_id: sessionId }
+          const toolFunc = new RunnableLambda({
+            func: async () => await listClones(toolArgs),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          if (!toolOutput.error) {
+            const cloneCount = toolOutput.active_clones?.length || 0
+            const step: ReasoningStep = {
+              iteration,
+              action: `Listing active personas`,
+              toolName: toolCall.name,
+              output: { count: cloneCount },
+              summary: `${cloneCount > 0 ? `${cloneCount} active persona(s)` : 'No active clones'}`
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            console.log('[ORCHESTRATOR] Listed clones:', cloneCount)
+          } else {
+            const step: ReasoningStep = {
+              iteration,
+              action: `Listing active personas`,
+              toolName: toolCall.name,
+              summary: `Error: ${toolOutput.error}`
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else if (toolCall.name === 'send_message') {
+          const args = toolCall.args as { prompt: string; clone_ids: string[] }
+          const toolFunc = new RunnableLambda({
+            func: async () => await sendMessage({ ...args, session_id: sessionId }),
+          })
+          toolResult = await toolFunc.invoke(null)
+          toolOutput = JSON.parse(toolResult)
+          if (!toolOutput.error) {
+            const responded = toolOutput.total_responded || 0
+            const total = toolOutput.total_sent || 0
+            const step: ReasoningStep = {
+              iteration,
+              action: `Sending prompt to ${total} persona(s)`,
+              toolName: toolCall.name,
+              input: { prompt: args.prompt, clone_count: total },
+              output: { responded, total },
+              summary: `${responded}/${total} personas responded`
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            console.log(`[ORCHESTRATOR] send_message: ${responded}/${total} responded`)
+            const relayMessages: { role: string; sender_id: string; content: string }[] = [
+              { role: 'capybara', sender_id: 'capybara-ai', content: `**Asking participants:** ${args.prompt}` },
+              ...(toolOutput.responses || [])
+                .filter((r: any) => r.response != null)
+                .map((r: any) => ({ role: 'clone', sender_id: String(r.clone_id), content: String(r.response) })),
+            ]
+            options?.onRelayMessages?.(relayMessages)
+          } else {
+            const step: ReasoningStep = {
+              iteration,
+              action: `Sending prompt to personas`,
+              toolName: toolCall.name,
+              summary: `Error: ${toolOutput.error}`
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else if (toolCall.name === 'extract_google_form') {
+          const args = toolCall.args as { form_url: string }
+          try {
+            const toolFunc = new RunnableLambda({
+              func: async () => {
+                const form = await extractGoogleForm(args.form_url)
+                return JSON.stringify({
+                  formId: form.formId,
+                  formUrl: form.formUrl,
+                  formResponseUrl: form.formResponseUrl,
+                  title: form.title,
+                  description: form.description,
+                  questions: form.questions.map((q) => ({
+                    entryId: q.entryId,
+                    prompt: q.prompt,
+                    type: q.typeName,
+                    options: q.options,
+                    gridRows: q.gridRows,
+                  })),
+                })
+              },
+            })
+            toolResult = await toolFunc.invoke(null)
+            toolOutput = JSON.parse(toolResult)
+            updatedLastExtractedFormQuestions = toolOutput.questions
+            const step: ReasoningStep = {
+              iteration,
+              action: 'Extracting Google Form structure',
+              toolName: toolCall.name,
+              output: { questionCount: toolOutput.questions?.length || 0 },
+              summary: `Found ${toolOutput.questions?.length || 0} questions`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            toolResult = JSON.stringify({ error: msg })
+            const step: ReasoningStep = {
+              iteration,
+              action: 'Extracting Google Form',
+              toolName: toolCall.name,
+              summary: `Error: ${msg}`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else if (toolCall.name === 'submit_google_form') {
+          const args = toolCall.args as any
+          const urlToUse = args.form_response_url ?? args.form_url
+          const formQuestions = args.form_questions ?? updatedLastExtractedFormQuestions
+          if (formQuestions && !args.form_questions) {
+            log.info('orchestrator.form_questions_auto', 'Using last extracted form questions for grid fill', {
+              sourceFile: 'langgraph-orchestrator.ts',
+              sourceLine: 1298,
+              metadata: { questionCount: formQuestions.length, hasGridRows: formQuestions.some((q: any) => q.gridRows?.length) }
             })
           }
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err)
-          log.error('orchestrator.tool_execution_failed', errorMsg, {
-            sourceFile: 'langgraph-orchestrator.ts',
-            sourceLine: 495,
-            metadata: {
-              sessionId,
+          try {
+            const toolFunc = new RunnableLambda({
+              func: async () => {
+                const result = await submitGoogleForm(urlToUse, args.responses, formQuestions)
+                return JSON.stringify(result)
+              },
+            })
+            toolResult = await toolFunc.invoke(null)
+            toolOutput = JSON.parse(toolResult)
+            const success = toolOutput.success
+            const summary = success
+              ? `Submitted ${toolOutput.submitted} form questions successfully`
+              : `Submission failed: ${toolOutput.error ?? 'unknown'}`
+            const step: ReasoningStep = {
+              iteration,
+              action: 'Submitting to Google Form for 1 User',
               toolName: toolCall.name,
-              iteration: iterations,
-              errorType: err instanceof Error ? err.name : 'Unknown'
+              output: toolOutput,
+              summary,
             }
-          })
-          toolResult = JSON.stringify({ error: `Tool execution failed: ${err}` })
-          pushReasoning({
-            iteration: iterations,
-            action: `Tool execution`,
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            if (!success) {
+              log.warn('orchestrator.google_form_submit_failed', summary, {
+                sourceFile: 'langgraph-orchestrator.ts',
+                sourceLine: 1305,
+                metadata: { sessionId, formUrl: args.form_url?.slice(0, 50), error: toolOutput.error }
+              })
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            toolResult = JSON.stringify({ error: msg })
+            const step: ReasoningStep = {
+              iteration,
+              action: 'Submitting to Google Form for 1 User',
+              toolName: toolCall.name,
+              summary: `Error: ${msg}`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+            log.error('orchestrator.google_form_submit_error', msg, {
+              sourceFile: 'langgraph-orchestrator.ts',
+              sourceLine: 1318,
+              metadata: { sessionId, formUrl: args.form_url?.slice(0, 50) }
+            })
+          }
+        } else if (toolCall.name === 'analyze_landing_page') {
+          const args = toolCall.args as { url: string }
+          try {
+            const toolFunc = new RunnableLambda({
+              func: async () => {
+                const page = await scrapeLandingPage(args.url)
+                return JSON.stringify(page)
+              },
+            })
+            toolResult = await toolFunc.invoke(null)
+            const page = JSON.parse(toolResult)
+            toolOutput = page.error ? { error: page.error } : { title: page.title, chars: page.bodyText?.length }
+            const step: ReasoningStep = {
+              iteration,
+              action: `Fetching landing page: ${args.url}`,
+              toolName: toolCall.name,
+              input: args,
+              output: toolOutput,
+              summary: page.error ? `Failed: ${page.error}` : `Fetched "${page.title}" — ${page.bodyText?.length || 0} chars`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            toolResult = JSON.stringify({ error: msg, url: args.url })
+            const step: ReasoningStep = {
+              iteration,
+              action: `Fetching landing page: ${args.url}`,
+              toolName: toolCall.name,
+              input: args,
+              summary: `Error: ${msg}`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else if (toolCall.name === 'create_visualization') {
+          const args = toolCall.args as { title: string; charts: ChartSpec[]; generatedAt?: string }
+          try {
+            updatedLastVisualization = {
+              title: args.title,
+              charts: args.charts,
+              generatedAt: args.generatedAt || new Date().toISOString(),
+            }
+            toolResult = JSON.stringify({ success: true, chartCount: args.charts.length })
+            toolOutput = { success: true, chartCount: args.charts.length }
+            const step: ReasoningStep = {
+              iteration,
+              action: 'Creating visualization',
+              toolName: toolCall.name,
+              input: { title: args.title, chartCount: args.charts.length },
+              output: toolOutput,
+              summary: `Rendering ${args.charts.length} chart(s): ${args.charts.map(c => c.title).join(', ')}`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            toolResult = JSON.stringify({ error: msg })
+            const step: ReasoningStep = {
+              iteration,
+              action: 'Creating visualization',
+              toolName: toolCall.name,
+              summary: `Error: ${msg}`,
+            }
+            pushReasoning(step)
+            updatedReasoning.push(step)
+          }
+        } else {
+          toolResult = JSON.stringify({ error: `Unknown tool: ${toolCall.name}` })
+          const step: ReasoningStep = {
+            iteration,
+            action: `Unknown tool called`,
             toolName: toolCall.name,
-            summary: `Error executing tool: ${errorMsg}`
-          })
+            summary: `Error: Unknown tool`
+          }
+          pushReasoning(step)
+          updatedReasoning.push(step)
         }
-
-        // Append tool message to continue conversation
-        messages.push(
-          new ToolMessage({
-            tool_call_id: toolCall.id || `${toolCall.name}_${Date.now()}`,
-            content: toolResult,
-            name: toolCall.name,
-          })
-        )
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        log.error('orchestrator.tool_execution_failed', errorMsg, {
+          sourceFile: 'langgraph-orchestrator.ts',
+          sourceLine: 495,
+          metadata: {
+            sessionId,
+            toolName: toolCall.name,
+            iteration,
+            errorType: err instanceof Error ? err.name : 'Unknown'
+          }
+        })
+        toolResult = JSON.stringify({ error: `Tool execution failed: ${err}` })
+        const step: ReasoningStep = {
+          iteration,
+          action: `Tool execution`,
+          toolName: toolCall.name,
+          summary: `Error executing tool: ${errorMsg}`
+        }
+        pushReasoning(step)
+        updatedReasoning.push(step)
       }
-    } else {
-      // No tool calls - extract final response and exit loop
+
+      toolMessages.push(
+        new ToolMessage({
+          tool_call_id: toolCall.id || `${toolCall.name}_${Date.now()}`,
+          content: toolResult,
+          name: toolCall.name,
+        })
+      )
+    }
+
+    return {
+      messages: toolMessages,
+      reasoning: updatedReasoning,
+      sessionTransition: updatedSessionTransition,
+      lastExtractedFormQuestions: updatedLastExtractedFormQuestions,
+      lastVisualization: updatedLastVisualization,
+    }
+  }
+
+  // Create and compile the graph
+  const graph = new StateGraph(AgentStateAnnotation)
+    .addNode('agent', agentNode)
+    .addNode('tools', toolsNode)
+    .addEdge('__start__', 'agent')
+    .addConditionalEdges('agent', shouldContinue)
+    .addEdge('tools', 'agent')
+    .compile()
+
+  // Execute the graph
+  let state: AgentState = {
+    messages: initialMessages,
+    reasoning: [],
+    sessionTransition: undefined,
+    lastExtractedFormQuestions: undefined,
+    lastVisualization: undefined,
+    iterationCount: 0,
+  }
+
+  let finalResponse: string | null = null
+
+  for (let i = 0; i < 30; i++) {
+    const nextState = await graph.invoke(state)
+    state = {
+      messages: [...state.messages, ...nextState.messages],
+      reasoning: [...state.reasoning, ...nextState.reasoning],
+      sessionTransition: nextState.sessionTransition ?? state.sessionTransition,
+      lastExtractedFormQuestions: nextState.lastExtractedFormQuestions ?? state.lastExtractedFormQuestions,
+      lastVisualization: nextState.lastVisualization ?? state.lastVisualization,
+      iterationCount: nextState.iterationCount,
+    }
+
+    const lastMessage = state.messages[state.messages.length - 1]
+    if (!('tool_calls' in lastMessage) || !Array.isArray(lastMessage.tool_calls) || lastMessage.tool_calls.length === 0) {
       console.log('[ORCHESTRATOR] No tool calls, extracting final response')
-      const content = response.content
+      const content = lastMessage.content
       if (typeof content === 'string') {
         finalResponse = content
       } else if (Array.isArray(content)) {
@@ -1591,12 +1721,12 @@ export async function callCapybaraAI(
     }
   }
 
-  console.log('[ORCHESTRATOR] Returning response with session_transition:', !!sessionTransition, 'visualization:', !!lastVisualization)
+  console.log('[ORCHESTRATOR] Returning response with session_transition:', !!state.sessionTransition, 'visualization:', !!state.lastVisualization)
   return {
     response: finalResponse || 'Unable to generate response',
-    reasoning,
-    session_transition: sessionTransition,
-    visualization: lastVisualization,
+    reasoning: state.reasoning,
+    session_transition: state.sessionTransition,
+    visualization: state.lastVisualization,
   }
 }
 
