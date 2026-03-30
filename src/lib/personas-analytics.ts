@@ -36,8 +36,9 @@ const EMPTY_ANALYTICS: PersonasAnalytics = {
 
 /**
  * Compute personas analytics from Supabase. Use this directly from page or API — no HTTP fetch.
+ * @param createdAfter - Optional ISO date string to filter personas created after this date
  */
-export async function getPersonasAnalytics(): Promise<PersonasAnalytics> {
+export async function getPersonasAnalytics(createdAfter?: string): Promise<PersonasAnalytics> {
   const startMs = Date.now()
   try {
     log.info('personas_analytics_start', 'Personas analytics invoked', {
@@ -56,10 +57,15 @@ export async function getPersonasAnalytics(): Promise<PersonasAnalytics> {
     let hasMore = true
 
     while (hasMore) {
-      const { data: batch, error } = await supabase
+      let query = supabase
         .from('personas')
         .select('age, gender, profession, interests, spending_power')
-        .range(offset, offset + pageSize - 1)
+
+      if (createdAfter) {
+        query = query.gt('created_at', createdAfter)
+      }
+
+      const { data: batch, error } = await query.range(offset, offset + pageSize - 1)
 
       if (error) {
         log.error('personas_analytics_fetch_error', 'Supabase personas fetch failed', {
@@ -105,7 +111,7 @@ export async function getPersonasAnalytics(): Promise<PersonasAnalytics> {
 
     const interests = Object.entries(interestCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
+      .slice(0, 50)
       .map(([label, count]) => ({ label, percent: Math.round((count / totalActive) * 100) }))
 
     const professionCounts: Record<string, number> = {}
@@ -118,7 +124,7 @@ export async function getPersonasAnalytics(): Promise<PersonasAnalytics> {
 
     const professions = Object.entries(professionCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
+      .slice(0, 50)
       .map(([label, count]) => ({
         label: label
           .split(/[\s-]+/)

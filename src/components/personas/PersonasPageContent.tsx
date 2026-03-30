@@ -1,11 +1,6 @@
-import { getPersonasAnalytics, type PersonasAnalytics } from '@/lib/personas-analytics'
+import { getPersonasAnalytics } from '@/lib/personas-analytics'
 import { PersonasNav } from './PersonasNav'
-import { MetricsCard } from './MetricsCard'
-import { InterestDistributionCard } from './InterestDistributionCard'
-import { ProfessionBreakdownCard } from './ProfessionBreakdownCard'
-import { AgeGroupsCard } from './AgeGroupsCard'
-import { DemographicsCard } from './DemographicsCard'
-import { demographicsFootnote } from '@/data/personasPageData'
+import { PersonasFilteredContent } from './PersonasFilteredContent'
 
 interface PersonasPageContentProps {
   readonly title?: string
@@ -34,25 +29,8 @@ export async function PersonasPageContent({
             </p>
           </div>
 
-          {/* Top Metrics - Stitch: Total Active, Live Clusters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <MetricsCard
-              label="Total Active"
-              value={analytics.totalActive.toLocaleString()}
-            />
-            <MetricsCard
-              label="Live Clusters"
-              value={analytics.liveClusters.toString()}
-            />
-          </div>
-
-          {/* Stats Grid - Stitch: Interests, Profession, Age Groups, Demographics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <InterestDistributionCard items={analytics.interests} totalUnique={analytics.totalUniqueInterests} />
-            <ProfessionBreakdownCard items={analytics.professions} totalUnique={analytics.totalUniqueProfessions} />
-            <AgeGroupsCard groups={Object.entries(analytics.ageGroups).map(([label, count]) => ({ label, count }))} />
-            <DemographicsCard items={analytics.demographics} footnote={demographicsFootnote} />
-          </div>
+          {/* Filtered Content - Stitch: Date filter + metrics cards */}
+          <PersonasFilteredContent initialAnalytics={analytics} />
         </div>
       </main>
     </div>

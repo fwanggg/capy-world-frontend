@@ -17,7 +17,7 @@ export function ProfessionBreakdownCard({ items, totalUnique }: Readonly<Profess
           Profession
         </h3>
         {totalUnique !== undefined && (
-          <span className="text-xs text-on-surface-variant font-body">Top 10 of {totalUnique}</span>
+          <span className="text-xs text-on-surface-variant font-body">Top 50 of {totalUnique}</span>
         )}
       </div>
       <div className="space-y-3">
